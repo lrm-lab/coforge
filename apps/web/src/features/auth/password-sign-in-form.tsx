@@ -1,11 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Input } from "#src/components/base/input/input";
+import { useAppForm } from "#src/components/ui/form";
 import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { useLoginArt } from "./login-art-state";
 import { signInWithAccountPassword } from "./sign-in.functions";
@@ -29,11 +31,6 @@ const problemText: Record<Problem, () => string> = {
   failed: () => m.login_failed(),
 };
 
-/**
- * Sign-in with an account (email or username) and a password, checked by Authing on the server. A refusal stays under
- * the form; success is a full navigation to where the server says to go (the name step, or
- * `returnTo`), so the next page loads with the new session.
- */
 export function PasswordSignInForm({
   returnTo,
   prompt,
@@ -41,103 +38,128 @@ export function PasswordSignInForm({
   onEmailCode,
 }: {
   returnTo?: string | undefined;
-  /** `"login"` when the page was asked to sign the person in afresh; the reset page keeps it. */
   prompt?: "login" | undefined;
-  /** What the account field starts with. */
   initialAccount?: string | undefined;
-  /** Takes someone to the code sign-in for an email. */
   onEmailCode: () => void;
 }) {
   const submit = useServerFn(signInWithAccountPassword);
-  const [account, setAccount] = useState(initialAccount);
-  const [password, setPassword] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
   const art = useLoginArt();
 
-  // Typing again clears what the last attempt said.
-  const edit = (set: (value: string) => void) => (value: string) => {
-    set(value);
-    setProblem(null);
-  };
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await guard(async () => {
-      // The server judges them again; asking here first only spares a round trip.
-      if (!account.trim() || !password) return setProblem("invalid_credentials");
-      setProblem(null);
-      try {
-        const result = await submit({ data: { account, password, returnTo } });
-        if (result.ok) {
-          // The agent beside the form says hello first (jing, 11-10); then, busy through the
-          // navigation: the page is replaced, not returned to.
-          await art.welcome(result.welcomed ? "back" : "joined");
-          window.location.assign(result.next);
-          return STAY_PENDING;
+  const form = useAppForm({
+    defaultValues: { account: initialAccount, password: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      await guard(async () => {
+        if (!value.account.trim() || !value.password) {
+          setProblem("invalid_credentials");
+          scheduleFocusInvalidField(
+            formRef.current,
+            !value.account.trim() ? "account" : "password",
+          );
+          return;
         }
-        setProblem(result.problem);
-      } catch {
-        setProblem("failed");
-      }
-    });
-  }
+        setProblem(null);
+        try {
+          const result = await submit({
+            data: { account: value.account, password: value.password, returnTo },
+          });
+          if (result.ok) {
+            await art.welcome(result.welcomed ? "back" : "joined");
+            window.location.assign(result.next);
+            return STAY_PENDING;
+          }
+          setProblem(result.problem);
+          if (result.problem === "invalid_credentials") {
+            scheduleFocusInvalidField(formRef.current, "account");
+          }
+        } catch {
+          setProblem("failed");
+        }
+      });
+    },
+  });
+
+  const credentialsInvalid = problem === "invalid_credentials";
 
   return (
-    <form noValidate onSubmit={onSubmit}>
-      <div className="flex flex-col gap-5">
-        <Input
-          size="lg"
-          placeholder={m.login_account_placeholder()}
-          name="account"
-          autoComplete="username"
-          value={account}
-          onChange={edit(setAccount)}
-          isInvalid={problem === "invalid_credentials"}
-        />
-        <Input
-          size="lg"
-          placeholder={m.login_password_placeholder()}
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(value) => {
-            edit(setPassword)(value);
-            art.lookAway(value.length > 0);
-          }}
-          // The agent looks away while a password is being typed, and back once the field is left.
-          onFocusChange={(focused) => art.lookAway(focused && password.length > 0)}
-          isInvalid={problem === "invalid_credentials"}
-        />
-        {problem ? (
-          <HintText isInvalid role="alert" className="text-md">
-            {problemText[problem]()}
-          </HintText>
-        ) : null}
-      </div>
-      <Button
-        type="submit"
-        size="lg"
-        className="mt-8 h-12 w-full"
-        isLoading={submitting}
-        showTextWhileLoading
+    <form.AppForm>
+      <form
+        ref={formRef}
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
       >
-        {m.login_submit()}
-      </Button>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        {/* lg is the link size whose text matches the row's text-md. */}
-        <Link
-          to="/login/reset-password"
-          search={{ returnTo, prompt }}
-          className="text-md font-semibold text-(--login-brand) hover:text-(--login-brand-hover)"
+        <div className="flex flex-col gap-5">
+          <form.AppField name="account">
+            {(field) => (
+              <Input
+                size="lg"
+                placeholder={m.login_account_placeholder()}
+                name={field.name}
+                autoComplete="username"
+                value={field.state.value}
+                onChange={(next) => {
+                  field.handleChange(next);
+                  setProblem(null);
+                }}
+                onBlur={field.handleBlur}
+                isInvalid={credentialsInvalid}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="password">
+            {(field) => (
+              <Input
+                size="lg"
+                placeholder={m.login_password_placeholder()}
+                name={field.name}
+                type="password"
+                autoComplete="current-password"
+                value={field.state.value}
+                onChange={(next) => {
+                  field.handleChange(next);
+                  setProblem(null);
+                  art.lookAway(next.length > 0);
+                }}
+                onBlur={field.handleBlur}
+                onFocusChange={(focused) => art.lookAway(focused && field.state.value.length > 0)}
+                isInvalid={credentialsInvalid}
+              />
+            )}
+          </form.AppField>
+          {problem ? (
+            <HintText isInvalid role="alert" className="text-md">
+              {problemText[problem]()}
+            </HintText>
+          ) : null}
+        </div>
+        <Button
+          type="submit"
+          size="lg"
+          className="mt-8 h-12 w-full"
+          isLoading={submitting}
+          showTextWhileLoading
         >
-          {m.login_forgot_password()}
-        </Link>
-        <Button color="link-gray" size="lg" noTextPadding onPress={onEmailCode}>
-          {m.login_email_code_link()}
+          {m.login_submit()}
         </Button>
-      </div>
-    </form>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <Link
+            to="/login/reset-password"
+            search={{ returnTo, prompt }}
+            className="text-md font-semibold text-(--login-brand) hover:text-(--login-brand-hover)"
+          >
+            {m.login_forgot_password()}
+          </Link>
+          <Button color="link-gray" size="lg" noTextPadding onPress={onEmailCode}>
+            {m.login_email_code_link()}
+          </Button>
+        </div>
+      </form>
+    </form.AppForm>
   );
 }

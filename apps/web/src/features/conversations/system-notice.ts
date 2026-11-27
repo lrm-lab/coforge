@@ -147,6 +147,16 @@ export type SystemNotice =
         actor?: SystemPerson & { kind?: "user" | "agent" };
       };
     }
+  | {
+      kind: "conversation.pinned_artifact_changed";
+      params: {
+        actor: SystemPerson;
+        change: "set" | "replaced" | "removed";
+        artifactId: string;
+        title: string;
+        isDm: boolean;
+      };
+    }
   | { kind: "legacy_text"; params: { body: string } };
 
 /** The body and structured content one notice carries. */
@@ -321,6 +331,14 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
     case "agent_dm.chain_limit":
     case "agent_dm.rate_limit":
       return true;
+    case "conversation.pinned_artifact_changed":
+      return (
+        person(params.actor) &&
+        (params.change === "set" || params.change === "replaced" || params.change === "removed") &&
+        typeof params.artifactId === "string" &&
+        typeof params.title === "string" &&
+        typeof params.isDm === "boolean"
+      );
     case "legacy_text":
       return typeof params.body === "string";
     default:

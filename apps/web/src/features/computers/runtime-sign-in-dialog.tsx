@@ -48,6 +48,7 @@ import {
 import { AntigravitySignIn } from "#src/features/computers/antigravity-sign-in";
 import { KiroEnterpriseSignIn } from "./kiro-enterprise-sign-in";
 import { CodeForm, DeviceCode } from "./runtime-sign-in-code";
+import { useCodexCompatibleSupport } from "./use-codex-compatible-support";
 import { useRuntimeAuthSignals } from "./use-runtime-auth-signals";
 
 type Target = {
@@ -55,24 +56,15 @@ type Target = {
   computerName: string;
   provider: RuntimeAuthProvider;
   runtimeName: string;
+  codexCompatibleSupported?: boolean;
 };
 
-/** At most this many views wait for the login id the start returns; a login sends far fewer. */
 const EARLY_VIEW_LIMIT = 16;
-/** The start call's own bound: past it the server is not answering, whatever it may still do. */
 const SIGN_IN_START_TIMEOUT_MS = 120_000;
-/** A started login with no report by now never reached its runtime (the server's own window). */
 const SIGN_IN_SILENT_TIMEOUT_MS = 10 * 60_000;
-/** Past every adapter's deadline and the record's lifetime: the last resort, never reached healthy. */
 const SIGN_IN_HARD_TIMEOUT_MS = 20 * 60_000;
-/** A running login re-reads its record this often; signals are best effort, reads are not. */
 const SIGN_IN_CATCHUP_INTERVAL_MS = 30_000;
 
-/**
- * Signs a Computer's runtime in from the web, as on Raft: the dialog shows what the runtime's own
- * flow asks for (a page to open, a device code, a code to paste back) until it ends. The code and
- * the link live only in this dialog's state; closing it drops them and cancels a running login.
- */
 export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: () => void }) {
   const [attempt, setAttempt] = useState(0);
   const [kiro, setKiro] = useState<KiroLoginTarget>();
@@ -121,10 +113,6 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
   );
 }
 
-/**
- * Kiro's first step: the choice of a free or an enterprise account where the Computer can sign in
- * free (task #87), else the enterprise form as it always was. A failed read counts as "cannot".
- */
 function KiroChoice({
   computerId,
   runtimeName,
@@ -172,6 +160,7 @@ function SignInAttempt({
   computerName,
   provider,
   runtimeName,
+  codexCompatibleSupported,
   kiro,
   antigravityMethodId,
   closeAction,
@@ -185,6 +174,14 @@ function SignInAttempt({
   onClose: () => void;
 }) {
   const [state, dispatch] = useReducer(loginReducer, initialLoginState);
+  const queriedCodexCompatible = useCodexCompatibleSupport(
+    computerId,
+    provider === RUNTIME_PROVIDER.CODEX && codexCompatibleSupported === undefined,
+  );
+  const showCodexApiKeyNote =
+    provider === RUNTIME_PROVIDER.CODEX &&
+    (codexCompatibleSupported ?? queriedCodexCompatible) &&
+    state.phase !== "signed_in";
   const start = useServerFn(startRuntimeAuthLogin);
   const read = useServerFn(readRuntimeAuthLogin);
   const cancel = useServerFn(cancelRuntimeAuthLogin);
@@ -201,7 +198,6 @@ function SignInAttempt({
     attached.current = true;
     return () => {
       attached.current = false;
-      // StrictMode reattaches before this microtask; a real navigation leaves it detached.
       queueMicrotask(() => {
         if (attached.current || closed.current) return;
         closed.current = true;
@@ -211,8 +207,6 @@ function SignInAttempt({
     };
   }, []);
 
-  // Subscribe, then read: the read covers what the channel delivered before this page knew the
-  // login, and the reducer drops whatever both deliver.
   const catchUp = () => {
     const id = loginId.current;
     if (!id || !subscribed.current) return;
@@ -233,8 +227,6 @@ function SignInAttempt({
   });
 
   useEffect(() => {
-    // Once per attempt, on a guard rather than cleanup: StrictMode's second run must not start a
-    // second login, and only closing the dialog cancels one.
     if (began.current) return;
     began.current = true;
     start({
@@ -247,8 +239,6 @@ function SignInAttempt({
       },
     })
       .then((started) => {
-        // A deadline already ended the attempt: a login that arrives this late is cancelled
-        // unseen rather than left holding the runtime's sign-in slot.
         if (gaveUp.current) {
           if (started.status === "started")
             void cancel({ data: { computerId, loginId: started.loginId } }).catch(() => {});
@@ -271,8 +261,6 @@ function SignInAttempt({
       .catch(() => dispatch({ type: "start_failed" }));
   }, []);
 
-  // The dialog never waits forever: an unanswered start, a login that never reported, and any
-  // login past every adapter's own deadline each end in the timed_out the server would send.
   useEffect(() => {
     const end = () => {
       const current = stateRef.current;
@@ -288,7 +276,6 @@ function SignInAttempt({
       }, SIGN_IN_START_TIMEOUT_MS),
       setTimeout(() => {
         const current = stateRef.current;
-        // `sequence` stays under 1 until the daemon's first report; a bare record read is not one.
         if (current.phase === "running" && current.sequence < 1) end();
       }, SIGN_IN_SILENT_TIMEOUT_MS),
       setTimeout(end, SIGN_IN_HARD_TIMEOUT_MS),
@@ -339,6 +326,11 @@ function SignInAttempt({
           runtimeName={runtimeName}
           dispatch={dispatch}
         />
+        {showCodexApiKeyNote && (
+          <p className="rounded-lg bg-secondary px-3 py-2 text-xs text-tertiary">
+            {m.runtime_auth_codex_api_key_note()}
+          </p>
+        )}
       </div>
       <DialogActions className="px-6 pt-6 pb-6">
         {state.phase === "signed_in" ? (
@@ -414,8 +406,6 @@ function SignInBody({
             />
           )}
           {state.checking && <Waiting>{m.runtime_auth_checking()}</Waiting>}
-          {/* Waiting on the browser, not on the person: a code to paste back means the next
-              step is theirs, so no spinner then. */}
           {state.link && state.prompt === undefined && !state.checking && (
             <Waiting>{m.runtime_auth_waiting()}</Waiting>
           )}
@@ -427,14 +417,12 @@ function SignInBody({
   }
 }
 
-/** An `info` event either carries a token this page words itself or a runtime's own sentence. */
 function signInInfo(message: string): string {
   if (message === RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN)
     return m.runtime_auth_antigravity_hint();
   return message;
 }
 
-/** A step that waits on something outside the dialog: one small spinner before its line. */
 function Waiting({ children }: { children: ReactNode }) {
   return (
     <p role="status" className="flex items-center gap-2 text-tertiary">
@@ -444,7 +432,6 @@ function Waiting({ children }: { children: ReactNode }) {
   );
 }
 
-/** One sentence for every runtime, as on Raft: the runtime's own instructions are not shown. */
 function AuthPage({ url }: { url: string }) {
   const safe = safeSignInUrl(url);
   const controlSize = useDialogControlSize();
@@ -505,7 +492,6 @@ function failureText(failure: LoginFailure, runtime: string): string {
   }
 }
 
-/** Why a runtime cannot be signed in or out from here at all. */
 export function unsupportedText(
   reason: "not_installed" | "version_unsupported" | "unsupported_installation",
   runtime: string,

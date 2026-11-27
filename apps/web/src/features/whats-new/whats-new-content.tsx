@@ -83,6 +83,7 @@ export const WHATS_NEW_CONTENT: Record<WhatsNewId, WhatsNewContent> = {
     title: m.whats_new_feedback_title,
     body: m.whats_new_feedback_body,
     illustration: FeedbackScene,
+    heroTone: "dark",
     action: { label: m.whats_new_feedback_cta, kind: "open-feedback" },
   },
 };

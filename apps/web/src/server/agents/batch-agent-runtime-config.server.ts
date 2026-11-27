@@ -1,3 +1,5 @@
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
+import { configureCodexCompatibleProvider } from "./codex-compatible-config.server";
 import {
   agentEnvironmentNameViolation,
   RUNTIME_PROVIDER,
@@ -70,6 +72,7 @@ export type BatchRuntimeSelectionInput = {
   contextWindow?: number;
   maxOutputTokens?: number;
   apiKey?: string;
+  baseUrl?: string;
 };
 
 export type BatchEnvironmentPatchInput = {
@@ -275,6 +278,15 @@ export class BatchAgentRuntimeConfig {
               ? {}
               : { maxOutputTokens: runtimeInput.maxOutputTokens }),
           };
+          const compatible = selectsCodexCompatible(selection.provider, selection.modelProvider);
+          const compatibleProvider = compatible
+            ? await configureCodexCompatibleProvider(
+                current.id,
+                { ...runtimeInput, model: selection.model },
+                currentConfig?.provider,
+                async () => this.environmentKey(),
+              )
+            : undefined;
           const sameProvider =
             currentConfig?.provider.kind === "coforge" &&
             currentConfig.runtime === selection.provider &&
@@ -283,27 +295,34 @@ export class BatchAgentRuntimeConfig {
             sameProvider && currentConfig?.provider.kind === "coforge"
               ? currentConfig.provider.apiKey
               : undefined;
-          const encryptedApiKey = apiKeyInput
-            ? await this.#encryptApiKey(current.id, selection.modelProvider, apiKeyInput)
-            : undefined;
+          const encryptedApiKey =
+            apiKeyInput && !compatible
+              ? await this.#encryptApiKey(current.id, selection.modelProvider, apiKeyInput)
+              : undefined;
           const apiKey = encryptedApiKey ?? preservedApiKey;
           if (selection.provider === RUNTIME_PROVIDER.COFORGE && !apiKey) {
             throw new AppError("INVALID_INPUT", { errorId: "agent-api-key-required" });
           }
           nextConfigWithoutEnv = agentRuntimeConfig(
             selection,
-            selection.modelProvider && (selection.provider === RUNTIME_PROVIDER.COFORGE || apiKey)
-              ? {
-                  kind: "coforge",
-                  providerId: selection.modelProvider,
-                  ...(apiKey ? { apiKey } : {}),
-                }
-              : { kind: "default" },
+            compatibleProvider ??
+              (selection.modelProvider &&
+              (selection.provider === RUNTIME_PROVIDER.COFORGE || apiKey)
+                ? {
+                    kind: "coforge",
+                    providerId: selection.modelProvider,
+                    ...(apiKey ? { apiKey } : {}),
+                  }
+                : { kind: "default" }),
             currentConfig?.environment,
           );
           runtimeSelectionChanged =
             JSON.stringify(currentConfig) !== JSON.stringify(nextConfigWithoutEnv);
-          providerChanged = currentConfig?.runtime !== nextConfigWithoutEnv.runtime;
+          providerChanged =
+            currentConfig?.runtime !== nextConfigWithoutEnv.runtime ||
+            ((currentConfig?.provider.kind === "codex-compatible" || compatible) &&
+              JSON.stringify(currentConfig?.provider) !==
+                JSON.stringify(nextConfigWithoutEnv.provider));
           if (runtimeSelectionChanged) {
             const refusal = await checkAvailability({
               provider: selection.provider,
@@ -311,7 +330,7 @@ export class BatchAgentRuntimeConfig {
               modelProvider: selection.modelProvider,
               reasoning: selection.reasoning,
               fastMode: selection.fastMode,
-              hasApiKey: Boolean(apiKey),
+              hasApiKey: Boolean(apiKey || compatibleProvider),
             });
             if (refusal) {
               throw new AppError("INVALID_INPUT", {

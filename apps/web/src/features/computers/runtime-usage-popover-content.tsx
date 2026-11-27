@@ -24,13 +24,6 @@ import {
 } from "./runtime-usage-status";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
 
-/**
- * The popover's pure body: everything `RuntimeUsage` fetches, rendered without touching a query
- * client itself, so a test can render it directly with a plain `data` fixture. Bands split by
- * full-width rules, as on Raft: the runtime (name, login state, version, who sees the account),
- * its account (plan, status, usage windows), when it was read with Refresh, the caller's
- * `footer`, and last its `actions`, which stay in view while the bands above them scroll.
- */
 export function RuntimeUsagePopoverContent({
   runtime,
   showUsage = true,
@@ -50,9 +43,10 @@ export function RuntimeUsagePopoverContent({
   resetPrompt,
   onResetCredit,
   notice,
+  billing,
+  codexCompatibleSupported,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
-  /** False for a runtime that reports no usage: only the runtime band and the footer show. */
   showUsage?: boolean;
   data?: UsageReadResult;
   scanning: boolean;
@@ -61,7 +55,6 @@ export function RuntimeUsagePopoverContent({
   computerOnline?: boolean;
   timeZone?: string | null;
   onRefresh: () => void;
-  /** Present when the popover opened on a press: draws its close button. */
   onClose?: () => void;
   auth?: RuntimeAuthStatus;
   account?: AccountState;
@@ -70,10 +63,12 @@ export function RuntimeUsagePopoverContent({
   accountAction?: ReactNode;
   resetPrompt?: ResetCreditPrompt;
   onResetCredit?: () => void;
-  /** A line under the version: why this runtime cannot be used, when it cannot. */
   notice?: ReactNode;
+  billing?: "provider-api-key";
+  codexCompatibleSupported?: boolean;
 }) {
   const hydrated = useHydrated();
+  const providerApiKeyBilling = billing === "provider-api-key";
   const snapshot = data?.result?.snapshot;
   const badge = data?.result ? usageStatus(data.result) : undefined;
   const reason =
@@ -86,8 +81,6 @@ export function RuntimeUsagePopoverContent({
           : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
-  // A signed-out runtime has no account to show: its band says so instead, beside Sign In. A login
-  // state that cannot be read, or is never sent, gets the same band, its button included (#208).
   const signedOut = account === "logged_out";
   const warnedAccount = accountBand(account);
   const sectionAction = warnedAccount ? undefined : accountAction;
@@ -150,7 +143,7 @@ export function RuntimeUsagePopoverContent({
               </p>
             )}
           </div>
-          {(showUsage || notice) && (
+          {((showUsage && !providerApiKeyBilling) || notice) && (
             <Tooltip title={refreshLabel}>
               <Button
                 size="xs"
@@ -180,10 +173,11 @@ export function RuntimeUsagePopoverContent({
           <div className="flex items-center justify-between gap-3 bg-warning-primary px-4 py-3">
             <div className="min-w-0">
               <h3 className="text-sm font-medium text-warning-primary">{warnedAccount.label}</h3>
-              {/* Only beside the button that does it: a viewer who may not sign in gets no hint. */}
               {signedOut && accountAction && (
                 <p className="text-xs text-tertiary">
-                  {m.computer_runtime_sign_in_hint({ runtime: runtime.displayName })}
+                  {runtime.provider === RUNTIME_PROVIDER.CODEX && codexCompatibleSupported
+                    ? m.computer_runtime_codex_sign_in_hint({ runtime: runtime.displayName })
+                    : m.computer_runtime_sign_in_hint({ runtime: runtime.displayName })}
                 </p>
               )}
             </div>
@@ -191,75 +185,91 @@ export function RuntimeUsagePopoverContent({
           </div>
         )}
 
-        {!signedOut && (showUsage || plan || accountLabel || sectionAction) && (
-          <section className="px-4 py-3">
-            {(title || accountNote || badge || sectionAction) && (
-              <div className="flex items-center justify-between gap-3">
-                {(title || accountNote) && (
-                  <div className="min-w-0">
-                    {title && (
-                      <h3 className="line-clamp-2 text-sm font-medium wrap-anywhere text-primary">
-                        {title}
-                      </h3>
-                    )}
-                    {accountNote && (
-                      <p className="line-clamp-2 text-xs wrap-anywhere text-tertiary">
-                        {accountNote}
-                      </p>
-                    )}
-                  </div>
-                )}
-                {sectionAction ??
-                  (badge && (
-                    <Badge
-                      color={badge.ok ? "success" : "warning"}
-                      size="sm"
-                      className="ms-auto shrink-0"
-                    >
-                      {badge.label}
-                    </Badge>
-                  ))}
-              </div>
-            )}
-            {!showUsage ? null : reading ? (
-              <div aria-label={m.computer_usage_reading()} className="mt-3 space-y-3">
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-2/3" />
-              </div>
-            ) : (
-              <>
-                {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
-                <RuntimeUsageWindows
-                  provider={runtime.provider}
-                  snapshot={snapshot}
-                  timeZone={timeZone}
-                />
-                {facts.length > 0 && (
-                  <p
-                    className={cn(
-                      "mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs tabular-nums text-tertiary",
-                      balance && "wrap-anywhere",
-                    )}
-                  >
-                    {facts.map((fact) => (
-                      <span key={fact} className={balance ? undefined : "truncate"}>
-                        {fact}
-                      </span>
+        {!signedOut &&
+          (showUsage || providerApiKeyBilling || plan || accountLabel || sectionAction) && (
+            <section className="px-4 py-3">
+              {(title || accountNote || badge || sectionAction) && (
+                <div className="flex items-center justify-between gap-3">
+                  {(title || accountNote) && (
+                    <div className="min-w-0">
+                      {title && (
+                        <h3 className="line-clamp-2 text-sm font-medium wrap-anywhere text-primary">
+                          {title}
+                        </h3>
+                      )}
+                      {accountNote && (
+                        <p className="line-clamp-2 text-xs wrap-anywhere text-tertiary">
+                          {accountNote}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {sectionAction ??
+                    (badge && (
+                      <Badge
+                        color={badge.ok ? "success" : "warning"}
+                        size="sm"
+                        className="ms-auto shrink-0"
+                      >
+                        {badge.label}
+                      </Badge>
                     ))}
-                  </p>
-                )}
-              </>
-            )}
-          </section>
-        )}
-        {!signedOut && showUsage && !reading && resetPrompt && onResetCredit && (
-          <RuntimeResetCreditAction
-            prompt={resetPrompt}
-            runtimeName={runtime.displayName}
-            computerOnline={computerOnline}
-            onPress={onResetCredit}
-          />
-        )}
+                </div>
+              )}
+              {providerApiKeyBilling ? (
+                <p
+                  className={
+                    title || accountNote || badge || sectionAction
+                      ? "mt-2 text-sm text-tertiary"
+                      : "text-sm text-tertiary"
+                  }
+                >
+                  {m.computer_usage_provider_api_key()}
+                </p>
+              ) : !showUsage ? null : reading ? (
+                <div aria-label={m.computer_usage_reading()} className="mt-3 space-y-3">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+              ) : (
+                <>
+                  {reason && <p className="mt-2 text-sm text-tertiary">{reason}</p>}
+                  <RuntimeUsageWindows
+                    provider={runtime.provider}
+                    snapshot={snapshot}
+                    timeZone={timeZone}
+                  />
+                  {facts.length > 0 && (
+                    <p
+                      className={cn(
+                        "mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs tabular-nums text-tertiary",
+                        balance && "wrap-anywhere",
+                      )}
+                    >
+                      {facts.map((fact) => (
+                        <span key={fact} className={balance ? undefined : "truncate"}>
+                          {fact}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+          )}
+        {!signedOut &&
+          showUsage &&
+          !providerApiKeyBilling &&
+          !reading &&
+          resetPrompt &&
+          onResetCredit && (
+            <RuntimeResetCreditAction
+              prompt={resetPrompt}
+              runtimeName={runtime.displayName}
+              computerOnline={computerOnline}
+              onPress={onResetCredit}
+            />
+          )}
         {footer && <div className="px-4 py-3">{footer}</div>}
       </div>
       {actions && <div className="shrink-0 divide-y divide-secondary">{actions}</div>}

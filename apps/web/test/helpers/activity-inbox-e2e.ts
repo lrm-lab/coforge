@@ -1,7 +1,7 @@
 import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { hydratedElement, seededUuid } from "./browser-e2e";
+import { elementAtRest, seededUuid } from "./browser-e2e";
 
 /**
  * The Activity list's rows, as a selector literal for page expressions. Scoped to the list: a
@@ -102,13 +102,12 @@ export const filterMenuItems = `document.querySelectorAll('[role="menu"][aria-la
 export const menuItemLabel = (item: string) =>
   `(${item}.querySelector("span.grow")?.textContent?.trim() ?? ${item}.textContent.trim())`;
 
-/** Opens the desktop Filter activity dropdown, picks `name`, and waits for the menu to close. */
 export async function selectDesktopFilter(
   browser: (...args: string[]) => Promise<string>,
   evaluate: <T>(expression: string) => Promise<T>,
   name: string,
 ) {
-  await browser("wait", "--fn", `${filterTrigger} !== null && ${hydratedElement(filterTrigger)}`);
+  await browser("wait", "--fn", elementAtRest(filterTrigger));
   await browser("click", filterTriggerSelector);
   await browser("wait", "--fn", `${filterMenuItems}.length === 5`);
   await evaluate(`[...${filterMenuItems}]

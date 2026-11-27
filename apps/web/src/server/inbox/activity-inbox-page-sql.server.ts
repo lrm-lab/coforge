@@ -5,6 +5,7 @@ import type {
 } from "#src/features/inbox/activity-inbox.schemas";
 import {
   ITEM_COLUMNS,
+  activityMentionsOnlySql,
   conversationItemRowsSql,
   conversationUnreadAttentionRowsSql,
   conversationUnreadMessageSql,
@@ -85,6 +86,7 @@ export function activityPageSql(
   },
 ) {
   const unreadFirst = options.filter === "all";
+  const mentionsOnly = activityMentionsOnlySql(Prisma.sql`listed."channelName"`);
   return Prisma.sql`
     WITH items AS MATERIALIZED (
       ${activityItemsSql(workspaceId, userId)}
@@ -147,7 +149,7 @@ export function activityPageSql(
       SELECT COUNT(*)::int AS "count", (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
       FROM "messages" m
       WHERE ${conversationUnreadMessageSql}
-        AND (cm."notificationLevel" <> 'muted' OR listed."channelName" IS NULL
+        AND (NOT ${mentionsOnly}
           OR listed."taskBoardId" IS NOT NULL OR EXISTS (
             SELECT 1 FROM "message_mentions" mm
             WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"

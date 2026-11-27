@@ -27,9 +27,15 @@ import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
 
-function TaskCreatedAt({ at }: { at: string | Date }) {
-  const hydrated = useHydrated();
-  const timeZone = useTimeZone();
+function TaskCreatedAt({
+  at,
+  hydrated,
+  timeZone,
+}: {
+  at: string | Date;
+  hydrated: boolean;
+  timeZone: string | null | undefined;
+}) {
   return (
     <time
       dateTime={new Date(at).toISOString()}
@@ -40,9 +46,15 @@ function TaskCreatedAt({ at }: { at: string | Date }) {
   );
 }
 
-function TaskDueAt({ task }: { task: TaskView }) {
-  const hydrated = useHydrated();
-  const timeZone = useTimeZone();
+function TaskDueAt({
+  task,
+  hydrated,
+  timeZone,
+}: {
+  task: TaskView;
+  hydrated: boolean;
+  timeZone: string | null | undefined;
+}) {
   if (!task.dueAt) return null;
   const state = task.dueState;
   return (
@@ -151,6 +163,8 @@ export function TaskCard({
   selected?: boolean;
   onReach?: () => void;
 }) {
+  const hydrated = useHydrated();
+  const timeZone = useTimeZone();
   const cardRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -227,7 +241,7 @@ export function TaskCard({
             )}
             {task.dueAt && (
               <span className="ms-auto shrink-0">
-                <TaskDueAt task={task} />
+                <TaskDueAt task={task} hydrated={hydrated} timeZone={timeZone} />
               </span>
             )}
           </p>
@@ -254,7 +268,7 @@ export function TaskCard({
         )}
         {task.dueAt && (
           <span className="hidden shrink-0 sm:inline-flex">
-            <TaskDueAt task={task} />
+            <TaskDueAt task={task} hydrated={hydrated} timeZone={timeZone} />
           </span>
         )}
         <TaskOwnerAvatar owner={task.owner} tooltip />
@@ -345,8 +359,8 @@ export function TaskCard({
             count={task.fileCount}
             label={(count) => m.task_card_files({ count })}
           />
-          <TaskCreatedAt at={task.createdAt} />
-          <TaskDueAt task={task} />
+          <TaskCreatedAt at={task.createdAt} hydrated={hydrated} timeZone={timeZone} />
+          <TaskDueAt task={task} hydrated={hydrated} timeZone={timeZone} />
         </span>
       </div>
       {tools && (

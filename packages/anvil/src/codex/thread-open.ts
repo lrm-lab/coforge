@@ -1,3 +1,5 @@
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
+import { CODEX_COMPATIBLE_NATIVE_PROVIDER } from "./provider-support";
 import { createHash } from "node:crypto";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSessionOptions } from "@coforge/agent";
@@ -35,6 +37,9 @@ export async function openCodexThread(
   appServerVersion?: string,
 ): Promise<OpenedCodexThread> {
   const sessionId = options.sessionId;
+  const compatible = selectsCodexCompatible(RUNTIME_PROVIDER.CODEX, options.runtime?.modelProvider);
+  const matchesProvider = (result: ThreadResponse | undefined) =>
+    compatible === (result?.modelProvider === CODEX_COMPATIBLE_NATIVE_PROVIDER);
   const serviceTier = options.runtime?.fastMode ? "fast" : standardServiceTier(appServerVersion);
   const open = (resume?: string) =>
     process.request(threadRequest(options, environment, serviceTier, resume, reasoningSummary));
@@ -42,9 +47,12 @@ export async function openCodexThread(
   // The resumed thread, or why it could not be: any error that is not a known one is thrown.
   const resume = (id: string) =>
     open(id).then(
-      (response) => ({ response, failure: undefined }),
+      (response) =>
+        matchesProvider(asRecord(response.result))
+          ? { response, failure: undefined }
+          : { response: undefined, failure: "provider_changed" as const },
       (error: unknown) => {
-        const failure = resumeFailure(error, id);
+        const failure = resumeFailure(error, id, compatible);
         if (!failure) throw error;
         return { response: undefined, failure };
       },
@@ -61,7 +69,9 @@ export async function openCodexThread(
       replacementWarning:
         reason === "active_writer"
           ? "Codex could not resume its previous thread because another writer is active; Raft started a fresh Codex thread.\n\nUse Raft conversation history and local MEMORY.md/notes as the recovery point; do not assume prior Codex thread context is loaded."
-          : undefined,
+          : reason === "provider_changed"
+            ? "Codex started a new session after the provider changed. Prior messages remain available in CoForge."
+            : undefined,
     };
   };
   const recover = async (
@@ -84,7 +94,12 @@ export async function openCodexThread(
     });
     const second = await resume(id);
     if (second.response) return { response: second.response };
-    return replace(id, second.failure === "active_writer" ? "active_writer" : "still_unavailable");
+    return replace(
+      id,
+      second.failure === "active_writer" || second.failure === "provider_changed"
+        ? second.failure
+        : "still_unavailable",
+    );
   };
   const first = sessionId ? await resume(sessionId) : { response: await open() };
   const replacement = first.response
@@ -93,11 +108,12 @@ export async function openCodexThread(
         replacedSessionId: undefined,
         replacementWarning: undefined,
       }
-    : first.failure === "active_writer"
-      ? await replace(sessionId!, "active_writer")
+    : first.failure === "active_writer" || first.failure === "provider_changed"
+      ? await replace(sessionId!, first.failure)
       : await recover(sessionId!, first.failure!);
   const { response, replacedSessionId, replacementWarning } = replacement;
   const result = asRecord(response.result);
+  if (!matchesProvider(result)) throw new Error("Codex did not select the requested provider");
   const thread = asRecord(result?.thread);
   if (typeof thread?.id !== "string") throw new Error("Codex did not create a thread");
   if (sessionId && !replacedSessionId && thread.id !== sessionId)
@@ -124,12 +140,22 @@ export async function openCodexThread(
 function resumeFailure(
   error: unknown,
   sessionId: string,
-): "active_writer" | "missing" | "archived" | undefined {
+  compatible: boolean,
+): "active_writer" | "missing" | "archived" | "provider_changed" | undefined {
   const native = error instanceof JsonlRequestError ? asRecord(error.responseError) : undefined;
   const message = native?.message;
   if (typeof message !== "string") return undefined;
   if (message.includes(" already has an active writer")) return "active_writer";
   if (native?.code !== -32600) return undefined;
+  const unavailableProvider =
+    /^This chat uses model provider “([^”]+)”, which is no longer configured\. Restore this provider’s configuration to continue\.$/u.exec(
+      message,
+    )?.[1];
+  if (
+    unavailableProvider &&
+    (compatible || unavailableProvider === CODEX_COMPATIBLE_NATIVE_PROVIDER)
+  )
+    return "provider_changed";
   if (message === `no rollout found for thread id ${sessionId}`) return "missing";
   return message.startsWith(`session ${sessionId} is archived`) ? "archived" : undefined;
 }

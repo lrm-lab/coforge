@@ -104,3 +104,39 @@ export function commentNoticeUnreadAttentionRowsSql(workspaceId: string, userId:
     WHERE ${pendingNoticeSql(workspaceId, userId)}
       AND pma."targetReadAt" IS NULL`;
 }
+
+function visibleActivityNoticeIdsSql(workspaceId: string, userId: string, before: Date) {
+  return Prisma.sql`
+    SELECT notice."mentionId" FROM (
+      ${mentionNoticeRowsSql(workspaceId, userId)}
+      UNION ALL
+      ${commentNoticeRowsSql(workspaceId, userId)}
+    ) notice
+    WHERE notice."latestAt" <= ${before}`;
+}
+
+export function markActivityNoticesReadSql(
+  workspaceId: string,
+  userId: string,
+  before: Date,
+  at: Date,
+) {
+  return Prisma.sql`
+    UPDATE "pending_mention_actions" pma SET "targetReadAt" = ${at}
+    WHERE ${pendingNoticeSql(workspaceId, userId)}
+      AND pma."targetReadAt" IS NULL
+      AND pma."id" IN (${visibleActivityNoticeIdsSql(workspaceId, userId, before)})`;
+}
+
+export function dismissActivityNoticesSql(
+  workspaceId: string,
+  userId: string,
+  before: Date,
+  at: Date,
+) {
+  return Prisma.sql`
+    UPDATE "pending_mention_actions" pma SET "dismissedAt" = ${at}
+    WHERE ${pendingNoticeSql(workspaceId, userId)}
+      AND pma."id" IN (${visibleActivityNoticeIdsSql(workspaceId, userId, before)})
+    RETURNING pma."id"`;
+}

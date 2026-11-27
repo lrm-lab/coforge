@@ -18,6 +18,7 @@ import { agentPrincipal, personPrincipal } from "./artifact-comment-principal.se
 import { resolveArtifactReference } from "./artifact-reference.server";
 import { listComments, readUnseenComments } from "./artifact-comment-reads.server";
 import { followArtifact, unfollowArtifact } from "./artifact-follows.server";
+import { ArtifactSettlements } from "./artifact-settlement.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
 import type { ArtifactSignals } from "./artifact-signals.server";
 import {
@@ -126,6 +127,8 @@ const RULES = {
   image: z.object({ artifact: id, image: id }),
   follow: z.object({ artifact: id }),
   unfollow: z.object({ artifact: id }),
+  settle: z.object({ artifact: id }),
+  unsettle: z.object({ artifact: id }),
 } satisfies Record<AgentArtifactRequest["operation"], z.ZodType>;
 
 export { ArtifactRateLimited } from "./agent-artifact-rate-limit.server";
@@ -458,6 +461,18 @@ export async function runAgentArtifactOperation(
         principal,
         (parsed.data as z.infer<typeof RULES.unfollow>).artifact,
       );
+    case "settle":
+      return new ArtifactSettlements(services.db).settle({
+        workspaceId,
+        artifactId: (parsed.data as z.infer<typeof RULES.settle>).artifact,
+        actor: { agentId },
+      });
+    case "unsettle":
+      return new ArtifactSettlements(services.db).unsettle({
+        workspaceId,
+        artifactId: (parsed.data as z.infer<typeof RULES.unsettle>).artifact,
+        actor: { agentId },
+      });
   }
 }
 

@@ -19,6 +19,7 @@ import type {
   GitHubCommitTrailersResponse,
 } from "@lrm/coforge-sdk/agent";
 import {
+  decodeAgentChannelErrorResponse,
   decodeGitHubCredentialResponse,
   decodeGitHubCommitTrailersResponse,
 } from "@lrm/coforge-sdk/agent";
@@ -31,6 +32,7 @@ import type {
   AgentReminderOperationResponse,
 } from "@lrm/coforge-sdk/internal";
 import { AGENT_SEND_REQUEST_TIMEOUT_MS } from "@lrm/coforge-sdk/internal";
+import { AgentChannelRequestError } from "./agent-channel-request-error";
 import { AgentTransportError } from "./agent-transport-error";
 import {
   createAgentAttentionHttpClient,
@@ -372,11 +374,19 @@ export const defaultAgentChannelHttpClient: AgentChannelHttpClient = {
     } catch (cause) {
       throw AgentTransportError.preResponseTransport("Agent Channel", cause);
     }
-    // A typed error (not a bare Error) so the real upstream status (e.g. 404 "channel not
-    // found") survives classification instead of collapsing into a generic 502; the CLI
-    // (local-client.ts#callChannel) turns a preserved 404 into CliError code NOT_FOUND.
-    if (!response.ok)
+    if (!response.ok) {
+      const rawText = await response.text().catch(() => "");
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(rawText);
+      } catch {
+        parsedBody = undefined;
+      }
+      const envelope = decodeAgentChannelErrorResponse(parsedBody);
+      if (envelope)
+        throw new AgentChannelRequestError(envelope.errorCode, envelope.error, response.status);
       throw AgentTransportError.upstreamHttpResponse("Agent Channel", response.status);
+    }
     return (await response.json()) as Record<string, unknown>;
   },
 };

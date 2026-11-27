@@ -50,7 +50,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "channel update": {
     syntax:
-      "coforge channel update --target '#channel' [--name <name>] [--description <text>] [--public|--private] [--json]",
+      "coforge channel update --target '#channel'|'@peer' [--name <name>] [--description <text>] [--public|--private] [--announcement <id|link>|--no-announcement] [--json]",
   },
   "channel archive": {
     syntax: "coforge channel archive --target '#channel' [--json]",

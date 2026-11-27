@@ -10,6 +10,7 @@ import {
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { WEEKLY_REPORTS_VISIBLE_AGENT_WHERE } from "#src/server/records/weekly-reports-gate.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import {
   readableRuntimeConfig,
@@ -195,7 +196,13 @@ export class PrismaAgentRepository implements AgentRepository {
 
   async listOwnedInWorkspace(workspaceId: string, ownerId: string) {
     const agents = await this.db.agent.findMany({
-      where: { workspaceId, ownerId, ...ACTIVE_AGENT_WHERE, ...ROSTER_AGENT_WHERE },
+      where: {
+        AND: [
+          { workspaceId, ownerId, ...ACTIVE_AGENT_WHERE },
+          ROSTER_AGENT_WHERE,
+          WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
+        ],
+      },
       select: AGENT_RECORD_SELECT,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });

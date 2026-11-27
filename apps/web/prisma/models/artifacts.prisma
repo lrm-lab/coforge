@@ -40,6 +40,11 @@ model Artifact {
   originMessageId    String?        @db.Uuid
   originAttachmentId String?        @db.Uuid
   currentVersion  Int               @default(0)
+  settledAt       DateTime?
+  settledVersion  Int?
+  settledByKind   String?
+  settledById     String?           @db.Uuid
+  reopenedAtVersion Int?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   deletedAt       DateTime?
@@ -151,10 +156,11 @@ model ArtifactAccessEvent {
 /// read that raced a newer one cannot rewind it. `agentId` has no foreign key: this module adds
 /// none to a table outside it. Goes with the artifact.
 model ArtifactReadPosition {
-  artifactId String   @db.Uuid
-  agentId    String   @db.Uuid
-  version    Int
-  artifact   Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  artifactId    String    @db.Uuid
+  agentId       String    @db.Uuid
+  version       Int
+  seenSettledAt DateTime?
+  artifact      Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
 
   @@id([artifactId, agentId])
   @@map("artifact_read_positions")

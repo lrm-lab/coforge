@@ -28,6 +28,7 @@ export function AgentProfileHeader({
   canMessage,
   deleted = false,
   onClose,
+  hideClose = false,
   back,
   pageHeading = false,
 }: {
@@ -44,6 +45,7 @@ export function AgentProfileHeader({
   canMessage: boolean;
   deleted?: boolean;
   onClose: () => void;
+  hideClose?: boolean;
   back?: { label: string; onPress: () => void };
   pageHeading?: boolean;
 }) {
@@ -133,14 +135,16 @@ export function AgentProfileHeader({
           </>
         )}
       </div>
-      <ButtonUtility
-        icon={X}
-        size="sm"
-        color="tertiary"
-        className="-me-1.5"
-        tooltip={m.controls_close()}
-        onClick={onClose}
-      />
+      {!hideClose && (
+        <ButtonUtility
+          icon={X}
+          size="sm"
+          color="tertiary"
+          className="-me-1.5"
+          tooltip={m.controls_close()}
+          onClick={onClose}
+        />
+      )}
     </header>
   );
   const statusLine = controls?.controlPendingLabel ?? controls?.controlFailureDetail;

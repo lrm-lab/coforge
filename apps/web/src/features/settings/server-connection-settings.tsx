@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import {
   downloadHostBootstrap,
@@ -22,9 +23,6 @@ const CLOUD_SERVICE_INPUT_MAX_LENGTH = 200;
 export function ServerConnectionSettings() {
   const [page, setPage] = useState<Page | null>(null);
   const [initialClusterName, setInitialClusterName] = useState<string | null>(null);
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<UnlockReason | null>(null);
-  const [pending, guard] = useSubmitGuard();
   const unlock = useServerFn(unlockCloudComputerService);
   const load = useServerFn(loadCloudComputerService);
   const lock = useServerFn(lockCloudComputerService);
@@ -43,55 +41,15 @@ export function ServerConnectionSettings() {
     return () => window.removeEventListener("focus", refresh);
   }, [page, load]);
 
-  function continueWithPassword() {
-    setError(null);
-    void guard(async () => {
-      try {
-        const result = await unlock({ data: { password } });
-        if (!result.ok) {
-          setError(result.reason);
-          return;
-        }
-        setPassword("");
-        setPage(result.page);
-        setInitialClusterName(result.clusterName);
-      } catch {
-        setError("unavailable");
-      }
-    });
-  }
-
   if (!page) {
     return (
-      <form
-        className="max-w-sm space-y-4 px-page py-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          continueWithPassword();
+      <UnlockForm
+        unlock={unlock}
+        onUnlocked={(nextPage, clusterName) => {
+          setPage(nextPage);
+          setInitialClusterName(clusterName);
         }}
-      >
-        <Input
-          label={m.settings_cloud_service_password_label()}
-          hint={m.settings_cloud_service_password_hint()}
-          type="password"
-          name="password"
-          autoComplete="current-password"
-          isRequired
-          maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
-          value={password}
-          onChange={setPassword}
-        />
-        <Button type="submit" size="sm" isDisabled={pending || password.length === 0}>
-          {pending
-            ? m.settings_cloud_service_password_checking()
-            : m.settings_cloud_service_password_continue()}
-        </Button>
-        {error ? (
-          <p role="alert" className="text-sm text-error-primary">
-            {passwordError(error)}
-          </p>
-        ) : null}
-      </form>
+      />
     );
   }
 
@@ -134,6 +92,85 @@ export function ServerConnectionSettings() {
   );
 }
 
+function UnlockForm({
+  unlock,
+  onUnlocked,
+}: {
+  unlock: (input: {
+    data: { password: string };
+  }) => Promise<
+    { ok: true; page: Page; clusterName: string | null } | { ok: false; reason: UnlockReason }
+  >;
+  onUnlocked: (page: Page, clusterName: string | null) => void;
+}) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [formError, setFormError] = useState<UnlockReason | null>(null);
+  const [pending, guard] = useSubmitGuard();
+
+  const form = useAppForm({
+    defaultValues: { password: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      if (value.password.length === 0) return;
+      await guard(async () => {
+        setFormError(null);
+        try {
+          const result = await unlock({ data: { password: value.password } });
+          if (!result.ok) {
+            if (result.reason === "rejected") {
+              setFieldServerError(form, "password", passwordError(result.reason), formRef.current);
+            } else {
+              setFormError(result.reason);
+            }
+            return;
+          }
+          form.reset();
+          onUnlocked(result.page, result.clusterName);
+        } catch {
+          setFormError("unavailable");
+        }
+      });
+    },
+  });
+
+  return (
+    <form.AppForm>
+      <form
+        ref={formRef}
+        className="max-w-sm space-y-4 px-page py-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <form.AppField name="password">
+          {(field) => (
+            <field.Input
+              label={m.settings_cloud_service_password_label()}
+              hint={m.settings_cloud_service_password_hint()}
+              type="password"
+              autoComplete="current-password"
+              isRequired
+              maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
+              onChange={() => setFormError(null)}
+            />
+          )}
+        </form.AppField>
+        <form.Subscribe selector={(state) => state.values.password.length === 0}>
+          {(empty) => (
+            <Button type="submit" size="sm" isDisabled={pending || empty}>
+              {pending
+                ? m.settings_cloud_service_password_checking()
+                : m.settings_cloud_service_password_continue()}
+            </Button>
+          )}
+        </form.Subscribe>
+        <form.Alert error={formError ? passwordError(formError) : undefined} />
+      </form>
+    </form.AppForm>
+  );
+}
+
 function InstallHost({
   clusterName: initialClusterName,
   download,
@@ -146,76 +183,90 @@ function InstallHost({
     | { ok: false; reason: "no-feed" | "no-token" | "invalid" }
   >;
 }) {
-  const [clusterName, setClusterName] = useState(initialClusterName ?? "");
-  const [image, setImage] = useState("");
-  const [error, setError] = useState<DownloadReason | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [formError, setFormError] = useState<DownloadReason | null>(null);
   const [pending, guard] = useSubmitGuard();
 
-  function saveScript() {
-    setError(null);
-    void guard(async () => {
-      try {
-        const result = await download({ data: { clusterName, image } });
-        if (!result.ok) {
-          setError(result.reason);
-          return;
+  const form = useAppForm({
+    defaultValues: { clusterName: initialClusterName ?? "", image: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      if (value.clusterName.length === 0 || value.image.length === 0) return;
+      await guard(async () => {
+        setFormError(null);
+        try {
+          const result = await download({
+            data: { clusterName: value.clusterName, image: value.image },
+          });
+          if (!result.ok) {
+            setFormError(result.reason);
+            return;
+          }
+          const url = URL.createObjectURL(
+            new Blob([result.script], { type: "text/x-shellscript" }),
+          );
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = result.filename;
+          link.click();
+          URL.revokeObjectURL(url);
+        } catch {
+          setFormError("failed");
         }
-        const url = URL.createObjectURL(new Blob([result.script], { type: "text/x-shellscript" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = result.filename;
-        link.click();
-        URL.revokeObjectURL(url);
-      } catch {
-        setError("failed");
-      }
-    });
-  }
+      });
+    },
+  });
 
   return (
-    <form
-      className="max-w-2xl space-y-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        saveScript();
-      }}
-    >
-      <div className="space-y-2">
-        <h2 className="font-medium text-primary">{m.settings_cloud_service_install_title()}</h2>
-        <p className="text-tertiary">{m.settings_cloud_service_install_body()}</p>
-      </div>
-      <Input
-        label={m.settings_cloud_service_cluster_name()}
-        name="clusterName"
-        isRequired
-        maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
-        value={clusterName}
-        onChange={setClusterName}
-      />
-      <Input
-        label={m.settings_cloud_service_image()}
-        hint={m.settings_cloud_service_image_hint()}
-        name="image"
-        placeholder="coforge-computer:staging"
-        isRequired
-        maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
-        value={image}
-        onChange={setImage}
-      />
-      <Button
-        type="submit"
-        size="sm"
-        isLoading={pending}
-        isDisabled={pending || clusterName.length === 0 || image.length === 0}
+    <form.AppForm>
+      <form
+        ref={formRef}
+        className="max-w-2xl space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
       >
-        {m.settings_cloud_service_download()}
-      </Button>
-      {error ? (
-        <p role="alert" className="text-error-primary">
-          {downloadError(error)}
-        </p>
-      ) : null}
-    </form>
+        <div className="space-y-2">
+          <h2 className="font-medium text-primary">{m.settings_cloud_service_install_title()}</h2>
+          <p className="text-tertiary">{m.settings_cloud_service_install_body()}</p>
+        </div>
+        <form.AppField name="clusterName">
+          {(field) => (
+            <field.Input
+              label={m.settings_cloud_service_cluster_name()}
+              isRequired
+              maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
+              onChange={() => setFormError(null)}
+            />
+          )}
+        </form.AppField>
+        <form.AppField name="image">
+          {(field) => (
+            <field.Input
+              label={m.settings_cloud_service_image()}
+              hint={m.settings_cloud_service_image_hint()}
+              placeholder="coforge-computer:staging"
+              isRequired
+              maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
+              onChange={() => setFormError(null)}
+            />
+          )}
+        </form.AppField>
+        <form.Subscribe
+          selector={(state) =>
+            state.values.clusterName.length === 0 || state.values.image.length === 0
+          }
+        >
+          {(empty) => (
+            <Button type="submit" size="sm" isLoading={pending} isDisabled={pending || empty}>
+              {m.settings_cloud_service_download()}
+            </Button>
+          )}
+        </form.Subscribe>
+        <form.Alert error={formError ? downloadError(formError) : undefined} />
+      </form>
+    </form.AppForm>
   );
 }
 

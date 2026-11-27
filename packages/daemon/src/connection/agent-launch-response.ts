@@ -1,3 +1,4 @@
+import { codexCompatibleEnvironment } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { agentEnvironmentShapeViolation } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
@@ -61,11 +62,15 @@ export function parseAgentLaunchConfig(response: unknown): AgentLaunchConfig {
     apiKey?: unknown;
     providerConfig?: unknown;
     envVars?: unknown;
+    codexCompatibleEnvironment?: unknown;
     runtimeConfigRevision?: unknown;
     assignedSkillPacks?: unknown;
     identity?: unknown;
   };
   const providerConfig = parseAgentRuntimeProviderConfig(value.providerConfig);
+  const compatible = codexCompatibleEnvironment(value.codexCompatibleEnvironment);
+  if (value.codexCompatibleEnvironment !== undefined && !compatible)
+    throw new Error("invalid Codex compatible provider environment");
   const assignedSkillPacks = Array.isArray(value.assignedSkillPacks)
     ? value.assignedSkillPacks.filter((entry): entry is string => typeof entry === "string")
     : [];
@@ -75,6 +80,7 @@ export function parseAgentLaunchConfig(response: unknown): AgentLaunchConfig {
     agentApiKey: parseAgentApiKey(value.apiKey),
     ...(providerConfig ? { providerConfig } : {}),
     envVars: parseAgentEnvironment(value.envVars),
+    ...(compatible ? { codexCompatibleEnvironment: compatible } : {}),
     ...(typeof runtimeConfigRevision === "number" &&
       Number.isInteger(runtimeConfigRevision) &&
       runtimeConfigRevision >= 0 &&

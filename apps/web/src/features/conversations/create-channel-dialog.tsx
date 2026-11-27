@@ -1,4 +1,5 @@
-import { useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useId, useMemo, useRef, useState } from "react";
+import { useStore } from "@tanstack/react-form";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import { XClose } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
@@ -14,15 +15,16 @@ import {
   DialogCancel,
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
-import { Input } from "#src/components/base/input/input";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import {
   buildGroupChatCandidates,
@@ -173,13 +175,10 @@ function CreateChannelForm({
   close,
 }: CreateChannelFormProps) {
   const controlSize = useDialogControlSize();
-  const [name, setName] = useState(defaultName);
-  const [makePrivate, setMakePrivate] = useState(false);
   const [startingKeys] = useState(() => initialKeys(initialMembers));
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(startingKeys);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<{
     channelId: string;
     name: string;
@@ -188,8 +187,54 @@ function CreateChannelForm({
   const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const wide = useBreakpoint("md");
-  const nameValid = CHANNEL_NAME_PATTERN.test(name.trim());
   const canCreate = canCreateGroupChat(selectedKeys.size, minMembers);
+
+  const form = useAppForm({
+    defaultValues: { name: defaultName, makePrivate: false },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      if (busy.current || !canCreate) return;
+      busy.current = true;
+      setError("");
+      const channelName = value.name.trim();
+      const { userIds, agentIds } = splitGroupChatKeys(selectedKeys);
+      try {
+        const outcome: CreateChannelOutcome = createChannelOutcome(
+          await onCreate(
+            channelName,
+            userIds,
+            agentIds,
+            value.makePrivate ? CHANNEL_VISIBILITY.PRIVATE : undefined,
+          ),
+        );
+        if (outcome.kind === "open") {
+          await onOpenChannel?.(outcome.channelId);
+          onOpenChange(false);
+        } else if (outcome.kind === "result") {
+          setCreated({ channelId: outcome.channelId, name: channelName, notice: outcome.notice });
+        } else {
+          onOpenChange(false);
+        }
+      } catch (cause) {
+        if (isAppErrorCode(cause, "CONFLICT")) {
+          setFieldServerError(form, "name", m.channel_conflict(), formRef.current);
+        } else if (isAppErrorCode(cause, "INVALID_INPUT")) {
+          setFieldServerError(form, "name", m.channel_name_hint(), formRef.current);
+        } else {
+          setError(m.channel_error());
+        }
+      } finally {
+        busy.current = false;
+      }
+    },
+  });
+
+  const { name, makePrivate, saving } = useStore(form.store, (state) => ({
+    name: state.values.name,
+    makePrivate: state.values.makePrivate,
+    saving: state.isSubmitting,
+  }));
+  const nameValid = CHANNEL_NAME_PATTERN.test(name.trim());
   const locked = saving || created !== null;
   const dirty =
     created === null &&
@@ -201,65 +246,46 @@ function CreateChannelForm({
   function toggle(key: string, on: boolean) {
     setSelectedKeys((previous) => toggleGroupChatKey(previous, key, on));
   }
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (busy.current || !canCreate || !nameValid) return;
-    busy.current = true;
-    setSaving(true);
-    setError("");
-    const channelName = name.trim();
-    const { userIds, agentIds } = splitGroupChatKeys(selectedKeys);
-    try {
-      const outcome: CreateChannelOutcome = createChannelOutcome(
-        await onCreate(
-          channelName,
-          userIds,
-          agentIds,
-          makePrivate ? CHANNEL_VISIBILITY.PRIVATE : undefined,
-        ),
-      );
-      if (outcome.kind === "open") {
-        await onOpenChannel?.(outcome.channelId);
-        onOpenChange(false);
-      } else if (outcome.kind === "result") {
-        setCreated({ channelId: outcome.channelId, name: channelName, notice: outcome.notice });
-      } else {
-        onOpenChange(false);
-      }
-    } catch (cause) {
-      setError(isAppErrorCode(cause, "CONFLICT") ? m.channel_conflict() : m.channel_error());
-    } finally {
-      busy.current = false;
-      setSaving(false);
-    }
-  }
   const nameField = (
-    <Input
-      size={controlSize}
-      label={m.channel_name()}
-      hint={m.channel_name_hint()}
-      value={name}
-      onChange={setName}
-      isRequired
-      maxLength={32}
-      pattern="[a-z0-9][a-z0-9_\-]{0,31}"
-      placeholder={m.channel_name_placeholder()}
-      isDisabled={locked}
-    />
+    <form.AppField
+      name="name"
+      validators={{
+        onChange: ({ value }) =>
+          value.trim() && !CHANNEL_NAME_PATTERN.test(value.trim())
+            ? m.channel_name_hint()
+            : undefined,
+        onSubmit: ({ value }) =>
+          CHANNEL_NAME_PATTERN.test(value.trim()) ? undefined : m.channel_name_hint(),
+      }}
+    >
+      {(field) => (
+        <field.Input
+          size={controlSize}
+          label={m.channel_name()}
+          hint={m.channel_name_hint()}
+          onChange={() => setError("")}
+          isRequired
+          maxLength={32}
+          pattern="[a-z0-9][a-z0-9_\-]{0,31}"
+          placeholder={m.channel_name_placeholder()}
+          isDisabled={locked}
+        />
+      )}
+    </form.AppField>
   );
   const privateField = offersPrivate && (
-    <Toggle
-      label={m.channel_create_private()}
-      isSelected={makePrivate}
-      onChange={setMakePrivate}
-      isDisabled={locked}
-    />
+    <form.AppField name="makePrivate">
+      {(field) => (
+        <Toggle
+          label={m.channel_create_private()}
+          isSelected={field.state.value}
+          onChange={field.handleChange}
+          isDisabled={locked}
+        />
+      )}
+    </form.AppField>
   );
-  const errorText = error && (
-    <p role="alert" className="text-sm text-error-primary">
-      {error}
-    </p>
-  );
+  const errorText = <form.Alert error={error} />;
   const openButton = (
     <Button
       type="button"
@@ -287,7 +313,7 @@ function CreateChannelForm({
   );
   if (!memberPicker) {
     return (
-      <>
+      <form.AppForm>
         <PhoneFormBar
           heading={m.channel_create()}
           submitLabel={m.controls_create()}
@@ -318,7 +344,11 @@ function CreateChannelForm({
         <form
           id={formId}
           ref={formRef}
-          onSubmit={(event) => void submit(event)}
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
           className="mt-5 flex flex-col gap-2 max-sm:mt-0 max-sm:min-h-0 max-sm:flex-1 max-sm:overflow-y-auto max-sm:p-4"
         >
           {nameField}
@@ -358,7 +388,7 @@ function CreateChannelForm({
             {m.channel_create()}
           </Button>
         </form>
-      </>
+      </form.AppForm>
     );
   }
   const picker = (
@@ -383,40 +413,46 @@ function CreateChannelForm({
   );
   if (!wide) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <Heading slot="title" className="sr-only">
-          {m.channel_start_group()}
-        </Heading>
-        <PhoneFormBar
-          className="sm:grid"
-          heading={m.channel_start_group()}
-          submitLabel={m.channel_group_finish()}
-          pending={saving}
-          submitDisabled={locked || !nameValid || !canCreate}
-          onCancel={close}
-          onSubmit={() => formRef.current?.requestSubmit()}
-        />
-        {createdNotice ? (
-          <div className="p-4">{createdNotice}</div>
-        ) : (
-          <form
-            id={formId}
-            ref={formRef}
-            onSubmit={(event) => void submit(event)}
-            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
-          >
-            {nameField}
-            {privateField}
-            {errorText}
-            {minMembersHint}
-            <div className="flex min-h-48 flex-1 flex-col gap-3">{picker}</div>
-          </form>
-        )}
-      </div>
+      <form.AppForm>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <Heading slot="title" className="sr-only">
+            {m.channel_start_group()}
+          </Heading>
+          <PhoneFormBar
+            className="sm:grid"
+            heading={m.channel_start_group()}
+            submitLabel={m.channel_group_finish()}
+            pending={saving}
+            submitDisabled={locked || !nameValid || !canCreate}
+            onCancel={close}
+            onSubmit={() => formRef.current?.requestSubmit()}
+          />
+          {createdNotice ? (
+            <div className="p-4">{createdNotice}</div>
+          ) : (
+            <form
+              id={formId}
+              ref={formRef}
+              noValidate
+              onSubmit={(event) => {
+                event.preventDefault();
+                void form.handleSubmit();
+              }}
+              className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
+            >
+              {nameField}
+              {privateField}
+              {errorText}
+              {minMembersHint}
+              <div className="flex min-h-48 flex-1 flex-col gap-3">{picker}</div>
+            </form>
+          )}
+        </div>
+      </form.AppForm>
     );
   }
   return (
-    <>
+    <form.AppForm>
       <aside className="flex min-h-0 w-[20rem] shrink-0 flex-col gap-3 border-r border-secondary bg-secondary p-4">
         {picker}
       </aside>
@@ -443,7 +479,11 @@ function CreateChannelForm({
           <form
             id={formId}
             ref={formRef}
-            onSubmit={(event) => void submit(event)}
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
             className="mt-5 flex flex-1 flex-col gap-4"
           >
             {nameField}
@@ -485,6 +525,6 @@ function CreateChannelForm({
           </form>
         )}
       </div>
-    </>
+    </form.AppForm>
   );
 }

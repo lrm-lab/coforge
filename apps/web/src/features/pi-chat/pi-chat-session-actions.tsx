@@ -1,13 +1,15 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useStore } from "@tanstack/react-form";
 import { Heading } from "react-aria-components";
 import { DotsHorizontal, Edit03, Trash01 } from "@untitledui/icons";
 import type { PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Input } from "#src/components/base/input/input";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { piChatFailureMessage } from "./pi-chat-failure";
 import { useExecutePiChat } from "./use-execute-pi-chat";
@@ -18,7 +20,6 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 
-/** The same discoverable actions work from a session row and its open conversation. */
 export function PiChatSessionActions({
   session,
   computerId,
@@ -34,11 +35,37 @@ export function PiChatSessionActions({
 }) {
   const controlSize = useDialogControlSize();
   const execute = useExecutePiChat();
+  const formRef = useRef<HTMLFormElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [title, setTitle] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const form = useAppForm({
+    defaultValues: { title: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      if (!value.title.trim()) return;
+      try {
+        await execute({
+          data: {
+            computerId,
+            command: {
+              action: "rename",
+              sessionId: session.id,
+              title: value.title,
+              runtime: session.runtime,
+            },
+          },
+        });
+        setRenaming(false);
+        onChanged();
+      } catch {
+        setFieldServerError(form, "title", piChatFailureMessage("action"), formRef.current);
+      }
+    },
+  });
+  const { title, pending } = useStore(form.store, (state) => ({
+    title: state.values.title,
+    pending: state.isSubmitting,
+  }));
   const running = session.status === "running";
   return (
     <>
@@ -56,8 +83,7 @@ export function PiChatSessionActions({
               icon={Edit03}
               isDisabled={running}
               onAction={() => {
-                setTitle(session.title);
-                setError(false);
+                form.reset({ title: session.title });
                 setRenaming(true);
               }}
             >
@@ -83,61 +109,42 @@ export function PiChatSessionActions({
       >
         <Modal className="w-[calc(100vw-2rem)] max-w-lg">
           <Dialog className="p-6">
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (pending || !title.trim()) return;
-                setPending(true);
-                setError(false);
-                void execute({
-                  data: {
-                    computerId,
-                    command: {
-                      action: "rename",
-                      sessionId: session.id,
-                      title,
-                      runtime: session.runtime,
-                    },
-                  },
-                })
-                  .then(() => {
-                    setRenaming(false);
-                    onChanged();
-                  })
-                  .catch(() => setError(true))
-                  .finally(() => setPending(false));
-              }}
-            >
-              <Heading slot="title" className="text-lg font-semibold text-primary">
-                {m.pi_chat_rename()}
-              </Heading>
-              <Input
-                size={controlSize}
-                aria-label={m.pi_chat_name()}
-                value={title}
-                onChange={setTitle}
-                maxLength={120}
-                autoFocus
-              />
-              {error && (
-                <p role="alert" className="text-sm text-error-primary">
-                  {piChatFailureMessage("action")}
-                </p>
-              )}
-              <DialogActions>
-                <DialogCancel isDisabled={pending} onPress={() => setRenaming(false)}>
-                  {m.pi_chat_cancel()}
-                </DialogCancel>
-                <DialogAction
-                  type="submit"
-                  isDisabled={pending || !title.trim()}
-                  isLoading={pending}
-                >
-                  {m.pi_chat_save()}
-                </DialogAction>
-              </DialogActions>
-            </form>
+            <form.AppForm>
+              <form
+                ref={formRef}
+                className="space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void form.handleSubmit();
+                }}
+              >
+                <Heading slot="title" className="text-lg font-semibold text-primary">
+                  {m.pi_chat_rename()}
+                </Heading>
+                <form.AppField name="title">
+                  {(field) => (
+                    <field.Input
+                      size={controlSize}
+                      aria-label={m.pi_chat_name()}
+                      maxLength={120}
+                      autoFocus
+                    />
+                  )}
+                </form.AppField>
+                <DialogActions>
+                  <DialogCancel isDisabled={pending} onPress={() => setRenaming(false)}>
+                    {m.pi_chat_cancel()}
+                  </DialogCancel>
+                  <DialogAction
+                    type="submit"
+                    isDisabled={pending || !title.trim()}
+                    isLoading={pending}
+                  >
+                    {m.pi_chat_save()}
+                  </DialogAction>
+                </DialogActions>
+              </form>
+            </form.AppForm>
           </Dialog>
         </Modal>
       </ModalOverlay>

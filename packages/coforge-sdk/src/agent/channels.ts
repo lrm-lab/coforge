@@ -1,6 +1,7 @@
 /** Channel lifecycle/roster response shapes for `agentApiRoutes.cloud.channels`. */
 
 import { z } from "zod";
+import type { ChannelAnnouncementSummary } from "../internal/workspace-info";
 
 /** Computed, never stored: `server_role` when the actor's Workspace/Agent server role is
  * owner/admin; otherwise `channel_role` when its own membership's stored `channelRole` is
@@ -38,6 +39,7 @@ export type AgentChannelInfo = {
   channelAdminBasis?: AgentChannelAdminBasis;
   /** Every capability name; only the ones this Agent may currently invoke are `true`. */
   channelCapabilities: AgentChannelCapabilities;
+  announcement?: ChannelAnnouncementSummary | null;
 };
 
 /** Response for `channel info` (GET /api/agent/v1/channels/:channel) and `channel update`
@@ -123,6 +125,7 @@ export type AgentChannelUpdateRequest = {
   name?: string;
   description?: string;
   visibility?: "public" | "private";
+  announcement?: string | null;
 };
 
 /** Response for `channel lifecycle archive|unarchive`. */
@@ -155,7 +158,12 @@ export type AgentChannelRemoveMemberResponse = {
  * Agent the calling Agent cannot see — the same stable outcome `user-info.ts`/`profile.ts` carry,
  * distinct from the plain-text "member not found"/"channel not found" bodies every other channel
  * command error still uses. */
-export const AGENT_CHANNEL_ERROR_CODES = ["agent_not_visible"] as const;
+export const AGENT_CHANNEL_ERROR_CODES = [
+  "agent_not_visible",
+  "channel_announcement_ref_invalid",
+  "pinned_artifact_not_in_conversation",
+  "ambiguous_target",
+] as const;
 export type AgentChannelErrorCode = (typeof AGENT_CHANNEL_ERROR_CODES)[number];
 
 export type AgentChannelErrorResponse = {

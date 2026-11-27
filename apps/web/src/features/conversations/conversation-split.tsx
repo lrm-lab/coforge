@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Group, Panel, Separator, useDefaultLayout, useGroupRef } from "react-resizable-panels";
 import { AnimatePresence } from "motion/react";
 import * as motion from "motion/react-m";
@@ -23,22 +30,29 @@ const LIST_COLUMN_DEFAULT_REM = 18;
 export const SIDE_PANE_ENTER =
   "animate-in fade-in slide-in-from-right-3 motion-enter-sm motion-reduce:animate-none";
 
+export type ResponsiveSplitState = {
+  splitRef: RefObject<HTMLDivElement | null>;
+  splitShown: boolean;
+};
+
 export function useResponsiveSplitLayout({
   active,
   mainMinRem = MAIN_PANE_MIN_REM,
   sideMinRem = SIDE_PANE_MIN_REM,
   reportListCrowd = true,
+  enabled = true,
 }: {
   active: boolean;
   mainMinRem?: number;
   sideMinRem?: number;
   reportListCrowd?: boolean;
-}) {
+  enabled?: boolean;
+}): ResponsiveSplitState {
   const wideViewport = useBreakpoint("md");
   const splitRef = useRef<HTMLDivElement>(null);
   const [splitFits, setSplitFits] = useState(true);
   const [listCrowds, setListCrowds] = useState(false);
-  useReportChatListCrowd(reportListCrowd && active && listCrowds);
+  useReportChatListCrowd(enabled && reportListCrowd && active && listCrowds);
   const measureSplit = useCallback(() => {
     const element = splitRef.current;
     if (!element) return;
@@ -63,6 +77,7 @@ export function useResponsiveSplitLayout({
   }, [mainMinRem, reportListCrowd, sideMinRem]);
   const splitShown = wideViewport && splitFits;
   useLayoutEffect(() => {
+    if (!enabled) return;
     const element = splitRef.current;
     if (!element) return;
     measureSplit();
@@ -71,7 +86,7 @@ export function useResponsiveSplitLayout({
     const cards = reportListCrowd ? element.closest("[data-chat-cards]") : null;
     if (cards) observer.observe(cards);
     return () => observer.disconnect();
-  }, [measureSplit, reportListCrowd, splitShown]);
+  }, [enabled, measureSplit, reportListCrowd, splitShown]);
   return { splitRef, splitShown };
 }
 
@@ -83,8 +98,12 @@ export function ConversationSplit({
   focused,
   sideExpanded = false,
   layoutId = "coforge-conversation",
-  reportListCrowd = true,
+  mainMinRem = MAIN_PANE_MIN_REM,
+  sideMinRem = SIDE_PANE_MIN_REM,
+  defaultSidePct = SIDE_PANE_DEFAULT_PCT,
+  reportListCrowd = false,
   forceSplit = false,
+  split,
 }: {
   main: ReactNode;
   side: ReactNode;
@@ -93,16 +112,24 @@ export function ConversationSplit({
   focused?: FocusedPanel;
   sideExpanded?: boolean;
   layoutId?: string;
+  mainMinRem?: number;
+  sideMinRem?: number;
+  defaultSidePct?: number;
   reportListCrowd?: boolean;
   forceSplit?: boolean;
+  split?: ResponsiveSplitState;
 }) {
   const groupRef = useGroupRef();
   const reduced = usePrefersReducedMotion();
-  const { splitRef, splitShown: responsiveSplitShown } = useResponsiveSplitLayout({
+  const localSplit = useResponsiveSplitLayout({
     active: !forceSplit && Boolean(visibleSlot) && !threadAlone && !sideExpanded,
+    mainMinRem,
+    sideMinRem,
     reportListCrowd,
+    enabled: !split && !forceSplit,
   });
-  const splitShown = forceSplit || responsiveSplitShown;
+  const splitRef = split ? split.splitRef : localSplit.splitRef;
+  const splitShown = forceSplit || (split ? split.splitShown : localSplit.splitShown);
   const splitPanelsVisible = splitShown && !threadAlone && Boolean(visibleSlot);
   const threadLayout = useDefaultLayout({
     id: layoutId,
@@ -127,9 +154,9 @@ export function ConversationSplit({
         >
           <Panel
             id="main"
-            minSize={splitPanelsVisible ? `${MAIN_PANE_MIN_REM}rem` : undefined}
+            minSize={splitPanelsVisible ? `${mainMinRem}rem` : undefined}
             hidden={splitShown && (focused === "thread" || sideExpanded)}
-            className="flex min-h-0 min-w-0 flex-col"
+            className="flex min-h-0 min-w-0 flex-col overflow-hidden"
           >
             <div
               inert={Boolean(!splitShown && visibleSlot && focused !== "chat") || undefined}
@@ -154,8 +181,8 @@ export function ConversationSplit({
                   }
                   onDoubleClick={() =>
                     groupRef.current?.setLayout({
-                      main: 100 - SIDE_PANE_DEFAULT_PCT,
-                      [visibleSlot]: SIDE_PANE_DEFAULT_PCT,
+                      main: 100 - defaultSidePct,
+                      [visibleSlot]: defaultSidePct,
                     })
                   }
                   className="group/sep relative flex w-px shrink-0 cursor-col-resize items-center justify-center bg-border-secondary outline-focus-ring transition-colors hover:bg-brand-solid focus-visible:bg-brand-solid focus-visible:outline-2 data-[separator=active]:bg-brand-solid after:absolute after:inset-y-0 after:-inset-x-1.5"
@@ -168,11 +195,11 @@ export function ConversationSplit({
               )}
               <Panel
                 id={visibleSlot}
-                defaultSize={`${SIDE_PANE_DEFAULT_PCT}`}
-                minSize={`${SIDE_PANE_MIN_REM}rem`}
+                defaultSize={`${defaultSidePct}`}
+                minSize={`${sideMinRem}rem`}
                 maxSize={sideExpanded ? undefined : "60"}
                 hidden={focused === "chat" && !sideExpanded}
-                className="flex min-h-0 min-w-0 flex-col"
+                className="flex min-h-0 min-w-0 flex-col overflow-hidden"
               >
                 <div
                   data-split-slot={visibleSlot}

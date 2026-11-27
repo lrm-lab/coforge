@@ -57,5 +57,6 @@
   "runtime_auth_kiro_region": "AWS region",
   "runtime_auth_kiro_invalid_target": "Enter an HTTPS Start URL and a valid AWS Region.",
   "runtime_auth_kiro_device_disabled": "Your organization has disabled device-code sign-in. Sign in on the Computer itself.",
-  "runtime_auth_kiro_external_idp": "This external identity provider does not support device-code sign-in. Sign in on the Computer itself."
+  "runtime_auth_kiro_external_idp": "This external identity provider does not support device-code sign-in. Sign in on the Computer itself.",
+  "runtime_auth_codex_api_key_note": "Using a custom API key or compatible relay? No sign-in is needed here — choose “Custom API key (OpenAI-compatible)” in the Agent’s runtime settings."
 }

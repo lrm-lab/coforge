@@ -1,3 +1,7 @@
+import { createMetadataRules } from "./oxlint-metadata-rules.js";
+import { createOptionCardRules } from "./oxlint-option-card-rules.js";
+import { createOtpRules } from "./oxlint-otp-rules.js";
+
 const noNativeTitle = {
   create(context) {
     return {
@@ -525,6 +529,23 @@ const noHandrolledResizeHandle = {
   },
 };
 
+const { noDtColon, noRaggedDl } = createMetadataRules({
+  collectClassStrings,
+  normalizedFilename,
+  upstreamOfficialFiles: UPSTREAM_OFFICIAL_FILES,
+});
+
+const { noHintedRadioButton } = createOptionCardRules({
+  normalizedFilename,
+  upstreamOfficialFiles: UPSTREAM_OFFICIAL_FILES,
+});
+
+const { noRawOtpInput } = createOtpRules({
+  normalizedFilename,
+  staticStringValue,
+  upstreamOfficialFiles: UPSTREAM_OFFICIAL_FILES,
+});
+
 export default {
   meta: {
     name: "coforge",
@@ -546,5 +567,9 @@ export default {
     "no-raw-file-type-icon": noRawFileTypeIcon,
     "no-distracting-animations": noDistractingAnimations,
     "no-handrolled-date-math": noHandrolledDateMath,
+    "no-dt-colon": noDtColon,
+    "no-ragged-dl": noRaggedDl,
+    "no-hinted-radio-button": noHintedRadioButton,
+    "no-raw-otp-input": noRawOtpInput,
   },
 };

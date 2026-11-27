@@ -5,7 +5,7 @@ import {
   conversationSearchWithArtifact,
   openArtifactSearch,
 } from "#src/features/artifacts/artifact-search";
-import { conversationSearchWithoutAgentProfile } from "#src/features/conversations/conversation-thread-search";
+import { conversationSearchForThread } from "#src/features/conversations/conversation-thread-search";
 
 describe("conversationSearchWithArtifact", () => {
   test("strips thread, profile and details when opening a document while preserving conversation view", () => {
@@ -64,10 +64,10 @@ describe("conversationSearchWithArtifact", () => {
   });
 });
 
-describe("conversationSearchWithoutAgentProfile", () => {
-  test("strips profile, details and open document when opening a thread", () => {
+describe("conversationSearchForThread", () => {
+  test("strips details and open document while preserving an open profile when opening a thread", () => {
     expect(
-      conversationSearchWithoutAgentProfile({
+      conversationSearchForThread({
         view: "chat",
         profile: "agent:a1",
         agentTab: "reminders",
@@ -77,6 +77,8 @@ describe("conversationSearchWithoutAgentProfile", () => {
       }),
     ).toEqual({
       view: "chat",
+      profile: "agent:a1",
+      agentTab: "reminders",
     });
   });
 });

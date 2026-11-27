@@ -44,8 +44,8 @@ test("a link to a message that is gone opens the conversation and says so, with 
     );
     await browser("wait", "600"); // the notice settles in before the picture
     await browser("screenshot", join(dir, "conversation.png"));
-    await browser("eval", `document.querySelector('a[href*="/records"]').click()`);
-    await browser("wait", "--fn", `location.pathname.includes("/records")`);
+    await browser("eval", `document.querySelector('a[href*="/projects"]').click()`);
+    await browser("wait", "--fn", `location.pathname.includes("/projects")`);
     const shown = await evaluate<string[]>(toasts);
     expect(shown.some((t) => t.includes("Messages could not be loaded"))).toBe(false);
     // The notice belongs to the conversation: leaving it takes the notice away too, well before

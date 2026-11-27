@@ -17,12 +17,14 @@ export function AgentRuntimeProviderSelect({
   provider,
   providers,
   unusable = [],
+  error,
   className,
   onChange,
 }: {
   provider: RuntimeProvider;
   providers: ReadonlySet<string | undefined>;
   unusable?: RuntimeOptions["unusable"];
+  error?: string;
   className?: string;
   onChange: (key: string | number) => void;
 }) {
@@ -37,33 +39,37 @@ export function AgentRuntimeProviderSelect({
     .sort((a, b) => compareRuntimeProvidersByLabel(a.provider, b.provider));
 
   return (
-    <Select
-      label={m.agent_form_provider()}
-      size={controlSize}
-      className={className}
-      selectedKey={provider}
-      onSelectionChange={(key) => {
-        if (key !== null) onChange(key);
-      }}
-    >
-      {selectableProviders.map((candidate) => (
-        <Select.Item
-          key={candidate}
-          id={candidate}
-          label={runtimeProviderLabel(candidate)}
-          icon={<RuntimeProviderMark provider={candidate} />}
-        />
-      ))}
-      {unavailableEntries.map((entry) => (
-        <Select.Item
-          key={entry.provider}
-          id={entry.provider}
-          label={runtimeProviderLabel(entry.provider)}
-          supportingText={runtimeUnavailableReason(entry.unavailableCode, entry.diagnostic)}
-          icon={<RuntimeProviderMark provider={entry.provider} />}
-          isDisabled
-        />
-      ))}
-    </Select>
+    <div data-field="provider" className={className}>
+      <Select
+        label={m.agent_form_provider()}
+        size={controlSize}
+        className="min-w-0"
+        isInvalid={Boolean(error)}
+        hint={error}
+        selectedKey={provider}
+        onSelectionChange={(key) => {
+          if (key !== null) onChange(key);
+        }}
+      >
+        {selectableProviders.map((candidate) => (
+          <Select.Item
+            key={candidate}
+            id={candidate}
+            label={runtimeProviderLabel(candidate)}
+            icon={<RuntimeProviderMark provider={candidate} />}
+          />
+        ))}
+        {unavailableEntries.map((entry) => (
+          <Select.Item
+            key={entry.provider}
+            id={entry.provider}
+            label={runtimeProviderLabel(entry.provider)}
+            supportingText={runtimeUnavailableReason(entry.unavailableCode, entry.diagnostic)}
+            icon={<RuntimeProviderMark provider={entry.provider} />}
+            isDisabled
+          />
+        ))}
+      </Select>
+    </div>
   );
 }

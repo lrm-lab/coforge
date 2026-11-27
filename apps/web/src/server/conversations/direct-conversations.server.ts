@@ -12,6 +12,7 @@ import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/men
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { assertAgentLive } from "#src/server/agents/active-agent.server";
+import { isWeeklyReportAgentBlocked } from "#src/server/records/weekly-reports-gate.server";
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -140,12 +141,22 @@ export class DirectConversations {
       },
       select: {
         directKey: true,
+        workspace: { select: { experiments: true } },
         members: {
           where: { OR: [{ agentId: { not: null } }, { userId: viewerId, leftAt: null }] },
           select: {
             id: true,
             userId: true,
-            agent: { select: { id: true, ownerId: true, visibility: true, deletedAt: true } },
+            agent: {
+              select: {
+                id: true,
+                ownerId: true,
+                visibility: true,
+                deletedAt: true,
+                weeklyReportAssistant: { select: { id: true } },
+                weeklyReportCollectorBinding: { select: { id: true } },
+              },
+            },
           },
         },
       },
@@ -161,6 +172,8 @@ export class DirectConversations {
     }
     const agent = conversation.members.find((member) => member.agent)?.agent;
     if (!agent) throw new AppError("NOT_FOUND");
+    if (isWeeklyReportAgentBlocked(agent, conversation.workspace?.experiments))
+      throw new AppError("NOT_FOUND");
     // Only the viewer's own DM with it: a member row in another member's DM grants nothing.
     if (
       conversation.directKey !== agentDirectKey(viewerId, agent.id) ||

@@ -20,7 +20,7 @@ import {
   PrismaWorkspaceCatalogStore,
   WorkspaceCatalog,
 } from "#src/server/workspaces/catalog.server";
-import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
+import { ensureWeeklyReportAssistantIfEnabled } from "#src/server/records/weekly-reports-gate.server";
 import { createWorkspaceAndStartCloudComputer } from "#src/server/workspaces/create-workspace.server";
 import {
   preferredWorkspaceSlugFromRequest,
@@ -152,7 +152,7 @@ export const createWorkspace = createServerFn({ method: "POST" })
         startCloudComputer: (request) =>
           productionCloudComputers(requireDatabaseClient()).ensureDefault(request),
         bindWeeklyReportAssistant: (request) =>
-          ensureWeeklyReportAssistant(requireDatabaseClient(), request),
+          ensureWeeklyReportAssistantIfEnabled(requireDatabaseClient(), request),
         bindWorkspaceAssistant: (request) =>
           workspaceAssistantOnboarding(requireDatabaseClient()).ensure(
             request.workspaceId,

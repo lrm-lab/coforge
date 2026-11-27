@@ -5,6 +5,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { HELD_AGENT_IDS_LIMIT } from "#src/features/agents/extra-agent";
 import { ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { FULL_EXTRA_DISPLAY_LIMIT, listExtraAgents } from "#src/server/agents/extra-agents.server";
+import { WEEKLY_REPORTS_VISIBLE_AGENT_WHERE } from "#src/server/records/weekly-reports-gate.server";
 import {
   visibleAgentWhere,
   type AgentVisibilityViewer,
@@ -114,6 +115,7 @@ describe("listExtraAgents", () => {
           ...visibleAgentWhere(member),
         },
         ROSTER_AGENT_WHERE,
+        WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
       ],
     });
   });
@@ -139,6 +141,7 @@ describe("listExtraAgents", () => {
           ...visibleAgentWhere(admin),
         },
         ROSTER_AGENT_WHERE,
+        WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
       ],
     });
     expect(adminCall.findManyCalls[0]!.where).not.toEqual(memberCall.findManyCalls[0]!.where);
@@ -148,7 +151,11 @@ describe("listExtraAgents", () => {
     const { db, displays, findManyCalls } = fakes([]);
     await listExtraAgents(db, displays, WORKSPACE_ID, siblingAgent);
     expect(findManyCalls[0]!.where).toMatchObject({
-      AND: [{ ownerId: { not: "user-member" } }, ROSTER_AGENT_WHERE],
+      AND: [
+        { ownerId: { not: "user-member" } },
+        ROSTER_AGENT_WHERE,
+        WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
+      ],
     });
   });
 

@@ -4,8 +4,10 @@ import { advanceCommentPosition } from "./artifact-comment-unseen.server";
 import {
   advanceReadPosition,
   changedPathsOf,
+  markSeenSettled,
   unseenVersions,
 } from "./artifact-read-positions.server";
+import { SettledArtifactHold } from "./artifact-settlement.server";
 import { unseenCommentBlock } from "./artifact-unseen-block.server";
 
 const VERSION_SCAN_LIMIT = 500;
@@ -175,6 +177,8 @@ export async function recordingRefusal<T>(
       const { commentId, version } = error.seen;
       if (commentId) await advanceCommentPosition(db, { ...input, commentId });
       await advanceReadPosition(db, { ...input, version });
+    } else if (error instanceof SettledArtifactHold) {
+      await markSeenSettled(db, { ...input, settledAt: error.settledAt });
     }
     throw error;
   }

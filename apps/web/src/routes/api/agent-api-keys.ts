@@ -1,3 +1,6 @@
+import { CODEX_COMPATIBLE_PROVIDER_CAPABILITY } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
+import { getCodexCompatibleCapabilityLease } from "#src/server/agents/codex-compatible-capability.server";
+import { readCodexCompatibleEnvironment } from "#src/server/agents/codex-compatible-config.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal/uuid";
@@ -33,12 +36,14 @@ import type { AgentLaunchApp } from "@lrm/coforge-sdk/internal/agent-launch-apps
 import { agentLaunchApps } from "#src/server/app-agent-access/app-agent-access-composition.server";
 import { artifactChecksEnabled } from "#src/server/artifacts/artifact-check-config.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
+import { isWeeklyReportAgentBlocked } from "#src/server/records/weekly-reports-gate.server";
 
 const createAgentApiKeyInputSchema = z.object({
   agentId: z.string().min(1),
   workspaceId: z.string().min(1),
   controlEpoch: z.number().int().positive().optional(),
   requestId: z.uuid().optional(),
+  codexCompatibleProvider: z.literal(CODEX_COMPATIBLE_PROVIDER_CAPABILITY).optional(),
   launchId: z
     .string()
     .min(1)
@@ -182,7 +187,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             systemKind: true,
             weeklyReportAssistant: { select: { id: true } },
             weeklyReportCollectorBinding: { select: { id: true } },
-            workspace: { select: { slug: true, name: true } },
+            workspace: { select: { slug: true, name: true, experiments: true } },
             computer: {
               select: {
                 name: true,
@@ -194,7 +199,11 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             },
           },
         });
-        if (principal.workspaceId !== input.workspaceId || !agent) {
+        if (
+          principal.workspaceId !== input.workspaceId ||
+          !agent ||
+          isWeeklyReportAgentBlocked(agent, agent.workspace.experiments)
+        ) {
           observation.reason_code = "AGENT_LAUNCH_NOT_AUTHORIZED";
           return errorResponse(
             "AGENT_LAUNCH_NOT_AUTHORIZED",
@@ -206,18 +215,36 @@ export const Route = createFileRoute("/api/agent-api-keys")({
         observation.agent_id = agent.id;
         if (input.launchId && RFC_UUID_PATTERN.test(input.launchId))
           observation.launch_digest = Bun.CryptoHasher.hash("sha256", input.launchId, "hex");
+        let runtimeConfig;
         try {
+          runtimeConfig = parseAgentRuntimeConfig(agent.runtimeConfig);
           const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
           const selection = await visibility.checkSelection(
             { userId: agent.ownerId, workspaceId: agent.workspaceId },
             principal.computerId,
-            parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+            runtimeConfig.runtime,
           );
           if (!selection.ok) {
             // The daemon relays this `code` to the Agent: a launch refused because the
             // Computer's runtime is missing, unusable, or private is not a permissions failure.
             observation.reason_code = selection.code;
             return errorResponse(selection.code, selection.error, 403, false);
+          }
+          if (
+            runtimeConfig.provider.kind === "codex-compatible" &&
+            (!input.codexCompatibleProvider ||
+              !(await getCodexCompatibleCapabilityLease().supports(
+                agent.workspaceId,
+                principal.computerId,
+              )))
+          ) {
+            observation.reason_code = "runtime_unusable";
+            return errorResponse(
+              "runtime_unusable",
+              "Update this Computer to run the Codex compatible provider",
+              403,
+              false,
+            );
           }
           await new AgentControl(
             new PrismaAgentControlStore(db),
@@ -257,14 +284,21 @@ export const Route = createFileRoute("/api/agent-api-keys")({
         }
         let providerConfig;
         let envVars;
+        let codexCompatibleEnvironment;
         try {
-          const config = parseAgentRuntimeConfig(agent.runtimeConfig);
+          const config = runtimeConfig;
           const encryptionKey = await readOptionalAgentRuntimeCredentialEncryptionKey(Bun.env);
           providerConfig = await new AgentRuntimeCredentials(
             new PrismaAgentRuntimeCredentialRepository(db),
             encryptionKey,
           ).launchProviderConfig(agent.id, config);
           envVars = await decryptAgentEnvironment(agent.id, config.environment, encryptionKey);
+          if (config.provider.kind === "codex-compatible")
+            codexCompatibleEnvironment = await readCodexCompatibleEnvironment(
+              agent.id,
+              config.provider,
+              encryptionKey,
+            );
         } catch {
           observation.reason_code = "LAUNCH_CONFIG_UNAVAILABLE";
           return Response.json(
@@ -309,6 +343,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             apiKey,
             providerConfig,
             envVars,
+            ...(codexCompatibleEnvironment ? { codexCompatibleEnvironment } : {}),
             runtimeConfigRevision: agent.runtimeConfigRevision,
             ...(assignedSkillPacks.length > 0
               ? { assignedSkillPacks: [...assignedSkillPacks] }

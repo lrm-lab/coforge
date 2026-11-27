@@ -8,6 +8,7 @@ import {
 } from "#src/server/agents/agent-visibility.server";
 import { restoreDirectConversationMembers } from "#src/server/conversations/direct-conversation-members.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { WEEKLY_REPORTS_VISIBLE_AGENT_WHERE } from "#src/server/records/weekly-reports-gate.server";
 import { buildUserAgentConversationCreateInput } from "./user-agent-conversation-input.server";
 
 /**
@@ -82,7 +83,13 @@ export async function openUserAgentConversation(
       AND: {
         members: {
           some: {
-            agent: { id: agentId, ...ACTIVE_AGENT_WHERE, ...directMessageAgentWhere(userId) },
+            agent: {
+              AND: [
+                { id: agentId, ...ACTIVE_AGENT_WHERE },
+                directMessageAgentWhere(userId),
+                WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
+              ],
+            },
           },
         },
       },
@@ -91,7 +98,12 @@ export async function openUserAgentConversation(
   });
   if (existing) return { id: existing.id, created: false };
   const agent = await db.agent.findFirst({
-    where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+    where: {
+      AND: [
+        { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+        WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
+      ],
+    },
     select: { ownerId: true, visibility: true },
   });
   if (!agent || !canDirectMessageAgent(userId, agent)) throw new AppError("ACCESS_DENIED");

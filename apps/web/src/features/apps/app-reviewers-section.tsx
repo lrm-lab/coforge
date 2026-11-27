@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { formatDateForDisplay } from "#src/lib/dates";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { getLocale } from "#src/paraglide/runtime";
 import {
   addPlatformOperator,
@@ -21,6 +22,10 @@ import type { PlatformOperatorRow } from "#src/server/app-marketplace/platform-o
 
 const operatorsQueryKey = ["platform-operators"] as const;
 
+function isEntryProblem(problem: PlatformOperatorProblem): boolean {
+  return problem === "invalid_address" || problem === "no_user" || problem === "ambiguous";
+}
+
 export function ReviewersSection() {
   const queryClient = useQueryClient();
   const load = useServerFn(loadPlatformOperators);
@@ -30,27 +35,44 @@ export function ReviewersSection() {
     queryKey: operatorsQueryKey,
     queryFn: () => load(),
   });
-  const [entry, setEntry] = useState("");
-  const [problem, setProblem] = useState<PlatformOperatorProblem | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [formError, setFormError] = useState("");
   const rows = operators.data ?? [];
   const invalidate = () => queryClient.invalidateQueries({ queryKey: operatorsQueryKey });
 
   const adding = useMutation({
     mutationFn: (value: string) => add({ data: { entry: value } }),
-    onSuccess: (result) => {
-      setProblem(result.ok ? null : result.problem);
-      if (result.ok) setEntry("");
-      void invalidate();
-    },
-    onError: () => setProblem("failed"),
   });
   const removing = useMutation({
     mutationFn: (userId: string) => remove({ data: { userId } }),
     onSuccess: (result) => {
-      setProblem(result.ok ? null : result.problem);
+      setFormError(result.ok ? "" : problemText(result.problem));
       void invalidate();
     },
-    onError: () => setProblem("failed"),
+    onError: () => setFormError(problemText("failed")),
+  });
+
+  const form = useAppForm({
+    defaultValues: { entry: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const trimmed = value.entry.trim();
+      if (!trimmed) return;
+      setFormError("");
+      try {
+        const result = await adding.mutateAsync(trimmed);
+        void invalidate();
+        if (result.ok) {
+          form.reset();
+        } else if (isEntryProblem(result.problem)) {
+          setFieldServerError(form, "entry", problemText(result.problem), formRef.current);
+        } else {
+          setFormError(problemText(result.problem));
+        }
+      } catch {
+        setFormError(problemText("failed"));
+      }
+    },
   });
 
   return (
@@ -94,31 +116,41 @@ export function ReviewersSection() {
           ))}
         </ul>
       )}
-      <form
-        className="flex items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!entry.trim()) return;
-          adding.mutate(entry.trim());
-        }}
-      >
-        <Input
-          aria-label={m.apps_review_reviewers_placeholder()}
-          placeholder={m.apps_review_reviewers_placeholder()}
-          value={entry}
-          onChange={setEntry}
-          isDisabled={adding.isPending}
-          className="max-w-sm"
-        />
-        <Button type="submit" color="secondary" size="md" isDisabled={adding.isPending}>
-          {m.apps_review_reviewers_add()}
-        </Button>
-      </form>
-      {problem ? (
-        <p role="alert" className="text-sm text-error-primary">
-          {problemText(problem)}
-        </p>
-      ) : null}
+      <form.AppForm>
+        <form
+          ref={formRef}
+          noValidate
+          className="grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
+        >
+          <div className="flex items-start gap-2">
+            <form.AppField
+              name="entry"
+              validators={{
+                onSubmit: ({ value }) =>
+                  value.trim() ? undefined : m.apps_review_reviewers_invalid(),
+              }}
+            >
+              {(field) => (
+                <field.Input
+                  aria-label={m.apps_review_reviewers_placeholder()}
+                  placeholder={m.apps_review_reviewers_placeholder()}
+                  isDisabled={adding.isPending}
+                  className="max-w-sm"
+                  onChange={() => setFormError("")}
+                />
+              )}
+            </form.AppField>
+            <Button type="submit" color="secondary" size="md" isDisabled={adding.isPending}>
+              {m.apps_review_reviewers_add()}
+            </Button>
+          </div>
+          <form.Alert error={formError} />
+        </form>
+      </form.AppForm>
     </section>
   );
 }
@@ -135,10 +167,7 @@ function ReviewerRow({
   onRemove: () => void;
 }) {
   const address = row.email ?? row.phone ?? "";
-  // null is "the provider has not said", which shows no label at all rather than a wrong one.
   const verified = row.email ? row.emailVerified : row.phoneVerified;
-  // The last reviewer's control stays on screen but does nothing; its reason is the tooltip, as
-  // the page keeps no room for a second line of explanation.
   const removeButton = last ? (
     <Tooltip title={m.apps_review_reviewers_last()} placement="top end">
       <TooltipTrigger
@@ -155,7 +184,7 @@ function ReviewerRow({
       size="sm"
       iconLeading={XClose}
       isDisabled={removing}
-      onClick={onRemove}
+      onPress={onRemove}
     >
       {m.apps_review_reviewers_remove()}
     </Button>

@@ -242,7 +242,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.body.textContent.includes(${JSON.stringify(agent.displayName)}) && document.querySelector('button[aria-label="Close"]') != null`,
+      `${pageHydrated} && document.body.textContent.includes(${JSON.stringify(agent.displayName)}) && ${hydratedElement(`document.querySelector('button[aria-label="Close"]')`)}`,
     );
     expect(await evaluate<boolean>(`${tabBar} === null`)).toBe(true);
     await settled();

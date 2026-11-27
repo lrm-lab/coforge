@@ -1,6 +1,6 @@
-# 9. 字段展示：表单和长值用网格，短事实用列表
+# 9. 字段展示：字段网格、键值列表与事实列表
 
-两种写法，按内容选一种。同一个 section 里不混用。
+三种写法，按内容选一种。同一个 section 里不混用。
 
 **字段网格：label 在上，value 在下。** 用于表单、可编辑字段、长值（路径、命令、URL）和字段很多的页面。表单也是这个方向（官方 Input 的 label 就在上方），读和写是同一套语法。
 
@@ -9,7 +9,13 @@
 - 字段之间不画线。只在 section 之间画一条 `border-secondary`，section 内边距 `py-6 px-8`。
 - 可编辑字段外观和只读字段一致。hover 出现浅底和铅笔，点击原地换成官方 Input 加 Save / Cancel，Escape 取消。不要常驻的编辑图标。
 
-**事实列表：label 在左，value 在右。** 用于详情页上只读的短事实：不超过 8 条，每个值一行放得下。参照 macOS 系统设置的「关于本机」。范例：Computer 详情页。
+**键值列表：左定宽浅灰 label，右值对齐同一纵轴。** 用于只读详情元数据（投递状态、接入确认、应用审核、项目与记忆元数据等），方便眼球沿单一纵轴自上而下扫读。
+
+- 直接使用共享原语 `KeyValueList` / `KeyValueRow`（`#src/components/ui/key-value-list`），语义用 `<dl>` / `<dt>` / `<dd>`。
+- 去掉冒号：靠左侧浅灰弱化（`text-tertiary`）与固定列宽留白自然分隔键值；`coforge/no-dt-colon` 禁止在 `<dt>` 中写尾部冒号，`coforge/no-ragged-dl` 禁止不固定左列宽度的裸 `flex` 横排 `<dt>` / `<dd>`。
+- 左侧固定宽度按中英文较长标签选档位：`compact`（`5rem`）、`default`（`6.5rem`）、`wide`（窄屏 `7.5rem`、桌面 `9.5rem`），不截断标签；右侧值统一左对齐纵轴（`minmax(0,1fr)`），长值在右列自然换行。
+
+**事实列表：label 在左，value 靠右。** 用于详情页上带行级操作或仿 macOS 系统设置分组的短事实：不超过 8 条，每个值一行放得下。范例：Computer 详情页、个人资料面板。
 
 - 一行一个事实。label：`text-sm font-medium text-primary`，不折行。value：`text-sm text-tertiary`，靠右，不在词中间折行。行高至少 44px，行间一条 `border-secondary`，最后一行后面不画。
 - 语义用 `<dl>`，每行一个 `<div>` 包一对 `<dt>` / `<dd>`。
@@ -20,8 +26,9 @@
 - 一组事实可以包在 `rounded-xl bg-secondary` 的浅底分组里，没有 border、没有阴影；分组标题 `text-sm font-semibold`，放在分组外、和行内文字左对齐。这是内容里的一组事实，不是[第 8 节](page-skeleton-and-density.md)禁止的页面级卡片岛屿。
 - 详情页顶部可以用居中的身份区（大号对象图标带状态点，下面是名称）。只用于「某一个对象」的详情页，列表页和表单页不用。名称可以改时，铅笔常驻挂在名称右侧、不挤偏名称：居中的标题没有可以 hover 出浅底的字段框，触屏上也没有 hover。
 
-两种写法共用：
+三种写法共用：
 
 - 路径、代码、指标用 `font-mono`；其他标识符（主机名、ID）跟正文同字体（见 [界面原则](ui-principles.md)）。
 - 空值显示 `—`，不显示 "N/A"、"Unknown"、"暂无"。
 - label 要在上下文里不产生歧义：「System」下面的版本号写「CoForge version」，不写「Version」。
+- 6 位一次性验证码不放进普通单行输入框，统一用 `InputOTP`（`#src/components/ui/input-otp`）拆成 3+3 分组的独立圆角字格，并给当前输入格加轻强调聚焦光环；登录/改密/绑定复用 `CodeInput` 与 `SendCodeRow`（发送/重发按钮放在字格上方，避免 390px 窄屏挤压）。`coforge/no-raw-otp-input` 禁止给单行 `<Input>` 或 `<input>` 写 `autoComplete="one-time-code"`。

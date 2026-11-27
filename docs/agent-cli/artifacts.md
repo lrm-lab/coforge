@@ -10,7 +10,7 @@ pushing it back; people on the web view and comment. The Agent Manual's `artifac
 to make which. It is the same artifact the web page shows, under the same rules.
 
 The commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one `operation` per
-request (`list`, `read`, `push`, `move`, `delete`, `save`, the comment operations, `image`, `follow` and `unfollow`). The daemon's proxy admits a request of
+request (`list`, `read`, `push`, `move`, `delete`, `save`, the comment operations, `image`, `follow`, `unfollow`, `settle` and `unsettle`). The daemon's proxy admits a request of
 up to 4 MiB (a manifest of 200 files, or a review of 50 comments at their limits) and passes on
 only the fields of its operation. File bytes travel on two more routes the proxy forwards unchanged: `PUT
 /api/agent/v1/artifacts/uploads/<sha256>` (raw bytes, `Content-Length` required, up to 16 MiB)
@@ -23,7 +23,14 @@ and `GET /api/agent/v1/artifacts/<id>/files/<path>[?version=<n>]` (exact bytes a
   member and Agent. An artifact the reader cannot see answers `NOT_FOUND`, as if it did not exist.
   When the conversation is hidden or deleted, only the author Agent, that Agent's owner and the
   Workspace's owners and admins still see it.
-- **Push:** an Agent pushes to any artifact it can read. A push that makes one needs a
+- **Push:** an Agent pushes to any artifact it can read, except while an artifact is pinned to a
+  conversation (`ACCESS_DENIED`, `channel-announcement-push-forbidden`):
+  - Channel-pinned: requires channel-admin or Workspace owner/admin authority, and the channel must
+    not be archived.
+  - DM-pinned: requires the pusher to be an active DM participant who may still post in that DM
+    (including private-Agent DMs being writable only with the Agent's owner), the DM must not be
+    archived, and the other participant must still be an active member of the Workspace.
+  A push that makes one needs a
   `--target`, and the Agent must be an active member of that conversation, which must not be
   archived. A person writes nothing.
 - **Move to the Workspace:** only the author Agent, and only while its owner can see the artifact
@@ -39,7 +46,7 @@ and `GET /api/agent/v1/artifacts/<id>/files/<path>[?version=<n>]` (exact bytes a
 | Command | Does |
 | --- | --- |
 | `artifact pull <id> [--dir <dir>] [--rev <n>]` | Writes every file of a version into a directory (by default a folder named after the title, or the id) and a hidden `.coforge-artifact.json` there. |
-| `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory in the home `--target` names, and prints its id. |
+| `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden] [--announcement]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory in the home `--target` names, and prints its id. `--announcement` also pins the newly created artifact to that channel or DM (preflighting channel-admin authority before pushing). |
 | `artifact download <id> <path> [--output <file>] [--rev <n>]` | Saves one file's exact bytes. `download <id> --image <image id>` saves a comment's image. |
 | `artifact save <attachment-id>` | Makes an artifact from a message's attachment: [References, pushes and saves](artifact-references.md). |
 | `artifact list [--target '#channel'\|'@name'] [--query <words>] [--after <c>] [--limit <n>]` | Lists one conversation's live artifacts (none named: every artifact you can see), newest first, a page at a time; the last line names the next page. |
@@ -48,6 +55,7 @@ and `GET /api/agent/v1/artifacts/<id>/files/<path>[?version=<n>]` (exact bytes a
 | `artifact delete <id>` | Deletes an artifact you made. |
 | `artifact comments\|comment\|review\|resolve\|reopen ...` | Comments on an artifact, and a push or comment held up by what others did since you last read: [Artifact comments](artifact-comments.md). |
 | `artifact follow <id>`, `artifact unfollow <id>` | Whether you are told of what others do on the artifact; your own push, comment or review follows it for you: [Following and notices](artifact-follows.md). |
+| `artifact settle <id>`, `artifact unsettle <id>` | Marks an artifact **Settled** at its current version (done, no longer a draft) or takes it back to **Working**. Anyone who can read it may settle/unsettle it; the first push to a Settled artifact is held once (`CONFLICT`, `artifact-settled`), and running the same push again proceeds and reopens it as Working. |
 
 `--json` prints the server's answer as it is. A `--target` names a channel (`#channel`; `#channel:<thread>` homes it in that channel), or a DM as `@name` (`@name~agent` when an Agent
 shares a person's name). A task reference such as `#channel:#7` is refused with the conversation to pass instead: an artifact belongs to the conversation. The DM must
@@ -102,7 +110,9 @@ the recorded base:
 
 Without a state file, `push <dir> --target <t> --title <t>` makes a new artifact from the files
 (`--target` is required: without it the push is refused with `artifact-target-required`) and the directory becomes its pull; its name is made from
-the title. The entry is `--entry`, else `index.html`, else the only file. An artifact may be any
+the title. If none of the files is an HTML or Markdown page, the CLI holds once locally for 10
+minutes (`ARTIFACT_NOT_A_PAGE`) to remind you that plain files are usually sent as attachments;
+running the same push again within 10 minutes proceeds. The entry is `--entry`, else `index.html`, else the only file. An artifact may be any
 number of files (up to 200); any file may be the entry, and
 `--description` (one line, shown on its card) is optional for any artifact.
 

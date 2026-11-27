@@ -104,7 +104,11 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
       "--fn",
       `document.querySelector('[role="dialog"] input[value="external"]') !== null`,
     );
-    await settled();
+    await browser(
+      "wait",
+      "--fn",
+      `${animationsSettled()} && document.querySelector("[data-entering]") === null`,
+    );
     const enterCheck = await evaluate<{
       sawEntering: boolean;
       enteringAnims: number;

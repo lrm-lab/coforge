@@ -125,6 +125,48 @@ const CASES: [SystemNotice, string, string][] = [
     "@coder was asked to welcome Frank An",
     "已请 @coder 欢迎 Frank An",
   ],
+  [
+    {
+      kind: "conversation.pinned_artifact_changed",
+      params: {
+        actor: frank,
+        change: "set",
+        artifactId: "art-1",
+        title: "v2.4 Release Checklist",
+        isDm: false,
+      },
+    },
+    "Frank An pinned v2.4 Release Checklist",
+    "Frank An 置顶了 v2.4 Release Checklist",
+  ],
+  [
+    {
+      kind: "conversation.pinned_artifact_changed",
+      params: {
+        actor: frank,
+        change: "replaced",
+        artifactId: "art-2",
+        title: "Ops Dashboard",
+        isDm: false,
+      },
+    },
+    "Frank An replaced the pinned content with Ops Dashboard",
+    "Frank An 将置顶内容更换为 Ops Dashboard",
+  ],
+  [
+    {
+      kind: "conversation.pinned_artifact_changed",
+      params: {
+        actor: frank,
+        change: "removed",
+        artifactId: "art-2",
+        title: "Ops Dashboard",
+        isDm: true,
+      },
+    },
+    "Frank An unpinned Ops Dashboard",
+    "Frank An 取消置顶了 Ops Dashboard",
+  ],
 ];
 
 describe("a system notice in the viewer's language", () => {

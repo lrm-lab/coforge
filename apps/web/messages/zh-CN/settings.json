@@ -215,6 +215,8 @@
   "settings_labels": "标签",
   "experiments_team_memory": "团队记忆",
   "experiments_team_memory_description": "允许 Agent 在此工作区共享和查阅知识。关闭后停止团队记忆读写，已保存的知识会保留。",
+  "experiments_weekly_reports": "周报",
+  "experiments_weekly_reports_description": "周报模板、团队汇总与周报助手。关闭后隐藏「记录」入口与周报助手并暂停定时发送，已保存的数据会保留。",
   "settings_password": "密码",
   "settings_password_set": "设置新密码",
   "settings_password_code_goes_to": "验证码将发送至 {destination}",

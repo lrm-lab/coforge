@@ -80,7 +80,9 @@ export type AgentArtifactRequest =
   | { operation: "resolve"; artifact: string; comment: string; note?: string }
   | { operation: "reopen"; artifact: string; comment: string }
   | { operation: "follow"; artifact: string }
-  | { operation: "unfollow"; artifact: string };
+  | { operation: "unfollow"; artifact: string }
+  | { operation: "settle"; artifact: string }
+  | { operation: "unsettle"; artifact: string };
 
 export const ARTIFACT_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -205,6 +207,14 @@ const agentArtifactRequestSchema = z.union([
     operation: z.literal("unfollow"),
     artifact: z.string(),
   }),
+  z.strictObject({
+    operation: z.literal("settle"),
+    artifact: z.string(),
+  }),
+  z.strictObject({
+    operation: z.literal("unsettle"),
+    artifact: z.string(),
+  }),
 ]);
 
 type OperationTraits = {
@@ -230,6 +240,8 @@ const OPERATION_TRAITS: Record<AgentArtifactRequest["operation"], OperationTrait
   image: { repeatable: true },
   follow: { repeatable: true },
   unfollow: { repeatable: true },
+  settle: { repeatable: true },
+  unsettle: { repeatable: true },
 };
 
 export function artifactOperationTraits(operation: AgentArtifactRequest["operation"]) {

@@ -32,6 +32,7 @@ export function manageAgents(db: Database) {
     runtimeLock,
     () => runtimeCredentials(db, true),
     userAgentConfigApply(db),
+    () => readAgentRuntimeCredentialEncryptionKey(process.env),
   );
   return agentManagement;
 }

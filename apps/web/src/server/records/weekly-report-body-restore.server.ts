@@ -2,6 +2,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { isChannelMessageTarget } from "@lrm/coforge-sdk/internal";
 import { recordReportContent } from "./record-report-content.server";
 import { parseWeeklyReportAssistantSuggestion } from "./weekly-report-assistant-suggestion.server";
+import { isWeeklyReportsEnabledInValue } from "./weekly-reports-gate.server";
 
 /**
  * When the member's weekly-report assistant sends a body-edit, write it at once.
@@ -35,9 +36,13 @@ export async function applyIncomingWeeklyReportBodyEdit(
   if (!user) return;
   const assistant = await db.weeklyReportAssistant.findUnique({
     where: { workspaceId_userId: { workspaceId: input.workspaceId, userId: user.id } },
-    select: { agentId: true },
+    select: { agentId: true, workspace: { select: { experiments: true } } },
   });
-  if (assistant?.agentId !== input.agentId) return;
+  if (
+    assistant?.agentId !== input.agentId ||
+    !isWeeklyReportsEnabledInValue(assistant.workspace?.experiments)
+  )
+    return;
   await recordReportContent(db).applyConfirmedReportBody({
     workspaceId: input.workspaceId,
     userId: user.id,

@@ -2,8 +2,8 @@ import { useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
-import { RadioButton, RadioGroup } from "#src/components/base/radio-buttons/radio-buttons";
 import { Alert } from "#src/components/ui/alert";
+import { OptionCard, OptionCardGroup } from "#src/components/ui/option-card";
 import { APP_FIXED_SCOPES } from "#src/features/apps/app-registration";
 import { AppLogo } from "#src/features/apps/app-logo";
 import { m } from "#src/paraglide/messages";
@@ -14,11 +14,6 @@ type InstalledApp = AgentAppAccess["apps"][number];
 
 const FIXED: readonly string[] = APP_FIXED_SCOPES;
 
-/**
- * The Apps tab's inline grant panel: the Workspace's installed apps the Agent has no active grant
- * for, then the chosen app's scopes (the fixed ones checked and locked), and Cancel / Grant access.
- * `onGrant` rejects when the grant failed; the panel then says so and stays open.
- */
 export function AgentAppGrantPanel({
   apps,
   anyInstalled,
@@ -26,7 +21,6 @@ export function AgentAppGrantPanel({
   onGrant,
 }: {
   apps: InstalledApp[];
-  /** Whether the Workspace has any app at all, to tell "none yet" from "all granted". */
   anyInstalled: boolean;
   onCancel: () => void;
   onGrant: (appKey: string, scopes: string[]) => Promise<void>;
@@ -58,7 +52,7 @@ export function AgentAppGrantPanel({
   };
 
   return (
-    <div className="mt-4 space-y-4 rounded-xl border border-secondary bg-primary p-4">
+    <div className="mt-4 space-y-4 border-t border-secondary pt-4">
       <div>
         <p className="text-sm font-semibold text-primary">{m.agent_apps_grant_title()}</p>
         <p className="mt-0.5 text-sm text-tertiary">{m.agent_apps_grant_description()}</p>
@@ -74,30 +68,30 @@ export function AgentAppGrantPanel({
           />
         )
       ) : (
-        <RadioGroup
+        <OptionCardGroup
           aria-label={m.agent_apps_grant_app_label()}
           value={appKey ?? null}
           onChange={choose}
-          className="gap-3"
+          isDisabled={saving}
         >
           {apps.map((candidate) => (
-            <RadioButton
+            <OptionCard
               key={candidate.key}
               value={candidate.key}
               label={
-                <span className="inline-flex items-center gap-2">
+                <span className="flex min-w-0 items-center gap-2">
                   <AppLogo name={candidate.name} url={candidate.logoUrl} size="sm" />
-                  {candidate.name}
+                  <span className="min-w-0">{candidate.name}</span>
                 </span>
               }
-              hint={
+              description={
                 candidate.description ? (
-                  <span className="line-clamp-2 break-words">{candidate.description}</span>
+                  <span className="line-clamp-2">{candidate.description}</span>
                 ) : undefined
               }
             />
           ))}
-        </RadioGroup>
+        </OptionCardGroup>
       )}
       {app && (
         <fieldset className="space-y-2">

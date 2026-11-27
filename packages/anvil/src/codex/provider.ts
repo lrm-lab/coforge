@@ -1,3 +1,7 @@
+import {
+  selectsCodexCompatible,
+  codexCompatibleEnvironment,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
 import { asRecord, type CodeAgentProvider } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
@@ -15,7 +19,13 @@ import { consumeCodexResetCredit } from "./reset-credit";
 import type { CodexRuntimeHost } from "./host";
 import { RUNTIME_PROVIDER, utf8Encoder, type ResetCreditOutcome } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { assertSkillsLoaded, codexServiceTierState } from "./provider-support";
+import {
+  CODEX_COMPATIBLE_NATIVE_PROVIDER,
+  assertSkillsLoaded,
+  codexServiceTierState,
+} from "./provider-support";
+
+const COMPATIBLE_API_KEY_ENV = "COFORGE_CODEX_COMPATIBLE_API_KEY";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
 
@@ -79,14 +89,24 @@ export class CodexProvider implements CodeAgentProvider {
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
-    const command = await this.#command();
+    let command = await this.#command();
     options.startupSignal?.throwIfAborted();
     const environment = this.#host.buildSessionEnvironment(options);
+    const compatible = selectsCodexCompatible(this.provider, options.runtime?.modelProvider);
+    if (compatible) command = configureCompatibleProvider(command, options, environment);
+    const compatibleKey = compatible ? environment[COMPATIBLE_API_KEY_ENV] : undefined;
+    const redact = compatibleKey
+      ? (line: string) => line.replaceAll(compatibleKey, "[redacted]")
+      : undefined;
     const process = new JsonlProcess(
       command,
       options.agentWorkspaceDirectory,
       environment,
       this.#host.processTreeSpawner,
+      undefined,
+      undefined,
+      undefined,
+      redact,
     );
     rejectServerRequests(process, options.agentId, options.runtimeId);
     let stopReadingBaseline: (() => void) | undefined;
@@ -145,6 +165,7 @@ export class CodexProvider implements CodeAgentProvider {
         (timeoutMs) =>
           readCodexLiveUsage(process, (label) => this.#host.maskAccountLabel(label), timeoutMs),
         replacedSessionId === undefined ? resumedUsage : undefined,
+        redact,
       );
     } catch (error) {
       await process.dispose();
@@ -153,4 +174,40 @@ export class CodexProvider implements CodeAgentProvider {
       stopReadingBaseline?.();
     }
   }
+}
+
+function configureCompatibleProvider(
+  command: readonly string[],
+  options: AgentSessionOptions,
+  environment: Record<string, string>,
+): readonly string[] {
+  const pair = codexCompatibleEnvironment(options.runtime?.codexCompatibleEnvironment);
+  if (!pair) throw new Error("Codex compatible provider requires an API key and a valid base URL");
+
+  for (const name of Object.keys(environment)) {
+    const upper = name.toUpperCase();
+    if (
+      upper === "OPENAI_BASE_URL" ||
+      upper === "OPENAI_API_KEY" ||
+      upper === COMPATIBLE_API_KEY_ENV
+    )
+      delete environment[name];
+  }
+  environment[COMPATIBLE_API_KEY_ENV] = pair.OPENAI_API_KEY;
+  const provider = `model_providers.${CODEX_COMPATIBLE_NATIVE_PROVIDER}`;
+  return [
+    ...command,
+    "-c",
+    `model_provider=${JSON.stringify(CODEX_COMPATIBLE_NATIVE_PROVIDER)}`,
+    "-c",
+    `${provider}.name="OpenAI-compatible"`,
+    "-c",
+    `${provider}.base_url=${JSON.stringify(pair.OPENAI_BASE_URL)}`,
+    "-c",
+    `${provider}.env_key=${JSON.stringify(COMPATIBLE_API_KEY_ENV)}`,
+    "-c",
+    `${provider}.requires_openai_auth=false`,
+    "-c",
+    `${provider}.wire_api="responses"`,
+  ];
 }

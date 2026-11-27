@@ -9,11 +9,6 @@ import {
   useResponsiveSplitLayout,
 } from "#src/features/conversations/conversation-split";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
-import {
-  ProjectTaskTreeSkeleton,
-  ProjectTaskTreeView,
-} from "#src/features/projects/project-task-tree";
-import { useProjectTasks } from "#src/features/projects/project-tasks";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -53,16 +48,9 @@ export function WorkspaceTaskBoard({
 }) {
   const { tasks: all, run, refetch } = useTaskOverview();
   const { task: taskParam, ...boardSearch } = search;
-  const searched = useTaskBoardSearch(boardSearch);
+  const view = useTaskBoardSearch(boardSearch);
   const hydrated = useHydrated();
   const desktop = useBreakpoint("lg");
-  const layoutPending = project !== undefined && boardSearch.layout === undefined && !hydrated;
-  const treeShown = project !== undefined && !layoutPending && searched.layout === "list";
-  const projectTasks = useProjectTasks(treeShown ? project : undefined);
-  const view = useMemo(
-    () => (treeShown ? searched : { ...searched, filter: { ...searched.filter, channels: [] } }),
-    [treeShown, searched],
-  );
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const router = useRouter();
   const projectPick = useMemo(
@@ -86,7 +74,7 @@ export function WorkspaceTaskBoard({
     window: view.completedWindow,
     filter: project ? { ...view.filter, projects: [project] } : view.filter,
     onPage: tasks,
-    enabled: !treeShown,
+    enabled: board,
   });
   const { refresh: refreshFinished } = finished;
   const command = useMemo(
@@ -164,11 +152,7 @@ export function WorkspaceTaskBoard({
   }, [missing, closePopup]);
 
   const orderedTasks = useMemo(() => {
-    if (treeShown) {
-      return (projectTasks.data?.tasks ?? []).filter(
-        (task) => statusMatches(task.status, view.statuses) && taskMatches(task, view.filter),
-      );
-    }
+    if (!openTask) return [];
     const unfinished = tasks.filter((task) => !isFinishedStatus(task.status));
     const visible = [
       ...unfinished,
@@ -177,8 +161,7 @@ export function WorkspaceTaskBoard({
     ].filter((task) => statusMatches(task.status, view.statuses) && taskMatches(task, view.filter));
     return orderBoardTasks(visible, view.statuses);
   }, [
-    treeShown,
-    projectTasks.data?.tasks,
+    openTask,
     tasks,
     finished.columns.done.rows,
     finished.columns.closed.rows,
@@ -235,22 +218,6 @@ export function WorkspaceTaskBoard({
       commandsPending={!hydrated}
       project={project !== undefined}
       newTask={newTask}
-      tree={
-        treeShown
-          ? {
-              node: (
-                <ProjectTaskTreeView
-                  query={projectTasks}
-                  view={view}
-                  onOpenTask={openTask && useInlineSplit ? switchPopup : openPopup}
-                />
-              ),
-              tasks: projectTasks.data?.tasks ?? [],
-            }
-          : layoutPending
-            ? { node: <ProjectTaskTreeSkeleton />, tasks: [] }
-            : undefined
-      }
     />
   ) : null;
 
@@ -381,6 +348,7 @@ function renderTaskTitle(task: OverviewTaskRow, title: ReactNode) {
         task: overviewTaskParam(task),
       })}
       resetScroll={false}
+      preload={false}
       className={TASK_TITLE_CLASS}
     >
       {title}

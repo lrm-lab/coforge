@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { CODEX_COMPATIBLE_MODEL_PROVIDER } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
 import { runtimeSignInNotice } from "#src/features/agents/agent-runtime-sign-in-state";
 
-const loggedOut = (provider: "claude-code" | "kiro" | "command-code") => ({
+const loggedOut = (provider: "claude-code" | "kiro" | "command-code" | "codex") => ({
   displayName: "s144",
   ownedByCurrentUser: true,
   runtimeAuth: { [provider]: { provider, state: "logged_out" as const } },
@@ -56,4 +57,32 @@ test("Kiro on Windows and Command Code are told, but signed in elsewhere", () =>
     runtimeSignInNotice({ ...loggedOut("kiro"), platform: "win32" }, RUNTIME_PROVIDER.KIRO),
   ).toEqual({});
   expect(runtimeSignInNotice(loggedOut("command-code"), RUNTIME_PROVIDER.COMMAND_CODE)).toEqual({});
+});
+
+test("signed-out Codex offers custom API key when Computer supports it, and hides notice once selected", () => {
+  expect(
+    runtimeSignInNotice(loggedOut("codex"), RUNTIME_PROVIDER.CODEX, {
+      codexCompatibleSupported: true,
+    }),
+  ).toEqual({
+    signInProvider: "codex",
+    canUseCodexCompatible: true,
+  });
+
+  expect(
+    runtimeSignInNotice(
+      { ...loggedOut("codex"), ownedByCurrentUser: false },
+      RUNTIME_PROVIDER.CODEX,
+      { codexCompatibleSupported: true },
+    ),
+  ).toEqual({
+    canUseCodexCompatible: true,
+  });
+
+  expect(
+    runtimeSignInNotice(loggedOut("codex"), RUNTIME_PROVIDER.CODEX, {
+      modelProvider: CODEX_COMPATIBLE_MODEL_PROVIDER,
+      codexCompatibleSupported: true,
+    }),
+  ).toBeUndefined();
 });

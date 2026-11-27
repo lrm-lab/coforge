@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { enableWeeklyReportsForTest } from "./weekly-reports-experiment";
 
 const yearNoRealCycleUses = 2900 + (process.pid % 90);
 
@@ -24,6 +25,7 @@ export async function seedWeeklyReport(
     orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true } } },
   });
+  const weeklyReports = await enableWeeklyReportsForTest(db, workspaceId);
   const cycle = await db.weeklyReportCycle.create({
     data: {
       workspaceId,
@@ -50,6 +52,7 @@ export async function seedWeeklyReport(
     async remove() {
       await db.weeklyReport.deleteMany({ where: { id: report.id } }).catch(() => undefined);
       await db.weeklyReportCycle.deleteMany({ where: { id: cycle.id } }).catch(() => undefined);
+      await weeklyReports.restore();
       await db.$disconnect();
     },
   };

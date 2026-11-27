@@ -43,7 +43,15 @@ import { artifactCheckConfig, artifactChecksEnabled } from "./artifact-check-con
 import { enqueueArtifactVersionCheckFromActiveQueue } from "./artifact-check-queue.server";
 import { createHttpArtifactCheckRunner } from "./artifact-check-runner.server";
 import { ArtifactChecks } from "./artifact-checks.server";
+import { ArtifactPinnedSummary } from "./artifact-pinned-summary.server";
+import { ArtifactSettlements } from "./artifact-settlement.server";
 export type { ArtifactMessageCard } from "./artifact-reads.server";
+export type { PinnedArtifactSummary } from "./artifact-pinned-summary.server";
+export type {
+  ArtifactReopenedView,
+  ArtifactSettledView,
+  ArtifactSettlementView,
+} from "./artifact-settlement.server";
 export { memberArtifactWorkspaceSlug } from "./artifact-public-page.server";
 
 export const productionArtifactSignals = () =>
@@ -88,6 +96,8 @@ export function productionArtifacts(db: PrismaClient) {
     ) => commentImageUploadResponse(request, (bytes) => comments.uploadImage({ ...place, bytes })),
     versionHistory: new ArtifactVersionHistory(db, artifacts.reads),
     viewerPositions: new ArtifactViewerPositions(db, artifacts.reads),
+    pinnedSummary: new ArtifactPinnedSummary(db),
+    settlements: new ArtifactSettlements(db),
     download: (input: Parameters<typeof artifactDownload>[1]) =>
       artifactDownload(
         { reads: artifacts.reads, blobs, zipLimit: getAppRateLimits().artifactZip },

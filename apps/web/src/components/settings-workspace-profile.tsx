@@ -1,13 +1,15 @@
-import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button as AriaButton, FileTrigger } from "react-aria-components";
 import { Building07 as Building, Camera01, Check } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { useAppForm, visibleFieldError } from "#src/components/ui/form";
 import { WorkspaceIcon } from "#src/features/workspaces/workspace-icon";
 import { WORKSPACE_NAME_MAX_LENGTH } from "#src/features/workspaces/workspace.schemas";
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
+import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { fieldHint, scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { IMAGE_MAX_BYTES, IMAGE_UPLOAD_TYPES } from "#src/lib/image-upload";
 import type { SettingsContentProps } from "./settings-content";
 import { cn } from "#src/lib/utils";
@@ -65,64 +67,8 @@ export function WorkspaceProfileSettings({
   archivedGroups: React.ReactNode;
   dangerZone: React.ReactNode;
 }) {
-  const [name, setName] = useState(workspace.name);
-  const [saving, guardSave] = useSubmitGuard();
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [uploading, guardUpload] = useSubmitGuard();
   const [iconError, setIconError] = useState<SaveError | null>(null);
-  const [slug, setSlug] = useState(workspace.slug);
-  const [savingSlug, guardSlugSave] = useSubmitGuard();
-  const [slugError, setSlugError] = useState<SaveError | null>(null);
-  useEffect(() => {
-    if (!saved) return;
-    const timer = setTimeout(() => setSaved(false), 2000);
-    return () => clearTimeout(timer);
-  }, [saved]);
-
-  const trimmed = name.trim();
-  const changed = trimmed.length > 0 && trimmed !== workspace.name;
-  const trimmedSlug = slug.trim();
-  const slugValid = isValidWorkspaceSlug(trimmedSlug);
-  const slugChanged = trimmedSlug !== workspace.slug;
-  const slugInvalid = canChangeSlug && slugChanged && !slugValid;
-  const slugHint = !canChangeSlug ? (
-    m.settings_workspace_url_owner_only()
-  ) : slugInvalid ? (
-    <span role="alert">{m.settings_workspace_url_invalid()}</span>
-  ) : undefined;
-
-  function save() {
-    void guardSave(async () => {
-      setSaveError(null);
-      setSaved(false);
-      try {
-        await onRename(trimmed);
-        setName(trimmed);
-        setSaved(true);
-      } catch (cause) {
-        setSaveError(
-          saveErrorFrom(
-            isAppErrorCode(cause, "ACCESS_DENIED")
-              ? m.settings_workspace_profile_access_denied()
-              : m.settings_workspace_profile_save_error(),
-            cause,
-          ),
-        );
-      }
-    });
-  }
-
-  function saveSlug() {
-    void guardSlugSave(async () => {
-      setSlugError(null);
-      try {
-        await onSlugChange(trimmedSlug);
-      } catch (cause) {
-        setSlugError(saveErrorFrom(workspaceSlugSaveError(cause), cause));
-      }
-    });
-  }
 
   function upload(files: FileList | null) {
     const file = files?.[0];
@@ -193,71 +139,278 @@ export function WorkspaceProfileSettings({
             {iconError && <SaveErrorMessage error={iconError} />}
           </div>
           <div className="flex flex-col gap-6 border-t border-secondary pt-6">
-            <div className="grid max-w-xl gap-6">
-              <Input
-                label={m.settings_workspace_name()}
-                value={name}
-                maxLength={WORKSPACE_NAME_MAX_LENGTH}
-                isReadOnly={!canEdit}
-                isDisabled={saving}
-                hideRequiredIndicator
-                onChange={(next) => {
-                  setName(next);
-                  setSaved(false);
-                }}
-              />
-            </div>
-            {canEdit && (
-              <div className="flex flex-col items-start gap-2">
-                {saveError && <SaveErrorMessage error={saveError} />}
-                <Button
-                  type="button"
-                  size="sm"
-                  iconLeading={saved ? Check : undefined}
-                  isLoading={saving}
-                  isDisabled={saving || !changed}
-                  onPress={save}
-                >
-                  {saved
-                    ? m.settings_workspace_profile_saved()
-                    : m.settings_workspace_profile_save()}
-                </Button>
-              </div>
-            )}
-            <div className="grid max-w-xl gap-6">
-              <Input
-                label={m.settings_workspace_url_label()}
-                value={slug}
-                icon={SlugPrefix}
-                inputClassName="font-mono"
-                hint={slugHint}
-                isInvalid={slugInvalid}
-                isReadOnly={!canChangeSlug}
-                isDisabled={savingSlug}
-                excludeFromTabOrder={!canChangeSlug}
-                onChange={setSlug}
-              />
-            </div>
-            {canChangeSlug && (
-              <div className="flex flex-col items-start gap-2">
-                {slugError && <SaveErrorMessage error={slugError} />}
-                <Button
-                  type="button"
-                  size="sm"
-                  isLoading={savingSlug}
-                  isDisabled={savingSlug || !slugValid || !slugChanged}
-                  onPress={saveSlug}
-                >
-                  {m.settings_workspace_url_save()}
-                </Button>
-              </div>
-            )}
+            <WorkspaceNameForm
+              workspaceName={workspace.name}
+              canEdit={canEdit}
+              onRename={onRename}
+            />
+            <WorkspaceSlugForm
+              workspaceSlug={workspace.slug}
+              canChangeSlug={canChangeSlug}
+              onSlugChange={onSlugChange}
+            />
           </div>
         </SettingsCard>
       </SettingsGroup>
       {archivedGroups}
       {dangerZone}
     </SettingsPage>
+  );
+}
+
+function WorkspaceNameForm({
+  workspaceName,
+  canEdit,
+  onRename,
+}: {
+  workspaceName: string;
+  canEdit: boolean;
+  onRename: (name: string) => Promise<void>;
+}) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [saving, guardSave] = useSubmitGuard();
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<SaveError | null>(null);
+
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), 2000);
+    return () => clearTimeout(timer);
+  }, [saved]);
+
+  const form = useAppForm({
+    defaultValues: { name: workspaceName },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const trimmed = value.name.trim();
+      if (!canEdit || trimmed.length === 0 || trimmed === workspaceName) return;
+      await guardSave(async () => {
+        setSaveError(null);
+        setSaved(false);
+        try {
+          await onRename(trimmed);
+          form.setFieldValue("name", trimmed);
+          setSaved(true);
+        } catch (cause) {
+          setSaveError(
+            saveErrorFrom(
+              isAppErrorCode(cause, "ACCESS_DENIED")
+                ? m.settings_workspace_profile_access_denied()
+                : m.settings_workspace_profile_save_error(),
+              cause,
+            ),
+          );
+          scheduleFocusInvalidField(formRef.current, "name");
+        }
+      });
+    },
+  });
+
+  useEffect(() => {
+    form.reset({ name: workspaceName });
+  }, [form, workspaceName]);
+
+  return (
+    <form.AppForm>
+      <form
+        ref={formRef}
+        noValidate
+        className="flex max-w-xl flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <form.AppField name="name">
+          {(field) => {
+            const fieldError = visibleFieldError(
+              field.state.meta,
+              field.form.state.submissionAttempts,
+            );
+            return (
+              <div className="flex flex-col gap-1.5">
+                <Input
+                  label={m.settings_workspace_name()}
+                  name={field.name}
+                  value={field.state.value}
+                  maxLength={WORKSPACE_NAME_MAX_LENGTH}
+                  isInvalid={Boolean(fieldError || saveError)}
+                  hint={saveError ? undefined : fieldHint(fieldError)}
+                  isReadOnly={!canEdit}
+                  isDisabled={saving}
+                  hideRequiredIndicator
+                  onChange={(next) => {
+                    if (field.state.meta.errorMap.onSubmit) {
+                      field.setMeta((prev) => ({
+                        ...prev,
+                        errorMap: { ...prev.errorMap, onSubmit: undefined },
+                      }));
+                    }
+                    field.handleChange(next);
+                    setSaved(false);
+                    setSaveError(null);
+                  }}
+                  onBlur={field.handleBlur}
+                />
+                {saveError && <SaveErrorMessage error={saveError} />}
+              </div>
+            );
+          }}
+        </form.AppField>
+        {canEdit && (
+          <div>
+            <form.Subscribe
+              selector={(state) => {
+                const trimmed = state.values.name.trim();
+                return trimmed.length > 0 && trimmed !== workspaceName;
+              }}
+            >
+              {(changed) => (
+                <Button
+                  type="submit"
+                  size="sm"
+                  iconLeading={saved ? Check : undefined}
+                  isLoading={saving}
+                  isDisabled={saving || !changed}
+                >
+                  {saved
+                    ? m.settings_workspace_profile_saved()
+                    : m.settings_workspace_profile_save()}
+                </Button>
+              )}
+            </form.Subscribe>
+          </div>
+        )}
+      </form>
+    </form.AppForm>
+  );
+}
+
+function WorkspaceSlugForm({
+  workspaceSlug,
+  canChangeSlug,
+  onSlugChange,
+}: {
+  workspaceSlug: string;
+  canChangeSlug: boolean;
+  onSlugChange: (slug: string) => Promise<void>;
+}) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [savingSlug, guardSlugSave] = useSubmitGuard();
+  const [slugError, setSlugError] = useState<SaveError | null>(null);
+
+  const form = useAppForm({
+    defaultValues: { slug: workspaceSlug },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const trimmedSlug = value.slug.trim();
+      if (!canChangeSlug || !isValidWorkspaceSlug(trimmedSlug) || trimmedSlug === workspaceSlug) {
+        return;
+      }
+      await guardSlugSave(async () => {
+        setSlugError(null);
+        try {
+          await onSlugChange(trimmedSlug);
+        } catch (cause) {
+          setSlugError(saveErrorFrom(workspaceSlugSaveError(cause), cause));
+          scheduleFocusInvalidField(formRef.current, "slug");
+        }
+      });
+    },
+  });
+
+  useEffect(() => {
+    form.reset({ slug: workspaceSlug });
+  }, [form, workspaceSlug]);
+
+  const validateSlug = ({ value }: { value: string }) => {
+    if (!canChangeSlug) return undefined;
+    const trimmed = value.trim();
+    if (trimmed === workspaceSlug) return undefined;
+    return isValidWorkspaceSlug(trimmed) ? undefined : m.settings_workspace_url_invalid();
+  };
+
+  return (
+    <form.AppForm>
+      <form
+        ref={formRef}
+        noValidate
+        className="flex max-w-xl flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <form.AppField
+          name="slug"
+          validators={{
+            onChange: validateSlug,
+            onSubmit: validateSlug,
+          }}
+        >
+          {(field) => {
+            const fieldError = visibleFieldError(
+              field.state.meta,
+              field.form.state.submissionAttempts,
+            );
+            const hint = slugError
+              ? undefined
+              : !canChangeSlug
+                ? m.settings_workspace_url_owner_only()
+                : fieldHint(fieldError);
+            return (
+              <div className="flex flex-col gap-1.5">
+                <Input
+                  label={m.settings_workspace_url_label()}
+                  name={field.name}
+                  value={field.state.value}
+                  icon={SlugPrefix}
+                  inputClassName="font-mono"
+                  hint={hint}
+                  isInvalid={Boolean(fieldError || slugError)}
+                  isReadOnly={!canChangeSlug}
+                  isDisabled={savingSlug}
+                  excludeFromTabOrder={!canChangeSlug}
+                  onChange={(next) => {
+                    if (field.state.meta.errorMap.onSubmit) {
+                      field.setMeta((prev) => ({
+                        ...prev,
+                        errorMap: { ...prev.errorMap, onSubmit: undefined },
+                      }));
+                    }
+                    field.handleChange(next);
+                    setSlugError(null);
+                  }}
+                  onBlur={field.handleBlur}
+                />
+                {slugError && <SaveErrorMessage error={slugError} />}
+              </div>
+            );
+          }}
+        </form.AppField>
+        {canChangeSlug && (
+          <div>
+            <form.Subscribe
+              selector={(state) => {
+                const trimmed = state.values.slug.trim();
+                return isValidWorkspaceSlug(trimmed) && trimmed !== workspaceSlug;
+              }}
+            >
+              {(canSave) => (
+                <Button
+                  type="submit"
+                  size="sm"
+                  isLoading={savingSlug}
+                  isDisabled={savingSlug || !canSave}
+                >
+                  {m.settings_workspace_url_save()}
+                </Button>
+              )}
+            </form.Subscribe>
+          </div>
+        )}
+      </form>
+    </form.AppForm>
   );
 }
 

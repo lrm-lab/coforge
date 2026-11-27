@@ -1,27 +1,27 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Plus } from "@untitledui/icons";
+import { useEffect, useRef, useState } from "react";
+import { useStore } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import {
+  codexCompatibleBaseUrl,
+  selectsCodexCompatible,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { localizeHref } from "#src/paraglide/runtime";
-import {
-  DialogAction,
-  DialogActions,
-  DialogCancel,
-  useDialogControlSize,
-} from "#src/components/ui/dialog-actions";
-import { Select } from "#src/components/base/select/select";
-import { TextArea } from "#src/components/base/textarea/textarea";
-import {
-  ComputerStatusIcon,
-  computerOptionClassName,
-} from "#src/features/computers/computer-status-icon";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
+import { setFieldServerError, useAppForm, visibleFieldError } from "#src/components/ui/form";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
-import { agentCreateErrorMessage, agentCreateModelError, sizesFromForm } from "./agent-form";
+import {
+  agentCreateErrorTarget,
+  agentCreateModelError,
+  sizesFromForm,
+  type AgentFormField,
+} from "./agent-form";
 import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
 import { AgentRuntimeSignInNotice } from "./agent-runtime-sign-in-notice";
@@ -34,11 +34,12 @@ import { AgentUsernameField, type AgentUsernameDraft } from "./agent-username-fi
 import type { CreateAgentInput } from "./agent.schemas";
 import { preferredRuntimeProvider, runtimeOptionsFromRuntimes } from "./agent-runtime-options";
 import {
+  AgentCreateComputerSelect,
+  AgentCreateEmptyComputers,
   AgentCreateFooter,
   AgentCreateForm,
   AgentCreateIntro,
   AgentCreateModal,
-  AgentCreatePhoneBar,
 } from "./agent-create-frame";
 import type {
   RuntimeAuthProvider,
@@ -60,7 +61,15 @@ type AgentCreateComputerOption = RuntimeSignInComputer & {
   }[];
 };
 
-const ADD_COMPUTER_KEY = "\u0000add-computer";
+const AGENT_FORM_FIELDS: readonly AgentFormField[] = [
+  "name",
+  "computerId",
+  "provider",
+  "modelProvider",
+  "model",
+  "baseUrl",
+  "apiKey",
+];
 
 function preferredRuntime(computer: AgentCreateComputerOption | undefined) {
   const { providers } = runtimeOptionsFromRuntimes(computer?.runtimes ?? []);
@@ -108,14 +117,110 @@ export function LocalAgentForm({
   const [submitting, guard] = useSubmitGuard();
   const workspaceSlug = useWorkspaceSlug();
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState("");
-  const [modelError, setModelError] = useState("");
   const [initialComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
-  const [computerId, setComputerId] = useState(initialComputerId);
-  const [isPrivate, setIsPrivate] = useState(false);
   const [runtimeChanged, setRuntimeChanged] = useState(false);
   const [signingIn, setSigningIn] = useState<RuntimeAuthProvider>();
   const [signedIn, setSignedIn] = useState<ReadonlySet<string>>(new Set());
+
+  const form = useAppForm({
+    defaultValues: {
+      name: defaults?.name ?? "",
+      computerId: initialComputerId,
+      description: defaults?.description ?? "",
+      provider: "",
+      modelProvider: "",
+      model: "",
+      baseUrl: "",
+      apiKey: "",
+      isPrivate: false,
+    },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      setError("");
+      for (const field of AGENT_FORM_FIELDS) clearFieldError(field);
+      const formData = formRef.current ? new FormData(formRef.current) : new FormData();
+      const name = finishedAgentUsername(String(formData.get("name") ?? ""));
+      const description = value.description.trim();
+      const provider = parseRuntimeProvider(formData.get("provider")) ?? RUNTIME_PROVIDER.COFORGE;
+      const model = String(formData.get("model") ?? "").trim();
+      const modelProvider = String(formData.get("modelProvider") ?? "").trim();
+      const baseUrl = String(formData.get("baseUrl") ?? "").trim();
+      const apiKey = String(formData.get("apiKey") ?? "").trim();
+      if (!name) {
+        setFieldServerError(form, "name", m.agent_form_username_required(), formRef.current);
+        return;
+      }
+      const nextModelError = agentCreateModelError(provider, model, modelProvider);
+      if (nextModelError) {
+        setFieldServerError(form, "model", nextModelError, formRef.current);
+        return;
+      }
+      if (selectsCodexCompatible(provider, modelProvider)) {
+        if (!codexCompatibleBaseUrl(baseUrl)) {
+          setFieldServerError(
+            form,
+            "baseUrl",
+            m.agent_form_codex_compatible_endpoint_required(),
+            formRef.current,
+          );
+          return;
+        }
+        if (apiKey.length < 8) {
+          setFieldServerError(
+            form,
+            "apiKey",
+            m.agent_form_codex_compatible_key_required(),
+            formRef.current,
+          );
+          return;
+        }
+      }
+      await guard(async () => {
+        try {
+          await onCreate({
+            name,
+            description,
+            provider,
+            model: model || undefined,
+            modelProvider: modelProvider || undefined,
+            reasoning: String(formData.get("reasoning") ?? "").trim(),
+            fastMode: formData.get("fastMode") === "true",
+            ...sizesFromForm(formData),
+            apiKey: apiKey || undefined,
+            baseUrl: baseUrl || undefined,
+            computerId: computerLocked
+              ? value.computerId
+              : String(formData.get("computerId") ?? value.computerId),
+            actionCardMessageId,
+            visibility: value.isPrivate ? AGENT_VISIBILITY.PRIVATE : AGENT_VISIBILITY.PUBLIC,
+          });
+        } catch (cause) {
+          const target = agentCreateErrorTarget(cause);
+          if (target.field) {
+            setFieldServerError(form, target.field, target.message, formRef.current);
+          } else {
+            setError(target.message);
+          }
+        }
+      });
+    },
+  });
+
+  function clearFieldError(field: AgentFormField) {
+    if (!form.getFieldMeta(field)?.errorMap.onSubmit) return;
+    form.setFieldMeta(field, (prev) => ({
+      ...prev,
+      errorMap: { ...prev.errorMap, onSubmit: undefined },
+    }));
+  }
+
+  const { computerId, isPrivate } = useStore(form.store, (state) => ({
+    computerId: state.values.computerId,
+    isPrivate: state.values.isPrivate,
+  }));
+
   useRuntimeAuthSignals(computerId, {
     onSubscribed: () => {},
     onSignal: (signal) => {
@@ -136,193 +241,190 @@ export function LocalAgentForm({
     return () => onBusyChange(false);
   }, [submitting, onBusyChange]);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setModelError("");
-    const form = new FormData(event.currentTarget);
-    const name = finishedAgentUsername(String(form.get("name") ?? ""));
-    const description = String(form.get("description") ?? "").trim();
-    const provider = parseRuntimeProvider(form.get("provider")) ?? RUNTIME_PROVIDER.COFORGE;
-    const model = String(form.get("model") ?? "").trim();
-    if (!name) {
-      setError(m.agent_form_username_required());
-      return;
-    }
-    const nextModelError = agentCreateModelError(provider, model);
-    if (nextModelError) {
-      setModelError(nextModelError);
-      return;
-    }
-    await guard(async () => {
-      try {
-        await onCreate({
-          name,
-          description,
-          provider,
-          model: model || undefined,
-          modelProvider: String(form.get("modelProvider") ?? "").trim() || undefined,
-          reasoning: String(form.get("reasoning") ?? "").trim(),
-          fastMode: form.get("fastMode") === "true",
-          ...sizesFromForm(form),
-          apiKey: String(form.get("apiKey") ?? "").trim() || undefined,
-          computerId: computerLocked ? computerId : String(form.get("computerId") ?? ""),
-          actionCardMessageId,
-          visibility: isPrivate ? AGENT_VISIBILITY.PRIVATE : AGENT_VISIBILITY.PUBLIC,
-        });
-      } catch (cause) {
-        setError(agentCreateErrorMessage(cause));
-      }
-    });
-  }
-
   if (!computers.length)
     return (
-      <>
-        {headless ? (
-          <p className="px-6 pt-5 text-sm text-tertiary">{m.agent_empty_computer_description()}</p>
-        ) : (
-          <AgentCreateIntro
-            illustration="local"
-            title={m.agent_create_local_title()}
-            description={m.agent_empty_computer_description()}
-            onClose={onClose}
-          />
-        )}
-        <AgentCreatePhoneBar pending={false} onCancel={onClose} />
-        <DialogActions className="mt-6 px-6 pb-6 max-sm:mt-4 max-sm:px-4">
-          <DialogCancel onPress={onClose} className="max-sm:hidden">
-            {m.controls_cancel()}
-          </DialogCancel>
-          <DialogAction
-            href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
-            onPress={onClose}
-          >
-            {m.agent_connect_computer()}
-          </DialogAction>
-        </DialogActions>
-      </>
+      <AgentCreateEmptyComputers
+        headless={headless}
+        workspaceSlug={workspaceSlug}
+        onClose={onClose}
+      />
     );
 
   return (
     <>
-      <AgentCreateForm
-        onSubmit={submit}
-        changed={computerId !== initialComputerId || isPrivate || runtimeChanged}
-        intro={
-          !headless && (
-            <AgentCreateIntro
-              illustration="local"
-              title={m.agent_create_local_title()}
-              description={m.agent_create_local_description()}
-              onClose={submitting ? undefined : onClose}
+      <form.AppForm>
+        <AgentCreateForm
+          formRef={formRef}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
+          changed={computerId !== initialComputerId || isPrivate || runtimeChanged}
+          intro={
+            !headless && (
+              <AgentCreateIntro
+                illustration="local"
+                title={m.agent_create_local_title()}
+                description={m.agent_create_local_description()}
+                onClose={submitting ? undefined : onClose}
+              />
+            )
+          }
+          footer={
+            <AgentCreateFooter
+              onCancel={onClose}
+              cancelDisabled={submitting}
+              submitLabel={submitLabel}
+              submitting={submitting}
             />
-          )
-        }
-        footer={
-          <AgentCreateFooter
-            onCancel={onClose}
-            cancelDisabled={submitting}
-            submitLabel={submitLabel}
-            submitting={submitting}
-          />
-        }
-      >
-        <div className="flex flex-col gap-4 px-6 pt-5 pb-3">
-          {joinsChannelName && (
-            <p className="text-sm text-secondary">
-              {m.agent_form_joins_channel({ channel: joinsChannelName })}
-            </p>
-          )}
-          <AgentUsernameField defaultValue={defaults?.name} note={nameNote} draft={usernameDraft} />
-          <Select
-            name="computerId"
-            isRequired
-            hideRequiredIndicator
-            isDisabled={computerLocked}
-            size={controlSize}
-            label={m.agent_create_computer()}
-            className="min-w-0"
-            selectedKey={computerId}
-            onSelectionChange={(key) => {
-              if (key === ADD_COMPUTER_KEY) {
-                onClose();
-                void router.navigate({
-                  href: localizeHref(workspacePath(workspaceSlug, "/computers?add=1")),
-                });
-                return;
-              }
-              if (key !== null) {
-                setComputerId(String(key));
-                setModelError("");
-              }
-            }}
-          >
-            {computers.map((computer) => (
-              <Select.Item
-                key={computer.id}
-                id={computer.id}
-                label={computer.displayName.trim() || computer.name}
-                aria-label={`${computer.displayName.trim() || computer.name}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
-                icon={<ComputerStatusIcon computer={computer} online={Boolean(computer.online)} />}
-                className={computerOptionClassName(Boolean(computer.online))}
-              />
-            ))}
-            {!computerLocked && (
-              <Select.Item
-                id={ADD_COMPUTER_KEY}
-                label={m.agent_create_add_computer()}
-                icon={Plus}
-                selectionIndicator="none"
-                className="sticky bottom-0 z-10 -mb-1 mt-1 border-t border-secondary bg-primary pt-1 pb-1"
-              />
+          }
+        >
+          <div className="flex flex-col gap-4 px-6 pt-5 pb-3">
+            {joinsChannelName && (
+              <p className="text-sm text-secondary">
+                {m.agent_form_joins_channel({ channel: joinsChannelName })}
+              </p>
             )}
-          </Select>
-          <TextArea
-            label={m.agent_create_description()}
-            name="description"
-            size={controlSize}
-            rows={3}
-            defaultValue={defaults?.description}
-            placeholder={m.agent_form_description_placeholder()}
-            className="min-w-0"
-            textAreaClassName="field-sizing-content max-h-40 min-h-20"
-          />
-          <AgentRuntimeFields
-            key={computerId}
-            open
-            computerId={computerId}
-            initial={preferredRuntime(computer)}
-            enforceRequiredModel
-            modelError={modelError}
-            onModelErrorClear={() => setModelError("")}
-            onDirtyChange={setRuntimeChanged}
-            providerNotice={(provider) =>
-              computer &&
-              !signedIn.has(`${computerId}:${provider}`) && (
-                <AgentRuntimeSignInNotice
-                  computer={computer}
-                  provider={provider}
-                  onSignIn={setSigningIn}
+            <form.AppField name="name">
+              {(field) => (
+                <AgentUsernameField
+                  defaultValue={defaults?.name}
+                  note={nameNote}
+                  error={visibleFieldError(field.state.meta, field.form.state.submissionAttempts)}
+                  onErrorClear={() => clearFieldError("name")}
+                  draft={usernameDraft}
                 />
-              )
-            }
-            onLoad={async (id) => runtimeOptionsFor(id, await onLoadRuntimeCatalog(id))}
-            initialOptions={cachedCatalog && runtimeOptionsFor(computerId, cachedCatalog)}
-          />
-          <AgentOptionCard
-            label={m.agent_form_visibility_private()}
-            isDisabled={visibilityLocked}
-            isSelected={isPrivate}
-            onChange={setIsPrivate}
-          />
-          {error && (
-            <p role="alert" className="text-sm text-error-primary">
-              {error}
-            </p>
-          )}
-        </div>
-      </AgentCreateForm>
+              )}
+            </form.AppField>
+            <form.AppField name="computerId">
+              {(field) => (
+                <AgentCreateComputerSelect
+                  computers={computers}
+                  computerLocked={computerLocked}
+                  computerError={visibleFieldError(
+                    field.state.meta,
+                    field.form.state.submissionAttempts,
+                  )}
+                  controlSize={controlSize}
+                  selectedKey={field.state.value}
+                  onAddComputer={() => {
+                    onClose();
+                    void router.navigate({
+                      href: localizeHref(workspacePath(workspaceSlug, "/computers?add=1")),
+                    });
+                  }}
+                  onSelectComputer={(id) => {
+                    clearFieldError("computerId");
+                    clearFieldError("provider");
+                    clearFieldError("modelProvider");
+                    clearFieldError("model");
+                    clearFieldError("baseUrl");
+                    clearFieldError("apiKey");
+                    field.handleChange(id);
+                  }}
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="description">
+              {(field) => (
+                <field.TextArea
+                  label={m.agent_create_description()}
+                  size={controlSize}
+                  rows={3}
+                  placeholder={m.agent_form_description_placeholder()}
+                  className="min-w-0"
+                  textAreaClassName="field-sizing-content max-h-40 min-h-20"
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="provider">
+              {(providerField) => (
+                <form.AppField name="modelProvider">
+                  {(modelProviderField) => (
+                    <form.AppField name="model">
+                      {(modelField) => (
+                        <form.AppField name="baseUrl">
+                          {(baseUrlField) => (
+                            <form.AppField name="apiKey">
+                              {(apiKeyField) => {
+                                const attempts = providerField.form.state.submissionAttempts;
+                                return (
+                                  <AgentRuntimeFields
+                                    key={computerId}
+                                    open
+                                    computerId={computerId}
+                                    initial={preferredRuntime(computer)}
+                                    enforceRequiredModel
+                                    providerError={visibleFieldError(
+                                      providerField.state.meta,
+                                      attempts,
+                                    )}
+                                    modelProviderError={visibleFieldError(
+                                      modelProviderField.state.meta,
+                                      attempts,
+                                    )}
+                                    modelError={visibleFieldError(modelField.state.meta, attempts)}
+                                    baseUrlError={visibleFieldError(
+                                      baseUrlField.state.meta,
+                                      attempts,
+                                    )}
+                                    apiKeyError={visibleFieldError(
+                                      apiKeyField.state.meta,
+                                      attempts,
+                                    )}
+                                    onModelErrorClear={() => clearFieldError("model")}
+                                    onFieldErrorClear={clearFieldError}
+                                    onDirtyChange={setRuntimeChanged}
+                                    providerNotice={({
+                                      provider,
+                                      modelProvider,
+                                      codexCompatibleSupported,
+                                      onUseCodexCompatible,
+                                    }) =>
+                                      computer &&
+                                      !signedIn.has(`${computerId}:${provider}`) && (
+                                        <AgentRuntimeSignInNotice
+                                          computer={computer}
+                                          provider={provider}
+                                          modelProvider={modelProvider}
+                                          codexCompatibleSupported={codexCompatibleSupported}
+                                          onUseCodexCompatible={onUseCodexCompatible}
+                                          onSignIn={setSigningIn}
+                                        />
+                                      )
+                                    }
+                                    onLoad={async (id) =>
+                                      runtimeOptionsFor(id, await onLoadRuntimeCatalog(id))
+                                    }
+                                    initialOptions={
+                                      cachedCatalog && runtimeOptionsFor(computerId, cachedCatalog)
+                                    }
+                                  />
+                                );
+                              }}
+                            </form.AppField>
+                          )}
+                        </form.AppField>
+                      )}
+                    </form.AppField>
+                  )}
+                </form.AppField>
+              )}
+            </form.AppField>
+            <form.AppField name="isPrivate">
+              {(field) => (
+                <AgentOptionCard
+                  label={m.agent_form_visibility_private()}
+                  isDisabled={visibilityLocked}
+                  isSelected={field.state.value}
+                  onChange={field.handleChange}
+                />
+              )}
+            </form.AppField>
+            <form.Alert error={error} />
+          </div>
+        </AgentCreateForm>
+      </form.AppForm>
       {signingIn && computer && (
         <RuntimeSignInDialog
           computerId={computer.id}

@@ -2,7 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { declareNoStore } from "#src/features/no-store-response.server";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
+import { isWeeklyReportsEnabled } from "#src/server/records/weekly-reports-gate.server";
+import { weeklyReportsMiddleware } from "./weekly-reports-middleware";
 
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { loadRecordsCatalog as loadRecordsCatalogData } from "#src/server/records/record-catalog-load.server";
@@ -28,14 +31,22 @@ import {
   updateWeeklyTemplateInputSchema,
 } from "./records-schemas";
 
+export const loadWeeklyReportsOn = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
+    declareNoStore();
+    return isWeeklyReportsEnabled(context.db, context.workspaceId);
+  });
+
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
+    if (!(await isWeeklyReportsEnabled(db, workspaceId))) return { preview: false as const };
     return recordNavAttention(db).loadNavAttention({ workspaceId, userId: user.id });
   });
 
 export const loadRecordsCatalog = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     return loadRecordsCatalogData(db, { workspaceId, userId: user.id }, (args) =>
       ensureFormatForSettings(db, args),
@@ -43,7 +54,7 @@ export const loadRecordsCatalog = createServerFn({ method: "GET" })
   });
 
 export const deleteMemberWeeklyReport = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordReportManagement(db).deleteMemberReport({
@@ -54,7 +65,7 @@ export const deleteMemberWeeklyReport = createServerFn({ method: "POST" })
   });
 
 export const setWeeklyReportFavorite = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),
@@ -71,7 +82,7 @@ export const setWeeklyReportFavorite = createServerFn({ method: "POST" })
   });
 
 export const deleteOverviewReport = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordReportManagement(db).deleteOverviewReport({
@@ -82,7 +93,7 @@ export const deleteOverviewReport = createServerFn({ method: "POST" })
   });
 
 export const deleteMemberWeek = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ cycleId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordReportManagement(db).deleteMemberWeek({
@@ -93,7 +104,7 @@ export const deleteMemberWeek = createServerFn({ method: "POST" })
   });
 
 export const loadRecordSubject = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ id: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { streamPositions, data: subject } = await readAfterStreamPositions(
@@ -104,7 +115,7 @@ export const loadRecordSubject = createServerFn({ method: "GET" })
   });
 
 export const loadWeeklyReportAssistantContext = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       subjectType: z.enum(["report", "cycle"]),
@@ -121,7 +132,7 @@ export const loadWeeklyReportAssistantContext = createServerFn({ method: "GET" }
   });
 
 export const createRecordNote = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ title: z.string().trim().max(200).optional() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordAssistantCatalog(db).createNote({
@@ -132,7 +143,7 @@ export const createRecordNote = createServerFn({ method: "POST" })
   });
 
 export const saveRecordNote = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(saveRecordNoteInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordAssistantCatalog(db).saveNote({
@@ -145,7 +156,7 @@ export const saveRecordNote = createServerFn({ method: "POST" })
   });
 
 export const deleteRecordNote = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ noteId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordAssistantCatalog(db).deleteNote({
@@ -156,7 +167,7 @@ export const deleteRecordNote = createServerFn({ method: "POST" })
   });
 
 export const saveWeeklyReportContent = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),
@@ -179,7 +190,7 @@ export const saveWeeklyReportContent = createServerFn({ method: "POST" })
   });
 
 export const updateFormatReportMeta = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(updateFormatReportMetaInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return updateFormatReportMetaData(db, {
@@ -191,7 +202,7 @@ export const updateFormatReportMeta = createServerFn({ method: "POST" })
   });
 
 export const markWeeklyAssignmentOpened = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordAssistantCatalog(db).markAssignmentOpened({
@@ -202,7 +213,7 @@ export const markWeeklyAssignmentOpened = createServerFn({ method: "POST" })
   });
 
 export const confirmWeeklyReportSend = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordReportSend(db).confirmPromptedSend({
@@ -213,7 +224,7 @@ export const confirmWeeklyReportSend = createServerFn({ method: "POST" })
   });
 
 export const sendWeeklyReportAssignments = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       sourceReportId: z.uuid(),
@@ -230,7 +241,7 @@ export const sendWeeklyReportAssignments = createServerFn({ method: "POST" })
   });
 
 export const applyConfirmedWeeklyReportBody = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),
@@ -251,7 +262,7 @@ export const applyConfirmedWeeklyReportBody = createServerFn({ method: "POST" })
   });
 
 export const switchWeeklyReportBodyVersion = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordReportContent(db).switchWeeklyReportBodyVersion({
@@ -262,7 +273,7 @@ export const switchWeeklyReportBodyVersion = createServerFn({ method: "POST" })
   });
 
 export const applyConfirmedKeyPointMarkdown = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),
@@ -279,7 +290,7 @@ export const applyConfirmedKeyPointMarkdown = createServerFn({ method: "POST" })
   });
 
 export const dismissKeyPointConfirmDraft = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordKeyPointEdits(db).dismissKeyPointConfirmDraft({
@@ -290,13 +301,13 @@ export const dismissKeyPointConfirmDraft = createServerFn({ method: "POST" })
   });
 
 export const loadWeeklyTemplates = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     return recordTemplates(db).listTemplates({ workspaceId, userId: user.id });
   });
 
 export const loadWeeklyTemplateForReport = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).loadTemplateForReport({
@@ -307,13 +318,13 @@ export const loadWeeklyTemplateForReport = createServerFn({ method: "GET" })
   });
 
 export const loadKeyPointPrompts = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     return recordTemplates(db).loadKeyPointPrompts({ workspaceId, userId: user.id });
   });
 
 export const saveKeyPointPrompts = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(saveKeyPointPromptsInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).saveKeyPointPrompts({
@@ -325,7 +336,7 @@ export const saveKeyPointPrompts = createServerFn({ method: "POST" })
   });
 
 export const deleteKeyPointPromptHistory = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       slot: z.enum(["team", "personal"]),
@@ -342,7 +353,7 @@ export const deleteKeyPointPromptHistory = createServerFn({ method: "POST" })
   });
 
 export const restartPersonalKeyPointExtraction = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).restartPersonalKeyPointExtraction({
@@ -353,7 +364,7 @@ export const restartPersonalKeyPointExtraction = createServerFn({ method: "POST"
   });
 
 export const startTeamKeyPointExtraction = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       overviewReportId: z.uuid(),
@@ -370,7 +381,7 @@ export const startTeamKeyPointExtraction = createServerFn({ method: "POST" })
   });
 
 export const applyWeeklyTemplate = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ templateId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).applyTemplate({
@@ -381,14 +392,14 @@ export const applyWeeklyTemplate = createServerFn({ method: "POST" })
   });
 
 export const createWeeklyTemplate = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(createWeeklyTemplateInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).createTemplate({ workspaceId, userId: user.id, ...data });
   });
 
 export const updateWeeklyTemplate = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(updateWeeklyTemplateInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).updateTemplate({
@@ -399,7 +410,7 @@ export const updateWeeklyTemplate = createServerFn({ method: "POST" })
   });
 
 export const deleteWeeklyTemplate = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ templateId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).deleteTemplate({
@@ -410,7 +421,7 @@ export const deleteWeeklyTemplate = createServerFn({ method: "POST" })
   });
 
 export const loadWeeklyReportStats = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ year: z.number().int(), month: z.number().int().min(1).max(12) }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordStats(db).loadStats({
@@ -422,7 +433,7 @@ export const loadWeeklyReportStats = createServerFn({ method: "GET" })
   });
 
 export const loadWeeklyReportDashboard = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ limit: z.number().int().min(2).max(12).optional() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordStats(db).loadWeeklyReportDashboard({

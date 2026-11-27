@@ -244,3 +244,36 @@ test("a first page read earlier than the one held does not replace it", () => {
   expect(names(queryClient)).toEqual(["read later", "second"]);
   unsubscribe();
 });
+
+test("a live first page seeded into a cold filter query survives the slower initial read", async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const unreadKey: readonly unknown[] = activityInboxQuery("workspace-1", "unread").queryKey;
+  const options = activityInboxQuery("workspace-1", "unread");
+  const release = deferred();
+  const observer = new InfiniteQueryObserver<TestPage, Error, InfiniteData<TestPage>>(queryClient, {
+    queryKey: unreadKey,
+    queryFn: async () => {
+      await release.promise;
+      return firstPage("cold initial read before live message", 1);
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.next,
+    staleTime: Infinity,
+    structuralSharing: options.structuralSharing,
+  });
+  const unsubscribe = observer.subscribe(() => {});
+
+  queryClient.setQueryData<InfiniteData<TestPage>>(unreadKey, (current) =>
+    current
+      ? { ...current, pages: [firstPage("live message page", 2), ...current.pages.slice(1)] }
+      : { pages: [firstPage("live message page", 2)], pageParams: [undefined] },
+  );
+  release.resolve();
+  await Bun.sleep(0);
+
+  expect(
+    queryClient.getQueryData<InfiniteData<TestPage>>(unreadKey)?.pages.map((p) => p.name),
+  ).toEqual(["live message page"]);
+  unsubscribe();
+  queryClient.clear();
+});

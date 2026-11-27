@@ -24,6 +24,10 @@ test("an owner reopening a committed Workspace repairs failed provisioning witho
       { id: true },
     );
     workspaceId = workspace.id;
+    await db.workspace.update({
+      where: { id: workspaceId },
+      data: { experiments: { weeklyReports: true } },
+    });
     const computer = await db.computer.create({
       data: {
         ownerId: owner.id,
@@ -105,6 +109,10 @@ test("opening with a local platform Computer does not retry a refused weekly bin
       { id: true },
     );
     workspaceId = workspace.id;
+    await db.workspace.update({
+      where: { id: workspaceId },
+      data: { experiments: { weeklyReports: true } },
+    });
     const input = { workspaceId, userId: owner.id };
     await provisionWorkspaceEnrollment(db, workspaceId, owner.id);
     const session = await new WorkspaceAssistants(db).ensure(workspaceId, owner.id);
@@ -154,6 +162,10 @@ test("a fully provisioned open is read-only while the assistant's introduction i
       { id: true },
     );
     workspaceId = workspace.id;
+    await db.workspace.update({
+      where: { id: workspaceId },
+      data: { experiments: { weeklyReports: true } },
+    });
     const input = { workspaceId, userId: owner.id };
     await provisionWorkspaceEnrollment(db, workspaceId, owner.id);
     const session = await new WorkspaceAssistants(db).ensure(workspaceId, owner.id);

@@ -4,44 +4,24 @@ import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import {
   agentIdFromProfileParam,
-  agentProfileSearchWithoutThread,
+  agentProfileSearchBase,
   formatAgentProfileParam,
   formatPersonProfileParam,
   personIdFromProfileParam,
   type AgentProfileTab,
 } from "./profile-panel-search";
 
-type AgentProfileSearch = {
-  profile?: string;
-  agentTab?: AgentProfileTab;
-  threadRootId?: string;
-  doc?: string;
-  docFull?: boolean;
-};
-
-/** Opens the Agent profile panel, on `tab` when one is named. */
 export type OpenAgentProfile = (agentId: string, tab?: AgentProfileTab) => void;
 
-/** Opens a person's profile panel in the same slot (`profile=user:<id>`). */
 export type OpenPersonProfile = (userId: string) => void;
 
-/**
- * The one way a conversation page or the Members directory opens/closes/switches the Agent
- * profile panel. Per `src/features/agents/AGENTS.md` ("the conversations feature does not own Agent state"),
- * callers use this instead of writing `profile`/`agentTab` search params themselves.
- *
- * Opening pushes a history entry (plain `router.navigate` without `replace`, the same default
- * every other search-param writer on these routes already relies on — see
- * `use-conversation-view.ts`), so browser Back closes the panel. Closing and tab switches replace
- * in place: neither should itself become a Back stop once the panel is already open.
- */
 export function useOpenAgentProfile() {
   const router = useRouter();
   const openAgentProfile: OpenAgentProfile = (agentId, tab) =>
     void router.navigate({
       to: ".",
-      search: (previous: AgentProfileSearch) => ({
-        ...agentProfileSearchWithoutThread(previous),
+      search: (previous) => ({
+        ...agentProfileSearchBase(previous),
         profile: formatAgentProfileParam(agentId),
         ...(tab ? { agentTab: tab } : {}),
       }),
@@ -49,8 +29,8 @@ export function useOpenAgentProfile() {
   const openPersonProfile: OpenPersonProfile = (userId) =>
     void router.navigate({
       to: ".",
-      search: (previous: AgentProfileSearch) => {
-        const { agentTab: _agentTab, ...rest } = agentProfileSearchWithoutThread(previous);
+      search: (previous) => {
+        const { agentTab: _agentTab, ...rest } = agentProfileSearchBase(previous);
         return { ...rest, profile: formatPersonProfileParam(userId) };
       },
     });
@@ -58,25 +38,20 @@ export function useOpenAgentProfile() {
     void router.navigate({
       to: ".",
       replace: true,
-      search: (previous: AgentProfileSearch) => ({ ...previous, agentTab: tab }),
+      search: (previous) => ({ ...previous, agentTab: tab }),
     });
   const closeAgentProfile = () =>
     void router.navigate({
       to: ".",
       replace: true,
-      search: (previous: AgentProfileSearch) => {
+      search: (previous) => {
         const { profile: _profile, agentTab: _agentTab, ...rest } = previous;
-        return agentProfileSearchWithoutThread(rest);
+        return rest;
       },
     });
   return { openAgentProfile, openPersonProfile, setAgentProfileTab, closeAgentProfile };
 }
 
-/**
- * The Agent profile panel's props for a conversation, from its host's `profile` / `agentTab`
- * search params. Every conversation host (Chat's routes, the hosted pane) spreads them into the
- * conversation.
- */
 export function useConversationAgentProfile({
   profile,
   agentTab,
@@ -99,13 +74,6 @@ export function useConversationAgentProfile({
   };
 }
 
-/**
- * How the chat list header opens an Agent's profile. The function never changes identity, so the
- * header's memoized stage is not repainted by a navigation. On a conversation page
- * the panel opens beside it, as from any other avatar there. Elsewhere in Chat (no conversation
- * open, Saved) there is no panel: the viewer's open Direct message with the Agent
- * (`directConversations`, by Agent id) opens with the panel, else the Members page does.
- */
 export function useOpenHeaderAgent(
   onConversationPage: boolean,
   directConversations: ReadonlyMap<string, string>,

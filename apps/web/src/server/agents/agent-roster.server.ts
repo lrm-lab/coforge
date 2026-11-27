@@ -24,6 +24,7 @@ import {
   mapAgent,
   type AgentRecord,
 } from "#src/server/db/repositories/agent.repositories.server";
+import { WEEKLY_REPORTS_VISIBLE_AGENT_WHERE } from "#src/server/records/weekly-reports-gate.server";
 
 type RosterPorts = {
   statuses?: Pick<AgentStatusCache, "snapshotMany">;
@@ -144,7 +145,13 @@ export async function loadWorkspaceAgentsSnapshot(
   const now = ports?.now ?? Date.now();
   const [allRows, busy] = await Promise.all([
     db.agent.findMany({
-      where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...ROSTER_AGENT_WHERE },
+      where: {
+        AND: [
+          { workspaceId, ...ACTIVE_AGENT_WHERE },
+          ROSTER_AGENT_WHERE,
+          WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
+        ],
+      },
       select: AGENT_RECORD_SELECT,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
@@ -205,7 +212,13 @@ export async function loadWorkspaceAgentsSnapshot(
 
 export async function statusAgentScopes(db: Pick<PrismaClient, "agent">, workspaceId: string) {
   return db.agent.findMany({
-    where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...ROSTER_AGENT_WHERE },
+    where: {
+      AND: [
+        { workspaceId, ...ACTIVE_AGENT_WHERE },
+        ROSTER_AGENT_WHERE,
+        WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
+      ],
+    },
     select: { id: true, computerId: true },
   });
 }
@@ -221,6 +234,7 @@ export async function visiblePrivateAgentIds(
         { workspaceId, ...ACTIVE_AGENT_WHERE, visibility: AGENT_VISIBILITY.PRIVATE },
         visibleAgentWhere(viewer),
         ROSTER_AGENT_WHERE,
+        WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
       ],
     },
     select: { id: true },

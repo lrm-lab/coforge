@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import type { WorkspaceInfoChannel, WorkspaceInfoComputer } from "@lrm/coforge-sdk/internal";
+import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import {
@@ -33,6 +34,7 @@ export async function listAgentWorkspaceChannels(
       description: true,
       visibility: true,
       archivedAt: true,
+      pinnedArtifact: { select: { artifactId: true } },
       members: {
         where: { ...channelActorMemberWhere(reader), ...ACTIVE_MEMBER_WHERE },
         select: { channelRole: true, notificationLevel: true },
@@ -41,16 +43,22 @@ export async function listAgentWorkspaceChannels(
     },
   });
   if (channels.length === 0) return [];
-  // One index probe per channel for its newest message (`messages(conversationId, createdAt)`),
-  // so the cost follows the number of channels and not the number of messages.
-  const newest = await db.$queryRaw<{ conversationId: string; lastPostAt: Date }[]>`
-    SELECT c."id" AS "conversationId", p."createdAt" AS "lastPostAt"
-    FROM unnest(${channels.map((channel) => channel.id)}::uuid[]) AS c("id")
-    CROSS JOIN LATERAL (
-      SELECT m."createdAt" FROM "messages" m
-      WHERE m."conversationId" = c."id" AND m."senderMemberId" IS NOT NULL
-      ORDER BY m."createdAt" DESC LIMIT 1
-    ) p`;
+  const pinnedPairs = channels.flatMap((channel) =>
+    channel.pinnedArtifact
+      ? [{ conversationId: channel.id, artifactId: channel.pinnedArtifact.artifactId }]
+      : [],
+  );
+  const [newest, announcements] = await Promise.all([
+    db.$queryRaw<{ conversationId: string; lastPostAt: Date }[]>`
+      SELECT c."id" AS "conversationId", p."createdAt" AS "lastPostAt"
+      FROM unnest(${channels.map((channel) => channel.id)}::uuid[]) AS c("id")
+      CROSS JOIN LATERAL (
+        SELECT m."createdAt" FROM "messages" m
+        WHERE m."conversationId" = c."id" AND m."senderMemberId" IS NOT NULL
+        ORDER BY m."createdAt" DESC LIMIT 1
+      ) p`,
+    productionArtifacts(db).pinnedSummary.readSummariesForConversations(workspaceId, pinnedPairs),
+  ]);
   const lastPostAt = new Map(newest.map((row) => [row.conversationId, row.lastPostAt]));
   return channels.map((channel) => {
     const member = channel.members[0];
@@ -65,6 +73,7 @@ export async function listAgentWorkspaceChannels(
       ...(authority.channelRole ? { channelRole: authority.channelRole } : {}),
       ...(authority.adminBasis ? { channelAdminBasis: authority.adminBasis } : {}),
       lastPostAt: lastPostAt.get(channel.id)?.toISOString() ?? null,
+      announcement: announcements.get(channel.id) ?? null,
     };
   });
 }

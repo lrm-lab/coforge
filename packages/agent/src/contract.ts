@@ -1,3 +1,4 @@
+import { type CodexCompatibleEnvironment } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import type {
   RuntimeProvider,
   RuntimeErrorAction,
@@ -41,6 +42,7 @@ export type AgentRuntimeConfig = Readonly<{
   contextWindow?: number;
   maxOutputTokens?: number;
   envVars?: Readonly<Record<string, string>>;
+  codexCompatibleEnvironment?: CodexCompatibleEnvironment;
 }>;
 export type UsageWindowStatus = "ok" | "limit_reached" | "parse_unavailable";
 export type UsageQuotaLevel = "ok" | "warning" | "near_exhausted" | "exhausted";

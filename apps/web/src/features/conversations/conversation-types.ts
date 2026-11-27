@@ -146,6 +146,7 @@ export type ThreadedConversationProps = Omit<ConversationProps, "conversation"> 
    * member directory. */
   plainMentions?: Map<string, ChipMention>;
   header: ReactNode;
+  pinnedStrip?: ReactNode;
   readOnlyNotice?: ReactNode;
   emptyState: {
     title: string;

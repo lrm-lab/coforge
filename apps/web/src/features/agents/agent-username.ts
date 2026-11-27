@@ -1,11 +1,9 @@
 import { AGENT_NAME_MAX_LENGTH, freeAgentName } from "@lrm/coforge-sdk/internal";
+import { adjectives, animals, uniqueNamesGenerator } from "unique-names-generator";
 
-/**
- * What a person types, turned into the username form (`AGENT_NAME_PATTERN`) as they type, so the
- * field never holds a value the server refuses: lowercase, accents dropped, spaces and underscores
- * become one hyphen, anything else is removed. A trailing hyphen stays so the next word can follow;
- * `finishedAgentUsername` drops it once they leave the field.
- */
+const MAX_GENERATION_ATTEMPTS = 64;
+const SEED_STRIDE = 7919;
+
 export function typedAgentUsername(text: string): string {
   return text
     .normalize("NFKD")
@@ -21,54 +19,63 @@ export function finishedAgentUsername(text: string): string {
   return typedAgentUsername(text).replace(/-+$/, "");
 }
 
-/** Usernames the create form suggests, after people who shaped computing. */
-const SUGGESTED_USERNAMES = [
-  "ada",
-  "alan",
-  "grace",
-  "linus",
-  "margaret",
-  "dennis",
-  "barbara",
-  "edsger",
-  "donald",
-  "katherine",
-  "hedy",
-  "guido",
-  "frances",
-  "radia",
-  "leslie",
-  "niklaus",
-  "annie",
-  "claude",
-  "john",
-  "dorothy",
-];
+function hashSeed(text: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 
-/** A suggested username for a new Agent, never the one it replaces, and free while one is
- * (`availableAgentUsername`). */
+function generatedCandidate(seed: number): string {
+  return finishedAgentUsername(
+    uniqueNamesGenerator({
+      dictionaries: [adjectives, animals],
+      separator: "-",
+      style: "lowerCase",
+      length: 2,
+      seed,
+    }),
+  );
+}
+
+function seedFromRandom(random: () => number, attempt: number): number {
+  const base = Math.floor(Math.abs(random()) * 0x7fffffff);
+  return (base + attempt * SEED_STRIDE) >>> 0;
+}
+
 export function randomAgentUsername(
   current?: string,
   random: () => number = Math.random,
   taken: ReadonlySet<string> = new Set(),
+  seen: ReadonlySet<string> = new Set(),
 ): string {
-  const others = SUGGESTED_USERNAMES.filter((name) => name !== current);
-  return availableAgentUsername(others[Math.floor(random() * others.length)]!, taken, current);
+  let fallbackFree: string | undefined;
+  let lastCandidate = "";
+  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
+    const candidate = generatedCandidate(seedFromRandom(random, attempt));
+    if (!candidate) continue;
+    lastCandidate = candidate;
+    if (candidate === current || taken.has(candidate)) continue;
+    if (!seen.has(candidate)) return candidate;
+    if (!fallbackFree) fallbackFree = candidate;
+  }
+  if (fallbackFree) return fallbackFree;
+  const base = lastCandidate && lastCandidate !== current ? lastCandidate : "agent";
+  return availableAgentUsername(base, taken, current);
 }
 
-/**
- * `name` while no Agent has it (`taken`: lowercase handles); otherwise the next suggestion nobody
- * has, never `skip`; once every one is taken, `name` with the first free `-2`, `-3`… The same
- * `name` and `taken` always give the same answer, so a suggestion made before the directory was
- * read moves once it is, and only then.
- */
 export function availableAgentUsername(
   name: string,
   taken: ReadonlySet<string>,
   skip?: string,
 ): string {
   if (!taken.has(name)) return name;
-  const start = SUGGESTED_USERNAMES.indexOf(name) + 1;
-  const order = [...SUGGESTED_USERNAMES.slice(start), ...SUGGESTED_USERNAMES.slice(0, start)];
-  return order.find((other) => other !== skip && !taken.has(other)) ?? freeAgentName(name, taken);
+  const baseSeed = hashSeed(name);
+  for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+    const candidate = generatedCandidate((baseSeed + attempt * SEED_STRIDE) >>> 0);
+    if (candidate && candidate !== skip && !taken.has(candidate)) return candidate;
+  }
+  return freeAgentName(name, taken);
 }

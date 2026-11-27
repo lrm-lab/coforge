@@ -11,12 +11,14 @@ import {
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
 import { decodeTaskChangedEvent } from "#src/features/tasks/task-realtime";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { TaskOwnerAvatar } from "#src/features/tasks/task-owner";
 import { TaskParentMark } from "#src/features/tasks/task-relations";
 import { TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { loadProjectTasks } from "#src/features/tasks/tasks.functions";
 import { overviewTaskParam } from "#src/features/tasks/task-overview-search";
 import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
 import { taskForest } from "./project-task-tree-model";
 
 export type ProjectTask = Awaited<ReturnType<typeof loadProjectTasks>>["tasks"][number];
@@ -119,6 +121,30 @@ export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: numb
         </span>
       </span>
       <TaskOwnerAvatar owner={task.owner} />
+    </div>
+  );
+}
+
+export function ProjectTaskTreeSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label={m.project_tasks_loading()}
+      className="overflow-hidden rounded-xl border border-secondary bg-primary"
+    >
+      {[0, 1, 1, 0, 0].map((level, index) => (
+        <div
+          key={index}
+          aria-hidden="true"
+          className="flex min-h-12 items-center gap-2 border-t border-secondary py-2 pr-4 first:border-t-0"
+          style={{ paddingLeft: `${0.5 + level * 1.5}rem` }}
+        >
+          <span className="size-6 shrink-0" />
+          <Skeleton className="size-4 rounded-full" />
+          <Skeleton className="h-3.5 w-2/5" />
+          <Skeleton className="ml-auto size-6 rounded-full" />
+        </div>
+      ))}
     </div>
   );
 }

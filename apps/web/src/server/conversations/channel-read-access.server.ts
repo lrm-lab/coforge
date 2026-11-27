@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import {
   ACTIVE_MEMBER_WHERE,
   DIRECT_CONVERSATION_WHERE,
@@ -10,6 +11,7 @@ import {
 } from "./active-member.server";
 import { taskDiscussionAccess, taskDiscussionBoardSelect } from "./task-discussion-access.server";
 import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
+import { hasChannelAdminAuthority } from "./channel-authority.server";
 
 export function visibleChannelWhere(workspaceId: string, reader: ChannelActor) {
   return {
@@ -404,6 +406,109 @@ export function readablePersonConversationSql(alias: string, workspaceId: string
     SELECT 1 FROM "conversation_members" v
     WHERE v."conversationId" = ${conversation}."id" AND v."userId" = ${userId}::uuid
       AND v."leftAt" IS NULL))`;
+}
+
+export type PinnedArtifactPushBlock =
+  | { kind: "channel"; channel: string; reason: "not_admin" | "archived" }
+  | { kind: "dm"; target: string; reason: "archived" | "peer_not_member" | "not_member" };
+
+export async function pinnedChannelPushBlock(
+  db: PrismaClient,
+  workspaceId: string,
+  artifactId: string,
+  actor: ChannelActor,
+): Promise<PinnedArtifactPushBlock | null> {
+  const pinned = await db.conversationPinnedArtifact.findFirst({
+    where: { workspaceId, artifactId },
+    select: {
+      conversation: {
+        select: {
+          id: true,
+          channelName: true,
+          directKey: true,
+          kind: true,
+          archivedAt: true,
+          hiddenFromWorkspaceAt: true,
+        },
+      },
+    },
+  });
+  const conversation = pinned?.conversation;
+  if (!conversation || conversation.hiddenFromWorkspaceAt !== null || conversation.kind !== null) {
+    return null;
+  }
+  if (conversation.channelName !== null) {
+    const channel = `#${conversation.channelName}`;
+    if (conversation.archivedAt !== null) {
+      return { kind: "channel", channel, reason: "archived" };
+    }
+    const allowed = await hasChannelAdminAuthority(db, workspaceId, actor, {
+      id: conversation.id,
+      channelName: conversation.channelName,
+    });
+    return allowed ? null : { kind: "channel", channel, reason: "not_admin" };
+  }
+  if (conversation.directKey === null) {
+    return null;
+  }
+  const members = await db.conversationMember.findMany({
+    where: { conversationId: conversation.id },
+    select: {
+      userId: true,
+      agentId: true,
+      leftAt: true,
+      user: {
+        select: {
+          username: true,
+          memberships: { where: { workspaceId }, select: { workspaceId: true } },
+        },
+      },
+      agent: {
+        select: { id: true, name: true, ownerId: true, visibility: true, deletedAt: true },
+      },
+    },
+  });
+  const callerMember =
+    "userId" in actor
+      ? members.find((member) => member.userId === actor.userId && member.leftAt === null)
+      : members.find((member) => member.agentId === actor.agentId && member.leftAt === null);
+  if (!callerMember) {
+    return { kind: "dm", target: "that DM", reason: "not_member" };
+  }
+  const peerMember = members.find((member) => member !== callerMember);
+  const target = peerMember?.user?.username
+    ? `dm:@${peerMember.user.username}`
+    : peerMember?.agent?.name
+      ? `dm:@${peerMember.agent.name}`
+      : "this DM";
+  if (conversation.archivedAt !== null) {
+    return { kind: "dm", target, reason: "archived" };
+  }
+  if (!peerMember || peerMember.leftAt !== null) {
+    return { kind: "dm", target, reason: "peer_not_member" };
+  }
+  if (peerMember.userId) {
+    if (!peerMember.user || peerMember.user.memberships.length === 0) {
+      return { kind: "dm", target, reason: "peer_not_member" };
+    }
+    if (
+      "agentId" in actor &&
+      (!callerMember.agent || !canDirectMessageAgent(peerMember.userId, callerMember.agent))
+    ) {
+      return { kind: "dm", target, reason: "not_member" };
+    }
+    return null;
+  }
+  if (peerMember.agentId) {
+    if (!peerMember.agent || peerMember.agent.deletedAt !== null) {
+      return { kind: "dm", target, reason: "peer_not_member" };
+    }
+    if ("userId" in actor && !canDirectMessageAgent(actor.userId, peerMember.agent)) {
+      return { kind: "dm", target, reason: "not_member" };
+    }
+    return null;
+  }
+  return { kind: "dm", target, reason: "peer_not_member" };
 }
 
 export function readableChannelSql(alias: string, workspaceId: string, reader: ChannelActor) {

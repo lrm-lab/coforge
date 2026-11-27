@@ -14,6 +14,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { EmptyState } from "#src/components/ui/empty";
 import { NoResultsWireframe, TaskBoardWireframe } from "#src/components/ui/empty-wireframes";
+import { ChannelNamesIndexProvider } from "#src/features/conversations/channel-name";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
@@ -32,6 +33,7 @@ import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
 import { TaskDetailMenu, taskMenuButton } from "./task-detail-dialog";
 import { statusMatches, taskMatches, type FilterableTask } from "./task-filters";
+import { WorkspaceLabelsIndexProvider } from "./task-label-chip";
 import type { TaskBoardView } from "./task-board-search";
 import type { OverviewTaskCommand } from "./task-overview-collection";
 import { TaskToolbar } from "./task-toolbar";
@@ -81,7 +83,6 @@ export function TaskBoard<T extends BoardTask>({
   commandsPending = false,
   conversation,
   project = false,
-  tree,
   newTask,
 }: {
   tasks: readonly T[];
@@ -95,7 +96,6 @@ export function TaskBoard<T extends BoardTask>({
   commandsPending?: boolean;
   conversation?: ConversationBoard;
   project?: boolean;
-  tree?: { node: ReactNode; tasks: readonly FilterableTask[] };
   newTask?: { projectSlug?: string; onCreated: () => void };
 }) {
   const { statuses, filter, layout } = view;
@@ -108,7 +108,6 @@ export function TaskBoard<T extends BoardTask>({
     [currentMemberId],
   );
   const availableStatuses = TASK_WRITE_STATUSES;
-  const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState<TaskCreateStatus | null>(null);
@@ -116,8 +115,7 @@ export function TaskBoard<T extends BoardTask>({
     statuses.length > 0 ||
     filter.owners.length > 0 ||
     filter.projects.length > 0 ||
-    filter.labels.length > 0 ||
-    (filter.channels?.length ?? 0) > 0;
+    filter.labels.length > 0;
   const { done, closed } = finished.columns;
   const unfinished = useMemo(() => tasks.filter((task) => !isFinishedStatus(task.status)), [tasks]);
   const visible = useMemo(
@@ -146,14 +144,16 @@ export function TaskBoard<T extends BoardTask>({
     () => (newTask ? newTaskChoices(tasks, newTask.projectSlug) : undefined),
     [tasks, newTask],
   );
-  const newTaskPlaces = useAssignTargets({ enabled: newTask !== undefined });
+  const newTaskPlaces = useAssignTargets({
+    enabled: newTask !== undefined && (newTaskChoice?.places.length ?? 0) === 0,
+  });
   const canFile = newTaskChoice
     ? canFileNewTask(newTaskChoice.places, newTaskPlaces.targets)
     : false;
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
   const canSetAnyStatus = useCanSetAnyTaskStatus();
   const clearFilters = () => {
-    view.changeFilter({ owners: [], projects: [], labels: [], channels: [] });
+    view.changeFilter({ owners: [], projects: [], labels: [] });
     view.changeStatuses([]);
   };
   return (
@@ -167,7 +167,7 @@ export function TaskBoard<T extends BoardTask>({
     >
       {conversation?.header}
       <TaskToolbar
-        tasks={tree ? tree.tasks : choices}
+        tasks={choices}
         filter={filter}
         statuses={statuses}
         availableStatuses={availableStatuses}
@@ -177,7 +177,6 @@ export function TaskBoard<T extends BoardTask>({
         onLayoutChange={view.changeLayout}
         currentMemberId={currentMemberId}
         project={project}
-        tree={showTree}
         action={
           onCreateTask ? (
             <Button
@@ -212,15 +211,14 @@ export function TaskBoard<T extends BoardTask>({
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-auto px-page py-4 md:py-6">
-        {tree?.node}
-        {!showTree && loading && (
+        {loading && (
           <div role="status" aria-label={m.tasks_loading()} className="grid gap-3">
             <TaskCardSkeleton list={layout === "list"} />
             <TaskCardSkeleton list={layout === "list"} />
             <TaskCardSkeleton list={layout === "list"} />
           </div>
         )}
-        {!showTree && empty && (
+        {empty && (
           <EmptyState
             size="page"
             live={filtered ? "polite" : undefined}
@@ -264,70 +262,72 @@ export function TaskBoard<T extends BoardTask>({
             }
           />
         )}
-        {!showTree && (
-          <TaskWorkflow
-            tasks={visible}
-            canSetAnyStatus={canSetAnyStatus}
-            layout={layout}
-            statuses={
-              empty || loading
-                ? []
-                : statuses.length > 0
-                  ? availableStatuses.filter((status) => statuses.includes(status))
-                  : availableStatuses
-            }
-            paged={paged}
-            hidden={hiddenColumns}
-            onHiddenChange={setColumnHidden}
-            disabled={!onCommand}
-            commandsPending={commandsPending}
-            showMoveError={!conversation}
-            adding={
-              newTaskChoice && (onCommand || commandsPending) && canFile
-                ? {
-                    statuses: TASK_CREATE_STATUSES,
-                    onAdd: (next) => {
-                      if (canCreateIn(next)) setCreating(next);
-                    },
-                  }
-                : undefined
-            }
-            currentMemberId={memberIdFor}
-            onMove={async (task, command) => {
-              await onCommand?.(task, command);
-            }}
-            renderTask={(task, controls) => (
-              <BoardTaskCard
-                task={task}
-                controls={controls}
-                currentMemberId={memberIdFor(task)}
-                list={layout === "list"}
-                selected={selectedTaskId === task.id}
-                onOpenTask={openTask}
-                renderTitle={renderTitle}
-                onCommand={onCommand ? runCommand : undefined}
-                inConversation={conversation !== undefined}
-                conversationName={conversation?.name}
-                members={conversation?.members}
-                project={project}
-              />
-            )}
-          />
-        )}
+        <ChannelNamesIndexProvider>
+          <WorkspaceLabelsIndexProvider>
+            <TaskWorkflow
+              tasks={visible}
+              canSetAnyStatus={canSetAnyStatus}
+              layout={layout}
+              statuses={
+                empty || loading
+                  ? []
+                  : statuses.length > 0
+                    ? availableStatuses.filter((status) => statuses.includes(status))
+                    : availableStatuses
+              }
+              paged={paged}
+              hidden={hiddenColumns}
+              onHiddenChange={setColumnHidden}
+              disabled={!onCommand}
+              commandsPending={commandsPending}
+              showMoveError={!conversation}
+              adding={
+                newTaskChoice && (onCommand || commandsPending) && canFile
+                  ? {
+                      statuses: TASK_CREATE_STATUSES,
+                      onAdd: (next) => {
+                        if (canCreateIn(next)) setCreating(next);
+                      },
+                    }
+                  : undefined
+              }
+              currentMemberId={memberIdFor}
+              onMove={async (task, command) => {
+                await onCommand?.(task, command);
+              }}
+              renderTask={(task, controls) => (
+                <BoardTaskCard
+                  task={task}
+                  controls={controls}
+                  currentMemberId={memberIdFor(task)}
+                  list={layout === "list"}
+                  selected={selectedTaskId === task.id}
+                  onOpenTask={openTask}
+                  renderTitle={renderTitle}
+                  onCommand={onCommand ? runCommand : undefined}
+                  inConversation={conversation !== undefined}
+                  conversationName={conversation?.name}
+                  members={conversation?.members}
+                  project={project}
+                />
+              )}
+            />
+          </WorkspaceLabelsIndexProvider>
+        </ChannelNamesIndexProvider>
       </div>
-      {newTask && newTaskChoice && (
+      {newTask && newTaskChoice && creating !== null && (
         <BoardNewTaskDialog
-          open={creating !== null}
-          status={creating ?? "todo"}
+          open
+          status={creating}
           places={newTaskChoice.places}
           boardProject={newTaskChoice.boardProject}
           onOpenChange={(open) => !open && setCreating(null)}
           onCreated={newTask.onCreated}
         />
       )}
-      {onCreateTask && (
+      {onCreateTask && createOpen && (
         <CreateTaskDialog
-          open={createOpen}
+          open
           onOpenChange={setCreateOpen}
           where={conversation?.name ? { label: conversation.name } : undefined}
           members={conversation?.members}

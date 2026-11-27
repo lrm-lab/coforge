@@ -8,6 +8,7 @@ import {
   reportCollectSlotOutcome,
   reportCollectorRuntimeFailure,
 } from "#src/server/records/weekly-report-collect-orchestrate.server";
+import { weeklyReportsDisabledResponse } from "#src/server/records/weekly-reports-gate.server";
 
 const slotReportSchema = z.object({
   idempotencyKey: z.uuid(),
@@ -113,11 +114,14 @@ export const Route = createFileRoute("/api/agent/v1/weekly-report-collect")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      POST: ({ request, context: { principal, db } }) =>
-        handleWeeklyReportCollectPost(request, principal, {
+      POST: async ({ request, context: { principal, db } }) => {
+        const disabled = await weeklyReportsDisabledResponse(db, principal.workspaceId);
+        if (disabled) return disabled;
+        return handleWeeklyReportCollectPost(request, principal, {
           reportCollectSlotOutcome: (input) => reportCollectSlotOutcome(db, input),
           reportCollectorRuntimeFailure: (input) => reportCollectorRuntimeFailure(db, input),
-        }),
+        });
+      },
     },
   },
 });

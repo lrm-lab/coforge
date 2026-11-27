@@ -37,6 +37,9 @@ import { WorkspacePresenceProvider } from "#src/features/workspaces/member-prese
 import { getUserPreferences } from "#src/features/settings/settings.functions";
 import { loadAiWorkbenchOn } from "#src/features/pi-chat/pi-chat.functions";
 import { useAiWorkbenchEnabled } from "#src/features/settings/ai-workbench";
+import { loadWeeklyReportsOn } from "#src/features/records/records.functions";
+import { useWeeklyReportsEnabled } from "#src/features/records/weekly-reports-gate";
+import { WorkspaceFeaturesRealtime } from "#src/features/settings/workspace-features-realtime";
 import { loadMemberWorkspaceSettings } from "#src/features/workspaces/member-settings.functions";
 import { loadOnboardingWizard } from "#src/features/onboarding/onboarding-wizard.functions";
 import { PanelTabOrderProvider } from "#src/features/panel-tabs/panel-tab-order-context";
@@ -100,6 +103,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       preferences,
       memberSettings,
       aiWorkbenchEnabled,
+      weeklyReportsEnabled,
     ] = await Promise.all([
       getUserProfile(),
       loadWorkspaceSwitcher(),
@@ -108,9 +112,14 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       getUserPreferences(),
       loadMemberWorkspaceSettings(),
       loadAiWorkbenchOn(),
-      context.queryClient.ensureQueryData({
-        ...recordsNavAttentionQuery(params.workspaceSlug),
-        revalidateIfStale: true,
+      loadWeeklyReportsOn().then(async (enabled) => {
+        if (enabled) {
+          await context.queryClient.ensureQueryData({
+            ...recordsNavAttentionQuery(params.workspaceSlug),
+            revalidateIfStale: true,
+          });
+        }
+        return enabled;
       }),
     ]);
     if (!user.named) throw nameStepRedirect(location.href);
@@ -136,6 +145,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       timeFormat: preferences.timeFormat,
       language: preferences.language,
       aiWorkbenchEnabled,
+      weeklyReportsEnabled,
       tabOrders: memberSettings.tabOrders,
     };
   },
@@ -161,13 +171,19 @@ function AppLayout() {
     timeFormat,
     language,
     aiWorkbenchEnabled,
+    weeklyReportsEnabled,
     tabOrders,
     onboarding,
     canSeeUsageLimits,
   } = Route.useLoaderData();
   const { queryClient } = Route.useRouteContext();
+  const aiWorkbench = useAiWorkbenchEnabled(aiWorkbenchEnabled);
+  const weeklyReports = useWeeklyReportsEnabled(weeklyReportsEnabled);
   const recordsPreview =
-    useQuery(recordsNavAttentionQuery(currentWorkspace.slug)).data?.preview ?? false;
+    useQuery({
+      ...recordsNavAttentionQuery(currentWorkspace.slug),
+      enabled: weeklyReports,
+    }).data?.preview ?? false;
   useEffect(() => {
     markShownWorkspace(queryClient, currentWorkspace.slug);
   }, [queryClient, currentWorkspace.slug]);
@@ -177,7 +193,6 @@ function AppLayout() {
   useEffect(() => {
     if (language && language !== getLocale()) setLocale(language);
   }, [language]);
-  const aiWorkbench = useAiWorkbenchEnabled(aiWorkbenchEnabled);
   useLastLocationMemory();
   useTimeZoneCookie(observedTimeZone);
   useSidebarShortcut();
@@ -238,6 +253,7 @@ function AppLayout() {
                     timeZone={timeZone}
                   >
                     <LeaveDeletedWorkspace workspaceId={currentWorkspace.id} />
+                    <WorkspaceFeaturesRealtime workspaceId={currentWorkspace.id} />
                     <ReferencedTasksRealtime workspaceId={currentWorkspace.id} userId={user.id} />
                     <BrowserPushLifecycle
                       enabled={notifications.enabled}
@@ -267,6 +283,7 @@ function AppLayout() {
                           currentWorkspace={currentWorkspace}
                           recordsPreview={recordsPreview}
                           aiWorkbench={aiWorkbench}
+                          weeklyReports={weeklyReports}
                           canSeeUsageLimits={canSeeUsageLimits}
                           sidebarLayout={sidebarLayout}
                           onSelectWorkspace={handleSelectWorkspace}

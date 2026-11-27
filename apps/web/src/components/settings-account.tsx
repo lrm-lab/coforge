@@ -1,5 +1,4 @@
-import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { Camera01, Check } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -7,15 +6,16 @@ import { AccountPasswordDialog } from "#src/features/profiles/account-password-d
 import { PersonAvatarDialog } from "#src/features/profiles/person-avatar-dialog";
 import { CreatedAgentFaces } from "#src/features/agents/created-agent-faces";
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
 import { Badge, BadgeWithIcon } from "#src/components/base/badges/badges";
-import { TextArea } from "#src/components/base/textarea/textarea";
+import { useAppForm } from "#src/components/ui/form";
 import {
   checkPersonName,
   PERSON_NAME_MAX_LENGTH,
   type PersonNameProblem,
 } from "#src/features/profiles/person-name";
+import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { formatCalendarDate } from "#src/lib/dates";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { SaveErrorMessage, saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { m } from "#src/paraglide/messages";
 import type { SettingsContentProps } from "./settings-content";
@@ -47,10 +47,6 @@ export function AccountSettings({
 }: SettingsContentProps) {
   const hydrated = useHydrated();
   const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(profile.displayName ?? "");
-  const [description, setDescription] = useState(profile.description);
-  const [saving, guard] = useSubmitGuard();
-  const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -62,45 +58,10 @@ export function AccountSettings({
     onBindArrivalHandled?.();
   }, [bindArrival, onBindArrivalHandled]);
 
-  useEffect(() => {
-    if (!editing) {
-      setDisplayName(profile.displayName ?? "");
-      setDescription(profile.description);
-    }
-  }, [editing, profile.displayName, profile.description]);
-
   function startEditing() {
-    setDisplayName(profile.displayName ?? "");
-    setDescription(profile.description);
-    setSaveError(null);
     setSaveSuccess(false);
     setEditing(true);
   }
-
-  function cancelEditing() {
-    setDisplayName(profile.displayName ?? "");
-    setDescription(profile.description);
-    setEditing(false);
-  }
-
-  async function save() {
-    await guard(async () => {
-      setSaveError(null);
-      try {
-        await onProfileSave({ displayName, description });
-        setSaveSuccess(true);
-        setEditing(false);
-      } catch (cause) {
-        setSaveError(saveErrorFrom(m.settings_profile_save_error(), cause));
-      }
-    });
-  }
-
-  const profileTextChanged =
-    displayName !== (profile.displayName ?? "") || description !== profile.description;
-  const changed = profileTextChanged;
-  const displayNameProblem = nameProblem(displayName);
-  const canSave = changed && !saving && !displayNameProblem;
 
   return (
     <div className="w-full pb-8">
@@ -166,60 +127,15 @@ export function AccountSettings({
 
         <div className="mt-8 max-w-2xl px-page">
           {editing ? (
-            <div className="flex min-w-0 flex-col gap-6">
-              {saveError && <SaveErrorMessage error={saveError} />}
-              <Input
-                label={m.settings_display_name()}
-                hint={
-                  displayNameProblem ? (
-                    <span role="alert">{nameProblemText[displayNameProblem]()}</span>
-                  ) : undefined
-                }
-                isRequired
-                isInvalid={displayNameProblem !== undefined}
-                value={displayName}
-                isDisabled={saving}
-                onChange={setDisplayName}
-              />
-
-              {profile.email || profile.phone ? (
-                <dl className="flex min-w-0 flex-col gap-6">
-                  <ContactValues profile={profile} />
-                </dl>
-              ) : null}
-
-              <TextArea
-                label={m.settings_user_description()}
-                value={description}
-                maxLength={280}
-                rows={4}
-                placeholder={m.settings_user_description_placeholder()}
-                isDisabled={saving}
-                hideRequiredIndicator
-                hint={m.settings_description_remaining({ count: 280 - description.length })}
-                onChange={setDescription}
-              />
-              <div className="flex justify-end gap-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  color="secondary"
-                  isDisabled={saving}
-                  onPress={cancelEditing}
-                >
-                  {m.settings_profile_cancel()}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  isLoading={saving}
-                  isDisabled={!canSave}
-                  onPress={save}
-                >
-                  {m.settings_profile_save()}
-                </Button>
-              </div>
-            </div>
+            <AccountProfileEditForm
+              profile={profile}
+              onProfileSave={onProfileSave}
+              onSaved={() => {
+                setSaveSuccess(true);
+                setEditing(false);
+              }}
+              onCancel={() => setEditing(false)}
+            />
           ) : (
             <dl className="flex min-w-0 flex-col gap-6">
               <ContactValues profile={profile} />
@@ -270,6 +186,120 @@ export function AccountSettings({
   );
 }
 
+function AccountProfileEditForm({
+  profile,
+  onProfileSave,
+  onSaved,
+  onCancel,
+}: {
+  profile: AccountProfile;
+  onProfileSave: SettingsContentProps["onProfileSave"];
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const initialDisplayName = profile.displayName ?? "";
+  const [saving, guard] = useSubmitGuard();
+  const [saveError, setSaveError] = useState<SaveError | null>(null);
+
+  const form = useAppForm({
+    defaultValues: {
+      displayName: initialDisplayName,
+      description: profile.description,
+    },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const changed =
+        value.displayName !== initialDisplayName || value.description !== profile.description;
+      if (!changed) return;
+      await guard(async () => {
+        setSaveError(null);
+        try {
+          await onProfileSave({ displayName: value.displayName, description: value.description });
+          onSaved();
+        } catch (cause) {
+          setSaveError(saveErrorFrom(m.settings_profile_save_error(), cause));
+        }
+      });
+    },
+  });
+
+  return (
+    <form.AppForm>
+      <form
+        ref={formRef}
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+        className="flex min-w-0 flex-col gap-6"
+      >
+        <form.AppField
+          name="displayName"
+          validators={{
+            onChange: ({ value }) => nameProblemMessage(value),
+            onSubmit: ({ value }) => nameProblemMessage(value),
+          }}
+        >
+          {(field) => (
+            <field.Input
+              label={m.settings_display_name()}
+              isRequired
+              isDisabled={saving}
+              onChange={() => setSaveError(null)}
+            />
+          )}
+        </form.AppField>
+
+        {profile.email || profile.phone ? (
+          <dl className="flex min-w-0 flex-col gap-6">
+            <ContactValues profile={profile} />
+          </dl>
+        ) : null}
+
+        <div className="flex flex-col gap-1.5">
+          <form.AppField name="description">
+            {(field) => (
+              <field.TextArea
+                label={m.settings_user_description()}
+                maxLength={280}
+                rows={4}
+                placeholder={m.settings_user_description_placeholder()}
+                isDisabled={saving}
+                hideRequiredIndicator
+                hint={m.settings_description_remaining({ count: 280 - field.state.value.length })}
+                onChange={() => setSaveError(null)}
+              />
+            )}
+          </form.AppField>
+          {saveError && <SaveErrorMessage error={saveError} />}
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <Button type="button" size="sm" color="secondary" isDisabled={saving} onPress={onCancel}>
+            {m.settings_profile_cancel()}
+          </Button>
+          <form.Subscribe
+            selector={(state) => {
+              const changed =
+                state.values.displayName !== initialDisplayName ||
+                state.values.description !== profile.description;
+              return changed && !nameProblem(state.values.displayName);
+            }}
+          >
+            {(canSave) => (
+              <Button type="submit" size="sm" isLoading={saving} isDisabled={!canSave || saving}>
+                {m.settings_profile_save()}
+              </Button>
+            )}
+          </form.Subscribe>
+        </div>
+      </form>
+    </form.AppForm>
+  );
+}
+
 const nameProblemText: Record<PersonNameProblem, () => string> = {
   empty: () => m.welcome_error_empty(),
   too_long: () => m.welcome_error_too_long({ max: PERSON_NAME_MAX_LENGTH }),
@@ -279,6 +309,11 @@ const nameProblemText: Record<PersonNameProblem, () => string> = {
 function nameProblem(name: string): PersonNameProblem | undefined {
   const checked = checkPersonName(name);
   return checked.ok ? undefined : checked.problem;
+}
+
+function nameProblemMessage(name: string): string | undefined {
+  const problem = nameProblem(name);
+  return problem ? nameProblemText[problem]() : undefined;
 }
 
 function ContactValues({ profile }: { profile: AccountProfile }) {

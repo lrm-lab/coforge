@@ -15,14 +15,8 @@ import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { m } from "#src/paraglide/messages";
 import { ConversationFocusButton } from "./conversation-focus-button";
 
-/** The viewer's follow state for a thread, where following is offered. */
 export type ThreadFollow = { followed: boolean; onChange: (followed: boolean) => void };
 
-/**
- * The thread pane's header: the title names the thread and where it lives and scrolls back to
- * the root; the pane's actions sit behind one menu, then Close. Below `md` the pane covers the
- * chat, so a back arrow leads and Close steps aside for it.
- */
 export function ThreadPaneHeader({
   context,
   onScrollToTop,
@@ -31,17 +25,16 @@ export function ThreadPaneHeader({
   onMarkUnread,
   follow,
   action,
+  showBack,
 }: {
-  /** Where the thread lives, named after "Thread": `#channel` or `@name`. */
   context?: string;
-  /** Scrolls back to the root; absent while the thread has no messages to scroll through. */
   onScrollToTop?: () => void;
   onClose?: () => void;
   onViewInConversation?: () => void;
   onMarkUnread?: () => void;
   follow?: ThreadFollow;
-  /** Shown before the actions menu (the Agents following the thread). */
   action?: React.ReactNode;
+  showBack?: boolean;
 }) {
   const title = (
     <>
@@ -53,17 +46,19 @@ export function ThreadPaneHeader({
       )}
     </>
   );
+  const backClass =
+    showBack === true ? "-ml-1.5" : showBack === false ? "hidden" : "-ml-1.5 md:hidden";
+  const closeClass =
+    showBack === true ? "hidden" : showBack === false ? "inline-flex" : "hidden md:inline-flex";
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-4 md:px-6">
-      {/* The -ml-1.5 cancels the button's p-1.5 so the arrow glyph itself lands on the pane
-          gutter (docs/design/page-skeleton-and-density.md §8 optical alignment). */}
       <ButtonUtility
         icon={ArrowLeft}
         size="sm"
         color="tertiary"
-        className="-ml-1.5 md:hidden"
+        className={backClass}
         onClick={onClose}
-        aria-label={m.conversation_thread_back()}
+        tooltip={m.conversation_thread_back()}
       />
       <h2 className="flex min-w-0 flex-1 text-md font-semibold">
         {onScrollToTop ? (
@@ -128,7 +123,7 @@ export function ThreadPaneHeader({
           icon={XClose}
           size="sm"
           color="tertiary"
-          className="hidden md:inline-flex"
+          className={closeClass}
           tooltip={m.conversation_thread_close()}
           onClick={onClose}
         />

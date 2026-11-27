@@ -19,6 +19,10 @@ import { useConversationDetailsState } from "./use-conversation-details-state";
 import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
+import {
+  ConversationPinnedArtifactStrip,
+  PinnedArtifactRestoreButton,
+} from "./conversation-pinned-artifact-strip";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
 import { plainMentionsByHandle } from "./message-markdown";
 import type {
@@ -142,6 +146,7 @@ export function DirectConversationHeader({
         // The -mr-1.5 cancels the button's p-1.5 so its glyph lands on the pane gutter, as in the
         // channel header.
         <div className="-mr-1.5 flex shrink-0 items-center gap-3">
+          <PinnedArtifactRestoreButton conversationId={conversation.conversationId} />
           <ConversationFocusButton />
           {onToggleSettings && (
             <DirectSettingsToggleButton open={settingsOpen} onToggle={onToggleSettings} />
@@ -225,6 +230,9 @@ export function DirectConversation({
           settingsOpen={details.open}
           onToggleSettings={details.toggleDetails}
         />
+      }
+      pinnedStrip={
+        <ConversationPinnedArtifactStrip conversationId={conversation.conversationId} isDm />
       }
       readOnlyNotice={
         deleted ? (

@@ -1,8 +1,7 @@
 import { asRecord, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
-type SessionRecovery = NonNullable<
-  Extract<AgentRuntimeEvent, { type: "error" }>["sessionRecovery"]
->;
+type ErrorEvent = Extract<AgentRuntimeEvent, { type: "error" }>;
+type SessionRecovery = NonNullable<ErrorEvent["sessionRecovery"]>;
 
 export type CodexTurnOutcome = {
   status: "completed" | "interrupted" | "failed";
@@ -12,6 +11,7 @@ export type CodexTurnOutcome = {
     code?: string;
     /** The stored thread cannot be continued: the API rejected its encrypted reasoning. */
     sessionRecovery?: SessionRecovery;
+    providerLimit?: ErrorEvent["providerLimit"];
   };
 };
 
@@ -42,10 +42,12 @@ function sessionRecoveryOf(
 
 /**
  * How one Codex `turn/completed` turn ended. Any status other than `completed` or `interrupted`
- * is a failure. Raw facts only: the daemon core owns redaction and truncation for the visible
- * Activity.
+ * is a failure. Keep provider detail unless a typed limit gives a more specific cause.
  */
-export function codexTurnOutcome(turn: Readonly<Record<string, unknown>>): CodexTurnOutcome {
+export function codexTurnOutcome(
+  turn: Readonly<Record<string, unknown>>,
+  compatible = false,
+): CodexTurnOutcome {
   const status =
     turn.status === "interrupted"
       ? "interrupted"
@@ -54,7 +56,15 @@ export function codexTurnOutcome(turn: Readonly<Record<string, unknown>>): Codex
         : "failed";
   if (status !== "failed") return { status };
   const error = asRecord(turn.error);
-  const message = typeof error?.message === "string" ? error.message : "Codex turn failed.";
+  const providerLimit = compatible ? compatibleProviderLimit(error?.codexErrorInfo) : undefined;
+  const message =
+    providerLimit?.kind === "quota_exhausted"
+      ? "The API provider's quota is exhausted. Check the provider's billing and limits."
+      : providerLimit?.kind === "transient_rate_limit"
+        ? "The API provider limited the request or token rate. Try again shortly."
+        : typeof error?.message === "string"
+          ? error.message
+          : "Codex turn failed.";
   // Codex's typed category, where it has one CoForge names: a model the account cannot use.
   const code =
     typeof error?.code === "string"
@@ -71,6 +81,21 @@ export function codexTurnOutcome(turn: Readonly<Record<string, unknown>>): Codex
       message,
       ...(code !== undefined ? { code } : {}),
       ...(sessionRecovery ? { sessionRecovery } : {}),
+      ...(providerLimit ? { providerLimit } : {}),
     },
   };
+}
+
+function compatibleProviderLimit(info: unknown): ErrorEvent["providerLimit"] {
+  if (info === "usageLimitExceeded") return { kind: "quota_exhausted" };
+  if (info === "rateLimitExceeded") return { kind: "transient_rate_limit" };
+  const details = asRecord(info);
+  for (const name of [
+    "httpConnectionFailed",
+    "responseStreamConnectionFailed",
+    "responseStreamDisconnected",
+    "responseTooManyFailedAttempts",
+  ]) {
+    if (asRecord(details?.[name])?.httpStatusCode === 429) return { kind: "transient_rate_limit" };
+  }
 }

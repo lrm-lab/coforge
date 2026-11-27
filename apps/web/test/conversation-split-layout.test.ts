@@ -43,9 +43,25 @@ test("where even the whole area is too narrow, the pane covers the chat and the 
   });
 });
 
-test("without a list beside (below lg) only the pane's own width counts", () => {
+test("without a list beside (or when list is pinned) only the container width decides split vs overlay", () => {
   expect(splitLayout({ rem, pane: 736 })).toEqual({ splitFits: true, listCrowds: false });
   expect(splitLayout({ rem, pane: 735 })).toEqual({ splitFits: false, listCrowds: false });
+  expect(splitLayout({ rem, pane: 672, mainMinRem: 22, sideMinRem: 20 })).toEqual({
+    splitFits: true,
+    listCrowds: false,
+  });
+  expect(splitLayout({ rem, pane: 671, mainMinRem: 22, sideMinRem: 20 })).toEqual({
+    splitFits: false,
+    listCrowds: false,
+  });
+  expect(splitLayout({ rem, pane: 640, mainMinRem: 20, sideMinRem: 20 })).toEqual({
+    splitFits: true,
+    listCrowds: false,
+  });
+  expect(splitLayout({ rem, pane: 639, mainMinRem: 20, sideMinRem: 20 })).toEqual({
+    splitFits: false,
+    listCrowds: false,
+  });
 });
 
 test("artifact split uses wider minimums and hides the list sooner so chat and document stay readable", () => {

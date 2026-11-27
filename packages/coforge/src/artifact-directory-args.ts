@@ -1,4 +1,5 @@
 import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
+import type { ChannelCommand } from "@lrm/coforge-sdk/internal";
 import { invalidArgument } from "#src/command-help/index";
 import { optional, parseFlags, type FlagSpec } from "#src/artifact-flags";
 
@@ -20,6 +21,7 @@ export type ArtifactDirectoryDraft =
       label?: string;
       delete?: string[];
       includeHidden?: boolean;
+      announcement?: boolean;
     }
   | { operation: "download"; artifact: string; path: string; output?: string; rev?: number }
   | { operation: "image"; artifact: string; image: string; output?: string };
@@ -39,6 +41,7 @@ export type ArtifactDirectoryTransport = {
     path: string;
     version?: number;
   }): Promise<Uint8Array>;
+  channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;
 };
 
 const DIRECTORY_FLAGS: Record<"pull" | "push" | "download", FlagSpec> = {
@@ -46,7 +49,7 @@ const DIRECTORY_FLAGS: Record<"pull" | "push" | "download", FlagSpec> = {
   download: { text: ["--output", "--image"], count: ["--rev"], positionals: 2 },
   push: {
     text: ["--target", "--title", "--description", "--entry", "--note", "--label"],
-    bool: ["--include-hidden"],
+    bool: ["--include-hidden", "--announcement"],
     repeat: ["--delete"],
     positionals: 1,
   },
@@ -127,6 +130,7 @@ export function parseDirectoryArgs(args: readonly string[]): ArtifactDirectoryIn
           ...optional("label", text["--label"]),
           ...(repeated.length > 0 ? { delete: repeated } : {}),
           ...(switches.has("--include-hidden") ? { includeHidden: true } : {}),
+          ...(switches.has("--announcement") ? { announcement: true } : {}),
         },
         ...extra,
       };

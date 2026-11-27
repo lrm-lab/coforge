@@ -310,5 +310,8 @@
   "records_editor_link": "链接",
   "records_editor_no_matching_commands": "无匹配命令",
   "records_editor_no_commands": "暂无命令",
-  "records_page_status": "第 {start}–{end} 项，共 {total} 项"
+  "records_page_status": "第 {start}–{end} 项，共 {total} 项",
+  "records_off_title": "周报已关闭",
+  "records_off_description": "当前工作区未开启周报功能。已保存的周报和周报助手会保留，重新开启后恢复。",
+  "records_off_settings": "去设置里打开"
 }

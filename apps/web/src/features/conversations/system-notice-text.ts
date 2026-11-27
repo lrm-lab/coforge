@@ -341,6 +341,34 @@ function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_N
       return m.system_notice_agent_dm_chain_limit({}, { locale });
     case "agent_dm.rate_limit":
       return m.system_notice_agent_dm_rate_limit({}, { locale });
+    case "conversation.pinned_artifact_changed": {
+      const actor = memberName(notice.params.actor);
+      const title = notice.params.title.trim();
+      if (!title) {
+        switch (notice.params.change) {
+          case "set":
+            return notice.params.isDm
+              ? m.system_notice_pinned_artifact_set_untitled_dm({ actor }, { locale })
+              : m.system_notice_pinned_artifact_set_untitled({ actor }, { locale });
+          case "replaced":
+            return notice.params.isDm
+              ? m.system_notice_pinned_artifact_replaced_untitled_dm({ actor }, { locale })
+              : m.system_notice_pinned_artifact_replaced_untitled({ actor }, { locale });
+          case "removed":
+            return notice.params.isDm
+              ? m.system_notice_pinned_artifact_removed_untitled_dm({ actor }, { locale })
+              : m.system_notice_pinned_artifact_removed_untitled({ actor }, { locale });
+        }
+      }
+      switch (notice.params.change) {
+        case "set":
+          return m.system_notice_pinned_artifact_set({ actor, title }, { locale });
+        case "replaced":
+          return m.system_notice_pinned_artifact_replaced({ actor, title }, { locale });
+        case "removed":
+          return m.system_notice_pinned_artifact_removed({ actor, title }, { locale });
+      }
+    }
     case "task.due_changed":
     case "task.labels_changed":
     case "task.project_changed":

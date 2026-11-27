@@ -128,11 +128,15 @@ function withDescription(line: string, description: string | undefined): string 
   return text ? `${line} \u2014 ${frameUntrustedText(text)}` : line;
 }
 
-const channelRow = (channel: WorkspaceInfoChannel, now: number, withArchived: boolean) =>
-  withDescription(
+const channelRow = (channel: WorkspaceInfoChannel, now: number, withArchived: boolean) => {
+  const base = withDescription(
     `${channel.name} [${channelStatus(channel, now, withArchived)}]`,
     channel.description,
   );
+  if (!channel.announcement) return base;
+  const title = foldUntrustedLine(channel.announcement.title || "(untitled)");
+  return `${base} [announcement: "${title}" (${channel.announcement.artifactId}, v${channel.announcement.version})]`;
+};
 const agentRow = (agent: Agent) =>
   withDescription(
     `@${agent.name} (${agentStatusLabel(agent)})${roleLabel(agent.role)}`,

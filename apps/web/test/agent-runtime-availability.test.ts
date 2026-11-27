@@ -127,3 +127,32 @@ describe("agentRuntimeSelectionIsAvailable", () => {
     ).toBe(true);
   });
 });
+
+test("a custom Codex model requires the compatible capability and the ordinary runtime permission", () => {
+  const config = {
+    provider: RUNTIME_PROVIDER.CODEX,
+    model: "gateway-model",
+    modelProvider: "openai-compatible",
+    reasoning: "",
+    hasApiKey: true,
+  };
+  const facts = { connected: true, providers: new Set([RUNTIME_PROVIDER.CODEX]), models: [] };
+  expect(agentRuntimeSelectionIsAvailable(config, facts)).toBe(false);
+  expect(agentRuntimeSelectionIsAvailable(config, { ...facts, codexCompatible: true })).toBe(true);
+  expect(
+    agentRuntimeSelectionIsAvailable(config, {
+      ...facts,
+      codexCompatible: true,
+      providers: new Set(),
+    }),
+  ).toBe(false);
+  expect(
+    agentRuntimeSelectionIsAvailable(
+      { ...config, hasApiKey: false },
+      {
+        ...facts,
+        codexCompatible: true,
+      },
+    ),
+  ).toBe(false);
+});

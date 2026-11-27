@@ -62,7 +62,10 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   `artifact-home-unseen`), an author Agent still seated and active there (`artifact-author-not-member`,
   `artifact-author-cannot-see`), and the `expectedLost` count the confirm showed to match the count
   at commit (`artifact-loss-changed`); it also revokes the live public link in the same transaction.
-  Read and push share one rule; only creating needs membership of an unarchived conversation.
+  Read and push share one rule, except pushing to a pinned Artifact is checked by
+  `pinnedChannelPushBlock` (active channel requires channel-admin or Workspace owner/admin;
+  archived channel/DM, non-participant or read-only private-Agent DM, or DM with a departed/deleted
+  peer refuses push); only creating needs membership of an unarchived conversation.
 - Only an Agent writes, and only by `push` (`Artifacts.push`; `ArtifactDocuments.create` makes an
   artifact with its first version in the same transaction). There is no single-text save, no
   history or revert, no Agent share
@@ -70,7 +73,10 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   authors or publishes: `Artifact.authorAgentId` and `ArtifactVersion.publisherAgentId` are the
   only writer columns. People read, comment, send, rename (managers only, a title-only change that makes no version) and delete.
 - A push over an older base merges by path only (`refuseOverlap`): a file or setting both sides
-  changed refuses the push with `artifact-base-moved`. Nothing merges inside a file. The entry
+  changed refuses the push with `artifact-base-moved`. Nothing merges inside a file. Pushing a new
+  version to a Settled artifact (`artifact-settlement.server.ts`) holds once per Agent
+  (`SettledArtifactHold`, recording `artifact_read_positions.seenSettledAt` outside the rolled-back
+  transaction); a second push proceeds and records `reopenedAtVersion`. The entry
   file is what the page shows whole, so a push or create whose entry exceeds
   `ARTIFACT_ENTRY_READ_LIMIT` (2 MiB) is refused (`artifact-entry-too-large`): a larger entry
   could only render blank.

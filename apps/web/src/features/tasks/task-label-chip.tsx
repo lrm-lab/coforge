@@ -2,7 +2,7 @@ import type { TaskLabel } from "@lrm/coforge-sdk/internal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Archive } from "@untitledui/icons";
-import { useState } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import {
   Button as AriaButton,
   Dialog as AriaDialog,
@@ -20,7 +20,20 @@ import { LabelColorSwatches } from "./label-color-swatches";
 import { badgeColor, LABEL_DOT } from "./label-colors";
 import { updateTaskLabel } from "./labels.functions";
 import { useCloseOnBack } from "./use-close-on-back";
-import { useCachedLabel, workspaceLabelsKey, type WorkspaceLabels } from "./workspace-labels";
+import {
+  useCachedLabel,
+  useCachedLabelsIndex,
+  workspaceLabelsKey,
+  type WorkspaceLabels,
+  type WorkspaceLabelsIndex,
+} from "./workspace-labels";
+
+const WorkspaceLabelsIndexContext = createContext<WorkspaceLabelsIndex | undefined>(undefined);
+
+export function WorkspaceLabelsIndexProvider({ children }: { children: ReactNode }) {
+  const index = useCachedLabelsIndex();
+  return <WorkspaceLabelsIndexContext value={index}>{children}</WorkspaceLabelsIndexContext>;
+}
 
 export function LabelDot({ color, className }: { color: string; className?: string }) {
   return (
@@ -40,7 +53,56 @@ export function TaskLabelChip({
   className?: string;
   full?: boolean;
 }) {
+  const index = useContext(WorkspaceLabelsIndexContext);
+  if (index !== undefined) {
+    const { color, archived } = index.get(label.id) ?? { color: label.color, archived: false };
+    return (
+      <TaskLabelChipView
+        name={label.name}
+        color={color}
+        archived={archived}
+        className={className}
+        full={full}
+      />
+    );
+  }
+  return <CachedTaskLabelChip label={label} className={className} full={full} />;
+}
+
+function CachedTaskLabelChip({
+  label,
+  className,
+  full,
+}: {
+  label: TaskLabel;
+  className?: string;
+  full: boolean;
+}) {
   const { color, archived } = useCachedLabel(label);
+  return (
+    <TaskLabelChipView
+      name={label.name}
+      color={color}
+      archived={archived}
+      className={className}
+      full={full}
+    />
+  );
+}
+
+function TaskLabelChipView({
+  name,
+  color,
+  archived,
+  className,
+  full,
+}: {
+  name: string;
+  color: string;
+  archived: boolean;
+  className?: string;
+  full: boolean;
+}) {
   if (archived) return null;
   return (
     <BadgeWithDot
@@ -56,9 +118,7 @@ export function TaskLabelChip({
           : cn("w-auto max-w-full min-w-0 overflow-hidden", className)
       }
     >
-      <span className={full ? "min-w-0 wrap-anywhere" : "min-w-0 max-w-32 truncate"}>
-        {label.name}
-      </span>
+      <span className={full ? "min-w-0 wrap-anywhere" : "min-w-0 max-w-32 truncate"}>{name}</span>
     </BadgeWithDot>
   );
 }

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "#src/components/base/buttons/button";
+import { setFieldServerError, useAppForm, visibleFieldError } from "#src/components/ui/form";
 import { Spinner } from "#src/components/ui/spinner";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
@@ -13,7 +15,7 @@ import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-agents-realtime";
-import { agentCreateErrorMessage } from "./agent-form";
+import { agentCreateErrorTarget } from "./agent-form";
 import { createCloudAgent } from "./cloud-agents.functions";
 import { cloudAgentComputerKey, type PlacedCloudAgentComputer } from "./cloud-agent-computer";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
@@ -44,6 +46,7 @@ export function CloudAgentForm({
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
   const refreshSidebar = useRefreshSidebar({ throwOnError: true });
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState("");
   const [submitting, guard] = useSubmitGuard();
   const [requestId] = useState(() => crypto.randomUUID());
@@ -52,6 +55,79 @@ export function CloudAgentForm({
   const [opening, setOpening] = useState(false);
   const openDirect = useOpenDirectConversation(() => setError(m.conversation_open_error()));
   const closeList = useCloseConversationList();
+  const form = useAppForm({
+    defaultValues: { name: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current, "name"),
+    onSubmit: async () => {
+      const formData = formRef.current ? new FormData(formRef.current) : undefined;
+      const name = finishedAgentUsername(String(formData?.get("name") ?? ""));
+      if (!name) {
+        setError("");
+        setFieldServerError(form, "name", m.agent_form_username_required(), formRef.current);
+        return;
+      }
+      await guard(async () => {
+        setError("");
+        const active = new AbortController();
+        controller.current = active;
+        try {
+          const result = await create({ data: { name, requestId }, signal: active.signal });
+          if (active.signal.aborted) return;
+          if (result.status === "unavailable") {
+            void queryClient.invalidateQueries({ queryKey: cloudAgentComputerKey(workspaceId) });
+            return;
+          }
+          const refreshed = await Promise.all([
+            refreshDirectory(),
+            queryClient.invalidateQueries(
+              { queryKey: ["direct-message-directory", workspaceId] },
+              { throwOnError: true },
+            ),
+          ]).then(
+            () => true,
+            () => false,
+          );
+          if (active.signal.aborted) return;
+          if (result.status === "start-deferred") {
+            setError(m.cloud_agent_create_start_deferred());
+            return;
+          }
+          if (!refreshed) {
+            setError(m.cloud_agent_create_refresh_error());
+            return;
+          }
+          openingDirect.current = true;
+          setOpening(true);
+          let opened;
+          try {
+            if (
+              await openDirect({ agentId: result.agentId }, { replace: conversationReplacesPage })
+            ) {
+              await refreshSidebar(["dms"]);
+              opened = true;
+            }
+          } catch {
+            setError(m.cloud_agent_create_refresh_error());
+          } finally {
+            openingDirect.current = false;
+            setOpening(false);
+          }
+          if (opened) {
+            closeList();
+            if (!conversationReplacesPage) close();
+          }
+        } catch (cause) {
+          if (active.signal.aborted) return;
+          const target = agentCreateErrorTarget(cause);
+          if (target.field === "name") {
+            setFieldServerError(form, "name", target.message, formRef.current);
+          } else {
+            setError(target.message);
+          }
+        }
+      });
+    },
+  });
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => {
     if (!open) controller.current?.abort();
@@ -71,96 +147,50 @@ export function CloudAgentForm({
     onClose();
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = finishedAgentUsername(String(form.get("name") ?? ""));
-    if (!name) {
-      setError(m.agent_form_username_required());
-      return;
-    }
-    await guard(async () => {
-      setError("");
-      const active = new AbortController();
-      controller.current = active;
-      try {
-        const result = await create({ data: { name, requestId }, signal: active.signal });
-        if (active.signal.aborted) return;
-        if (result.status === "unavailable") {
-          void queryClient.invalidateQueries({ queryKey: cloudAgentComputerKey(workspaceId) });
-          return;
-        }
-        const refreshed = await Promise.all([
-          refreshDirectory(),
-          queryClient.invalidateQueries(
-            { queryKey: ["direct-message-directory", workspaceId] },
-            { throwOnError: true },
-          ),
-        ]).then(
-          () => true,
-          () => false,
-        );
-        if (active.signal.aborted) return;
-        if (result.status === "start-deferred") {
-          setError(m.cloud_agent_create_start_deferred());
-          return;
-        }
-        if (!refreshed) {
-          setError(m.cloud_agent_create_refresh_error());
-          return;
-        }
-        openingDirect.current = true;
-        setOpening(true);
-        let opened;
-        try {
-          if (
-            await openDirect({ agentId: result.agentId }, { replace: conversationReplacesPage })
-          ) {
-            await refreshSidebar(["dms"]);
-            opened = true;
-          }
-        } catch {
-          setError(m.cloud_agent_create_refresh_error());
-        } finally {
-          openingDirect.current = false;
-          setOpening(false);
-        }
-        if (opened) {
-          closeList();
-          if (!conversationReplacesPage) close();
-        }
-      } catch (cause) {
-        if (active.signal.aborted) return;
-        setError(agentCreateErrorMessage(cause));
-      }
-    });
+    void form.handleSubmit();
   }
 
   const ready = computer.state === "ready";
   return (
-    <AgentCreateForm
-      onSubmit={submit}
-      footer={
-        <AgentCreateFooter
-          onCancel={close}
-          cancelDisabled={opening}
-          submitLabel={m.agent_create_submit_chat()}
-          submitting={submitting}
-          submitDisabled={!ready}
-        />
-      }
-    >
-      <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
-        {!ready && <CloudComputerStatus computer={computer} onLeave={close} />}
-        <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} draft={usernameDraft} />
-        {ready && <p className="text-sm text-tertiary">{m.cloud_agent_create_private_note()}</p>}
-        {error && (
-          <p role="alert" className="text-sm text-error-primary">
-            {error}
-          </p>
-        )}
-      </div>
-    </AgentCreateForm>
+    <form.AppForm>
+      <AgentCreateForm
+        formRef={formRef}
+        onSubmit={submit}
+        footer={
+          <AgentCreateFooter
+            onCancel={close}
+            cancelDisabled={opening}
+            submitLabel={m.agent_create_submit_chat()}
+            submitting={submitting}
+            submitDisabled={!ready}
+          />
+        }
+      >
+        <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
+          {!ready && <CloudComputerStatus computer={computer} onLeave={close} />}
+          <form.AppField name="name">
+            {(field) => (
+              <AgentUsernameField
+                autoFocus={autoFocus}
+                isReadOnly={submitting}
+                error={visibleFieldError(field.state.meta, field.form.state.submissionAttempts)}
+                onErrorClear={() => {
+                  field.setMeta((prev) => ({
+                    ...prev,
+                    errorMap: { ...prev.errorMap, onSubmit: undefined },
+                  }));
+                }}
+                draft={usernameDraft}
+              />
+            )}
+          </form.AppField>
+          {ready && <p className="text-sm text-tertiary">{m.cloud_agent_create_private_note()}</p>}
+          <form.Alert error={error} />
+        </div>
+      </AgentCreateForm>
+    </form.AppForm>
   );
 }
 
@@ -191,7 +221,7 @@ function CloudComputerStatus({
           href={localizeHref(workspacePath(workspaceSlug, `/computer/${computer.computerId}`))}
           color="link-color"
           size="sm"
-          onClick={onLeave}
+          onPress={onLeave}
         >
           {m.cloud_agent_create_view_computer()}
         </Button>

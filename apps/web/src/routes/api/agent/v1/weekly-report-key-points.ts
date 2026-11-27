@@ -5,6 +5,7 @@ import { z } from "zod";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { agentRouteDomainErrorResponse } from "#src/server/agents/agent-http-routes.server";
 import { applyKeyPointExtractionWriteBack } from "#src/server/records/weekly-report-key-points.server";
+import { weeklyReportsDisabledResponse } from "#src/server/records/weekly-reports-gate.server";
 
 const bodySchema = z.object({
   idempotencyKey: z.uuid(),
@@ -55,10 +56,13 @@ export const Route = createFileRoute("/api/agent/v1/weekly-report-key-points")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      POST: ({ request, context: { principal, db } }) =>
-        handleWeeklyReportKeyPointsPost(request, principal, (input) =>
+      POST: async ({ request, context: { principal, db } }) => {
+        const disabled = await weeklyReportsDisabledResponse(db, principal.workspaceId);
+        if (disabled) return disabled;
+        return handleWeeklyReportKeyPointsPost(request, principal, (input) =>
           applyKeyPointExtractionWriteBack(db, input),
-        ),
+        );
+      },
     },
   },
 });

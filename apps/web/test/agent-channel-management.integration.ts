@@ -196,7 +196,7 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
     });
     expect(channelRoleUpdate.description).toBe("Updated via channel_role admin");
     await expect(manage.update(workspace.id, admin.id, "#eng", {})).rejects.toThrow(
-      "update requires --name, --description, --public or --private",
+      "update requires --name, --description, --public, --private, --announcement or --no-announcement",
     );
     await expect(
       manage.update(workspace.id, admin.id, "#eng", { name: "general" }),

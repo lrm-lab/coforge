@@ -198,3 +198,137 @@ test("Mark all done announces every moved conversation's badge in one batched ca
     await cleanup(db, suffix);
   }
 });
+
+test.each([
+  ["done", "relevant"],
+  ["read", "relevant"],
+  ["done", "muted"],
+  ["read", "muted"],
+])(
+  "Mark all %s reads through the visible mention at level %s",
+  async (action, notificationLevel) => {
+    const db = database();
+    const suffix = crypto.randomUUID();
+    try {
+      const { alice, workspace, channel, post } = await seed(db, suffix);
+      const hidden = await channel("hidden");
+      const shown = await channel("shown");
+      const inbox = inboxWith(db);
+      for (const each of [hidden, shown]) {
+        await db.conversationMember.update({
+          where: { id: each.aliceMember.id },
+          data: { notificationLevel },
+        });
+        await post(each.conversation.id, each.bobMember.id, "ordinary");
+      }
+      const mention = await post(shown.conversation.id, shown.bobMember.id, "mention", {
+        mentionMemberIds: [shown.aliceMember.id],
+      });
+      const later = await post(shown.conversation.id, shown.bobMember.id, "ordinary again");
+
+      const before = new Date(later.createdAt.getTime() + 1);
+      const newMention = await post(
+        shown.conversation.id,
+        shown.bobMember.id,
+        "mention after cutoff",
+        {
+          mentionMemberIds: [shown.aliceMember.id],
+        },
+      );
+      if (action === "done") {
+        const { count } = await inbox.markAllDone(workspace.id, alice.id, { before });
+        expect(count).toBe(1);
+      } else {
+        await inbox.markAllRead(workspace.id, alice.id, { before });
+      }
+      const hiddenMember = await db.conversationMember.findUniqueOrThrow({
+        where: { id: hidden.aliceMember.id },
+      });
+      const shownMember = await db.conversationMember.findUniqueOrThrow({
+        where: { id: shown.aliceMember.id },
+      });
+      expect(hiddenMember.readThroughSequence).toBe(0);
+      expect(shownMember.readThroughSequence).toBe(mention.sequence);
+      const { items } = await inbox.list(workspace.id, alice.id, { filter: "unread" });
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        kind: "conversation",
+        unreadCount: 1,
+        latest: { id: newMention.id },
+      });
+    } finally {
+      await cleanup(db, suffix);
+    }
+  },
+);
+
+test.each(["read", "done"])(
+  "Mark all %s excludes inactive channels and their mentions",
+  async (action) => {
+    const db = database();
+    const suffix = crypto.randomUUID();
+    try {
+      const { alice, workspace, channel, post } = await seed(db, suffix);
+      const rows = await Promise.all([channel("archived"), channel("hidden"), channel("active")]);
+      const inbox = inboxWith(db);
+      const noticeIds = [];
+      for (const row of rows) {
+        const message = await post(row.conversation.id, row.bobMember.id, "mention");
+        const notice = await db.pendingMentionAction.create({
+          data: {
+            workspaceId: workspace.id,
+            conversationId: row.conversation.id,
+            messageId: message.id,
+            senderMemberId: row.bobMember.id,
+            targetUserId: alice.id,
+            targetHandle: alice.username,
+            expiresAt: new Date(Date.now() + 86_400_000),
+            notifiedAt: message.createdAt,
+          },
+        });
+        noticeIds.push(notice.id);
+      }
+      const [archived, hidden, active] = rows;
+      await db.conversation.update({
+        where: { id: archived!.conversation.id },
+        data: { archivedAt: new Date() },
+      });
+      await db.conversation.update({
+        where: { id: hidden!.conversation.id },
+        data: { channelName: "general", hiddenFromWorkspaceAt: new Date() },
+      });
+      const { items } = await inbox.list(workspace.id, alice.id, { filter: "all" });
+      expect(items.map((item) => item.key).sort()).toEqual([
+        `conversation:${active!.conversation.id}`,
+        `mention:${noticeIds[2]}`,
+      ]);
+
+      const before = new Date();
+      if (action === "done") await inbox.markAllDone(workspace.id, alice.id, { before });
+      else await inbox.markAllRead(workspace.id, alice.id, { before });
+
+      for (const [index, row] of rows.entries()) {
+        const member = await db.conversationMember.findUniqueOrThrow({
+          where: { id: row.aliceMember.id },
+        });
+        const notice = await db.pendingMentionAction.findUniqueOrThrow({
+          where: { id: noticeIds[index] },
+        });
+        const visible = row === active;
+        expect({
+          readThrough: member.readThroughSequence,
+          doneThrough: member.doneThroughSequence,
+          noticeRead: notice.targetReadAt !== null,
+          noticeDone: notice.dismissedAt !== null,
+        }).toEqual({
+          readThrough: visible ? 1 : 0,
+          doneThrough: visible && action === "done" ? 1 : null,
+          noticeRead: visible && action === "read",
+          noticeDone: visible && action === "done",
+        });
+      }
+    } finally {
+      await cleanup(db, suffix);
+    }
+  },
+);

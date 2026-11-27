@@ -110,6 +110,17 @@ export function formatMonthDay(
   }).format(new Date(value));
 }
 
+const currentYearCache = new Map<string, { year: number; bucket: number }>();
+
+function currentYearInZone(zone: string): number {
+  const bucket = Math.floor(Date.now() / 60_000);
+  const cachedYear = currentYearCache.get(zone);
+  if (cachedYear && cachedYear.bucket === bucket) return cachedYear.year;
+  const year = Temporal.Now.instant().toZonedDateTimeISO(zone).year;
+  currentYearCache.set(zone, { year, bucket });
+  return year;
+}
+
 export function formatMonthDayOrYear(
   value: Date | string,
   timeZone: string | null | undefined,
@@ -121,13 +132,11 @@ export function formatMonthDayOrYear(
   const targetInstant =
     options?.dueHasTime === false ? rawInstant.subtract({ milliseconds: 1 }) : rawInstant;
   const targetZoned = targetInstant.toZonedDateTimeISO(zone);
-  const nowZoned = (
-    options?.now
-      ? Temporal.Instant.fromEpochMilliseconds(options.now.getTime())
-      : Temporal.Now.instant()
-  ).toZonedDateTimeISO(zone);
+  const nowYear = options?.now
+    ? Temporal.Instant.fromEpochMilliseconds(options.now.getTime()).toZonedDateTimeISO(zone).year
+    : currentYearInZone(zone);
   const targetDate = new Date(targetInstant.epochMilliseconds);
-  return targetZoned.year === nowZoned.year
+  return targetZoned.year === nowYear
     ? formatMonthDay(targetDate, zone, locale)
     : formatCalendarDate(targetDate, zone, locale);
 }

@@ -3,21 +3,30 @@ import {
   parseRuntimeProvider,
   RUNTIME_PROVIDER,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
-  type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import {
+  CODEX_COMPATIBLE_MODEL_PROVIDER,
+  selectsCodexCompatible,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
-import { Button } from "#src/components/base/buttons/button";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
-import { Select } from "#src/components/base/select/select";
+import { useCodexCompatibleSupport } from "#src/features/computers/use-codex-compatible-support";
+import { fieldHint } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
+import { AgentCodexCompatibleFields } from "./agent-codex-compatible-fields";
+import {
+  AgentRuntimeApiKeyField,
+  AgentRuntimeCustomModelField,
+  AgentRuntimeModelProviderField,
+  RuntimeCatalogLoadFailure,
+} from "./agent-runtime-fallback-fields";
 import { AgentFastModeField } from "./agent-fast-mode-field";
 import { AgentModelSizeFields } from "./agent-model-size-fields";
 import { initialModelSizes, modelSizesApply } from "./agent-model-sizes";
 import { AgentReasoningField } from "./agent-reasoning-field";
-import { KEYED_MODEL_PROVIDERS, PI_BUILTIN_MODEL_PROVIDERS } from "./agent.schemas";
+import { KEYED_MODEL_PROVIDERS } from "./agent.schemas";
 import { ModelComboBox } from "./model-combobox";
-import { modelProviderDisplayName } from "./model-provider-display";
 import type { ModelChoice } from "./model-search";
 import {
   fastModeFieldState,
@@ -28,6 +37,8 @@ import {
   piBuiltinModels,
   piConfiguredModelLabel,
   piConfiguredModels,
+  codexCompatibleCanKeepKey,
+  codexCompatibleOriginChanged,
   piExtraProviderOption,
   piInitialProviderChoice,
   reasoningFieldState,
@@ -36,6 +47,7 @@ import {
   splitCustomModel,
   submittedRuntimeModel,
   type RuntimeOptions,
+  type RuntimeProviderNoticeContext,
   type RuntimeSelection,
 } from "./agent-runtime-fields-state";
 import { AgentRuntimeProviderSelect } from "./agent-runtime-provider-select";
@@ -55,8 +67,13 @@ export function AgentRuntimeFields({
   initial,
   credentialConfigured = false,
   enforceRequiredModel = false,
+  providerError,
+  modelProviderError,
   modelError,
+  baseUrlError,
+  apiKeyError,
   onModelErrorClear,
+  onFieldErrorClear,
   onLoad,
   initialOptions,
   onDirtyChange,
@@ -67,14 +84,25 @@ export function AgentRuntimeFields({
   initial?: RuntimeSelection;
   credentialConfigured?: boolean;
   enforceRequiredModel?: boolean;
+  providerError?: string;
+  modelProviderError?: string;
   modelError?: string;
+  baseUrlError?: string;
+  apiKeyError?: string;
   onModelErrorClear?: () => void;
+  onFieldErrorClear?: (
+    field: "provider" | "modelProvider" | "model" | "baseUrl" | "apiKey",
+  ) => void;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
   initialOptions?: RuntimeOptions;
   onDirtyChange?: (dirty: boolean) => void;
-  providerNotice?: (provider: RuntimeProvider) => ReactNode;
+  providerNotice?: (context: RuntimeProviderNoticeContext) => ReactNode;
 }) {
   const controlSize = useDialogControlSize();
+  const initialCodexCompatible = selectsCodexCompatible(
+    initial?.provider ?? "",
+    initial?.modelProvider,
+  );
   const [provider, setProvider] = useState(initial?.provider ?? RUNTIME_PROVIDER.COFORGE);
   const [modelProvider, setModelProvider] = useState(initial?.modelProvider ?? "");
   const [piProviderChoice, setPiProviderChoice] = useState(() =>
@@ -87,6 +115,10 @@ export function AgentRuntimeFields({
   const [modelKey, setModelKey] = useState(initialModelKey);
   const [customModelActive, setCustomModelActive] = useState(false);
   const [customModelText, setCustomModelText] = useState("");
+  const [codexModel, setCodexModel] = useState(
+    initialCodexCompatible ? (initial?.model ?? "") : "",
+  );
+  const [baseUrl, setBaseUrl] = useState(initialCodexCompatible ? (initial?.baseUrl ?? "") : "");
   const [reasoning, setReasoning] = useState(initial?.reasoning ?? "");
   const [fastMode, setFastMode] = useState(initial?.fastMode ?? false);
   const [sizes, setSizes] = useState(() => initialModelSizes(initial));
@@ -112,6 +144,17 @@ export function AgentRuntimeFields({
   const piConfigured = isPi && piProviderChoice === "";
   const piBuiltin = isPi && !piConfigured;
   const sizesApply = modelSizesApply(provider, piBuiltin ? piProviderChoice : "");
+  const queriedCodexCompatible = useCodexCompatibleSupport(
+    computerId,
+    open && provider === RUNTIME_PROVIDER.CODEX && options?.codexCompatible === undefined,
+  );
+  const codexCompatibleSupported = options?.codexCompatible ?? queriedCodexCompatible;
+  const showCodexCompatibleSection =
+    provider === RUNTIME_PROVIDER.CODEX &&
+    !failed &&
+    (codexCompatibleSupported || initialCodexCompatible);
+  const isCodexCompatible =
+    showCodexCompatibleSection && selectsCodexCompatible(provider, modelProvider);
 
   useEffect(() => {
     if (!open) setApiKey("");
@@ -201,13 +244,15 @@ export function AgentRuntimeFields({
     selectedModel,
     modelKey,
     initialModelKey,
+    codexModel,
     initial,
   });
   const matchingConfiguredCredential =
     credentialConfigured &&
     initial?.provider === provider &&
     initial.modelProvider === submittedModelProvider;
-  const modelRequired = enforceRequiredModel && runtimeRequiresModel(provider);
+  const modelRequired =
+    enforceRequiredModel && runtimeRequiresModel(provider, submittedModelProvider);
   const pinnedModelChoices = modelRequired ? EMPTY_PINNED_MODEL_CHOICES : PINNED_MODEL_CHOICES;
   const visibleModels = catalogModels.filter((model) => {
     if (provider === RUNTIME_PROVIDER.COFORGE) return model.modelProvider === modelProvider;
@@ -261,6 +306,7 @@ export function AgentRuntimeFields({
     submittedFastMode,
     sizes,
     sizesApply,
+    baseUrl: isCodexCompatible ? baseUrl : "",
     initial,
   });
 
@@ -272,6 +318,8 @@ export function AgentRuntimeFields({
     setModelKey("");
     setCustomModelActive(false);
     setCustomModelText("");
+    setCodexModel("");
+    setBaseUrl("");
     setReasoning("");
     setFastMode(false);
     setSizes(initialModelSizes());
@@ -285,6 +333,7 @@ export function AgentRuntimeFields({
         provider={provider}
         providers={providers}
         unusable={options?.unusable}
+        error={providerError}
         className="min-w-0"
         onChange={(key) => {
           setProvider(parseRuntimeProvider(key) ?? RUNTIME_PROVIDER.COFORGE);
@@ -292,59 +341,90 @@ export function AgentRuntimeFields({
           setPiProviderChoice("");
           resetModelFields();
           onModelErrorClear?.();
+          onFieldErrorClear?.("provider");
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("model");
+          onFieldErrorClear?.("baseUrl");
+          onFieldErrorClear?.("apiKey");
         }}
       />
-      {providerNotice?.(provider)}
-      {failed ? (
-        <Input
-          label={m.agent_form_model_provider()}
-          name="modelProvider"
-          size={controlSize}
-          isRequired={provider === RUNTIME_PROVIDER.COFORGE}
-          maxLength={100}
-          defaultValue={modelProvider}
-          onChange={() => {
-            setApiKey("");
-            setManualDirty(true);
+      {providerNotice?.({
+        provider,
+        modelProvider: submittedModelProvider,
+        codexCompatibleSupported,
+        onUseCodexCompatible: () => {
+          setModelProvider(CODEX_COMPATIBLE_MODEL_PROVIDER);
+          resetModelFields();
+          onModelErrorClear?.();
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("model");
+          onFieldErrorClear?.("baseUrl");
+          onFieldErrorClear?.("apiKey");
+        },
+      })}
+      <AgentRuntimeModelProviderField
+        failed={failed}
+        provider={provider}
+        controlSize={controlSize}
+        modelProvider={modelProvider}
+        modelProviderError={modelProviderError}
+        submittedModelProvider={submittedModelProvider}
+        optionsLoaded={Boolean(options)}
+        isPi={isPi}
+        piProviderChoice={piProviderChoice}
+        piExtraProvider={piExtraProvider}
+        modelProviders={modelProviders}
+        onManualChange={() => {
+          setApiKey("");
+          setManualDirty(true);
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("apiKey");
+        }}
+        onSelectChange={(value) => {
+          if (isPi) setPiProviderChoice(value);
+          else setModelProvider(value);
+          resetModelFields();
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("model");
+          onFieldErrorClear?.("apiKey");
+        }}
+      />
+      {showCodexCompatibleSection && (
+        <AgentCodexCompatibleFields
+          controlSize={controlSize}
+          showModeSelect={codexCompatibleSupported}
+          modelProvider={modelProvider}
+          model={codexModel}
+          modelError={modelError}
+          baseUrl={baseUrl}
+          baseUrlError={baseUrlError}
+          apiKey={apiKey}
+          apiKeyError={apiKeyError}
+          canKeepKey={codexCompatibleCanKeepKey(initial, baseUrl)}
+          originChanged={codexCompatibleOriginChanged(initial, baseUrl)}
+          onModeChange={(next) => {
+            setModelProvider(next);
+            resetModelFields();
+            onModelErrorClear?.();
+            onFieldErrorClear?.("modelProvider");
+            onFieldErrorClear?.("model");
+            onFieldErrorClear?.("baseUrl");
+            onFieldErrorClear?.("apiKey");
+          }}
+          onModelChange={(value) => {
+            setCodexModel(value);
+            onModelErrorClear?.();
+            onFieldErrorClear?.("model");
+          }}
+          onBaseUrlChange={(value) => {
+            setBaseUrl(value);
+            onFieldErrorClear?.("baseUrl");
+          }}
+          onApiKeyChange={(value) => {
+            setApiKey(value);
+            onFieldErrorClear?.("apiKey");
           }}
         />
-      ) : (
-        <input type="hidden" name="modelProvider" value={submittedModelProvider} />
-      )}
-      {!failed && !RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider] && (
-        <Select
-          label={m.agent_form_model_provider()}
-          size={controlSize}
-          className="min-w-0"
-          isDisabled={!options}
-          selectedKey={isPi ? piProviderChoice : modelProvider}
-          onSelectionChange={(key) => {
-            if (key === null) return;
-            const value = String(key);
-            if (isPi) setPiProviderChoice(value);
-            else setModelProvider(value);
-            resetModelFields();
-          }}
-        >
-          {isPi ? (
-            <>
-              <Select.Item id="" label={m.agent_form_pi_provider_configured()} />
-              {PI_BUILTIN_MODEL_PROVIDERS.map((value) => (
-                <Select.Item key={value} id={value} label={modelProviderDisplayName(value)} />
-              ))}
-              {piExtraProvider && (
-                <Select.Item key={piExtraProvider} id={piExtraProvider} label={piExtraProvider} />
-              )}
-            </>
-          ) : (
-            <>
-              <Select.Item id="" label={m.agent_form_provider_default()} />
-              {modelProviders.map((value) => (
-                <Select.Item key={value} id={value} label={value} />
-              ))}
-            </>
-          )}
-        </Select>
       )}
       {failed ? (
         <Input
@@ -354,19 +434,20 @@ export function AgentRuntimeFields({
           isRequired
           validationBehavior={modelRequired ? "aria" : undefined}
           isInvalid={Boolean(modelError)}
-          hint={modelError || undefined}
+          hint={fieldHint(modelError)}
           maxLength={200}
           defaultValue={initial?.model}
           className="min-w-0"
           onChange={() => {
             setManualDirty(true);
             onModelErrorClear?.();
+            onFieldErrorClear?.("model");
           }}
         />
-      ) : (
+      ) : !isCodexCompatible ? (
         <>
           <input type="hidden" name="model" value={modelValue} />
-          <div className="relative min-w-0">
+          <div data-field="model" className="relative min-w-0">
             <ModelComboBox
               label={m.agent_form_model()}
               className="min-w-0"
@@ -374,7 +455,7 @@ export function AgentRuntimeFields({
               isDisabled={!options}
               isRequired={modelRequired}
               isInvalid={Boolean(modelError)}
-              hint={modelError || undefined}
+              hint={modelError}
               refresh={{
                 run: () => void catalogRefresh.refresh(),
                 busy: catalogRefresh.busy,
@@ -385,6 +466,7 @@ export function AgentRuntimeFields({
               selectedKey={piConfigured && customModelActive ? CUSTOM_MODEL_KEY : modelKey}
               onSelectionChange={(value) => {
                 onModelErrorClear?.();
+                onFieldErrorClear?.("model");
                 if (piConfigured && value === CUSTOM_MODEL_KEY) {
                   setCustomModelActive(true);
                   setModelKey("");
@@ -410,64 +492,39 @@ export function AgentRuntimeFields({
             <RuntimeRefreshOutcome note={catalogRefresh.note} runtime={provider} />
           )}
         </>
-      )}
+      ) : null}
       {piConfigured && customModelActive && (
-        <Input
-          label={m.agent_form_model_custom_id()}
-          size={controlSize}
-          className="min-w-0"
-          placeholder="provider/model-id"
+        <AgentRuntimeCustomModelField
+          controlSize={controlSize}
           value={customModelText}
+          invalid={customInvalid}
           onChange={setCustomModelText}
-          isRequired
-          validate={(value) => (splitCustomModel(value) ? null : m.agent_form_model_custom_error())}
-          isInvalid={customInvalid}
-          hint={customInvalid ? m.agent_form_model_custom_error() : undefined}
         />
       )}
       {showApiKeyField && (
-        <Input
-          label={m.agent_runtime_api_key({ provider: apiKeyProviderId })}
-          size={controlSize}
-          className="min-w-0"
-          name="apiKey"
-          type="password"
-          value={apiKey}
+        <AgentRuntimeApiKeyField
+          controlSize={controlSize}
+          provider={provider}
+          apiKeyProviderId={apiKeyProviderId}
+          apiKey={apiKey}
+          apiKeyError={apiKeyError}
+          matchingConfiguredCredential={matchingConfiguredCredential}
           onChange={setApiKey}
-          isRequired={!matchingConfiguredCredential}
-          minLength={8}
-          maxLength={4096}
-          autoComplete="new-password"
-          placeholder={m.agent_runtime_api_key_placeholder({ provider: apiKeyProviderId })}
-          hint={
-            matchingConfiguredCredential
-              ? m.agent_form_api_key_preserve_help()
-              : provider === RUNTIME_PROVIDER.PI
-                ? m.agent_form_pi_api_key_help()
-                : m.agent_form_coforge_api_key_help()
-          }
+          onErrorClear={() => onFieldErrorClear?.("apiKey")}
         />
       )}
       {failed && (
-        <div role="alert" className="grid gap-2">
-          <p className="text-sm text-error-primary">{m.agent_form_catalog_manual_help()}</p>
-          <Button
-            type="button"
-            color="secondary"
-            size={controlSize}
-            className="justify-self-start"
-            onPress={() => {
-              setFailedComputerId(undefined);
-              setOptionsByComputer((current) => ({
-                ...current,
-                [computerId]: undefined,
-              }));
-              setRetry((value) => value + 1);
-            }}
-          >
-            {m.controls_retry()}
-          </Button>
-        </div>
+        <RuntimeCatalogLoadFailure
+          controlSize={controlSize}
+          onRetry={() => {
+            setFailedComputerId(undefined);
+            setOptionsByComputer((current) => ({
+              ...current,
+              [computerId]: undefined,
+            }));
+            setRetry((value) => value + 1);
+          }}
+        />
       )}
       <input type="hidden" name="reasoning" value={submittedReasoning} />
       <input type="hidden" name="fastMode" value={submittedFastMode ? "true" : ""} />

@@ -62,6 +62,7 @@ export function AgentRuntimeCredentialSection({
           providerId={providerId}
           credentialHint={runtimeCredential?.hint}
           error={error}
+          onErrorClear={() => setError("")}
           modelFields={[
             {
               label: m.agent_form_model(),

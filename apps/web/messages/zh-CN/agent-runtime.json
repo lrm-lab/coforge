@@ -20,5 +20,7 @@
   "agent_stop_model_detail": "在 Agent 的运行时设置里换一个模型，然后启动 Agent。",
   "agent_stop_environment": "环境变量有误",
   "agent_stop_environment_detail": "修改 Agent 的环境变量，然后启动 Agent。",
-  "agent_stop_reason_sentence": "{label}。{detail}"
+  "agent_stop_reason_sentence": "{label}。{detail}",
+  "agent_form_codex_signed_out_or_api_key": "{runtime} 在 {computer} 上尚未登录。你可以登录共享账号，或直接改用自定义 API Key。",
+  "agent_form_use_custom_api_key": "使用自定义 API Key"
 }

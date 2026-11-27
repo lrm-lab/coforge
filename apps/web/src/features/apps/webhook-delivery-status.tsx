@@ -1,16 +1,12 @@
 import type { ReactNode } from "react";
 
 import { Alert } from "#src/components/ui/alert";
+import { KeyValueList, KeyValueRow } from "#src/components/ui/key-value-list";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { m } from "#src/paraglide/messages";
 import { WEBHOOK_STOPPED_REASONS } from "./app-notification-copy";
 import type { WebhookStatusSummary } from "./app-webhooks.functions";
 
-/**
- * How deliveries to one installation's endpoint are going, for an owner or admin: stopped (with
- * why and how to resume), or the last delivery, the last error, the failures in a row and the next
- * attempt. A response body is never part of it.
- */
 export function WebhookDeliveryStatus({ status }: { status: WebhookStatusSummary | null }) {
   if (!status)
     return <p className="text-sm text-tertiary">{m.apps_notifications_delivery_none()}</p>;
@@ -23,36 +19,42 @@ export function WebhookDeliveryStatus({ status }: { status: WebhookStatusSummary
       />
     );
   }
-  const rows: [string, ReactNode][] = [
-    [
-      m.apps_notifications_delivery_last(),
-      status.lastDeliveryAt ? (
+  const rows: { term: string; value: ReactNode; mono?: boolean }[] = [
+    {
+      term: m.apps_notifications_delivery_last(),
+      value: status.lastDeliveryAt ? (
         <RelativeTime value={status.lastDeliveryAt} />
       ) : (
         m.apps_notifications_delivery_never()
       ),
-    ],
+    },
   ];
   if (status.lastError) {
-    rows.push([m.apps_notifications_delivery_error(), <code>{status.lastError}</code>]);
+    rows.push({
+      term: m.apps_notifications_delivery_error(),
+      value: <code>{status.lastError}</code>,
+      mono: true,
+    });
   }
   if (status.consecutiveFailures > 0) {
-    rows.push([m.apps_notifications_delivery_failures(), status.consecutiveFailures]);
+    rows.push({
+      term: m.apps_notifications_delivery_failures(),
+      value: status.consecutiveFailures,
+    });
   }
   if (status.nextAttemptAt) {
-    rows.push([
-      m.apps_notifications_delivery_next(),
-      <RelativeTime value={status.nextAttemptAt} />,
-    ]);
+    rows.push({
+      term: m.apps_notifications_delivery_next(),
+      value: <RelativeTime value={status.nextAttemptAt} />,
+    });
   }
   return (
-    <dl className="grid gap-1 text-sm">
-      {rows.map(([term, value]) => (
-        <div key={term} className="flex flex-wrap gap-x-2">
-          <dt className="text-tertiary">{term}</dt>
-          <dd className="text-secondary">{value}</dd>
-        </div>
+    <KeyValueList labelWidth="wide" className="gap-y-1.5">
+      {rows.map((row) => (
+        <KeyValueRow key={row.term} label={row.term} mono={row.mono}>
+          {row.value}
+        </KeyValueRow>
       ))}
-    </dl>
+    </KeyValueList>
   );
 }

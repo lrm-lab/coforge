@@ -29,10 +29,15 @@ import { refuseOverlap, refuseUnknownBase } from "./artifact-agent-base.server";
 import { createVersionedArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { recordingRefusal, requireNoUnseenChangesOnPush } from "./artifact-comment-gate.server";
+import { requireNotSettledOrSeen, type ArtifactSettlementRow } from "./artifact-settlement.server";
 import { lockComments } from "./artifact-comment-write.server";
 import { settleWrite } from "./artifact-activity-wake.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
 import { ArtifactVisibility } from "./artifact-visibility.server";
+import {
+  pinnedChannelPushBlock,
+  type PinnedArtifactPushBlock,
+} from "#src/server/conversations/channel-read-access.server";
 import { writeVersion } from "./artifact-version-write.server";
 
 export type ArtifactHome = { kind: "conversation"; conversationId: string } | { kind: "public" };
@@ -45,6 +50,22 @@ export const ARTIFACT_LABEL_LIMIT = 60;
 
 export function artifactHomeKey(home: ArtifactHome): string {
   return home.kind === "conversation" ? `conversation:${home.conversationId}` : home.kind;
+}
+
+function pinnedPushBlockHint(block: PinnedArtifactPushBlock): string {
+  if (block.kind === "channel") {
+    if (block.reason === "archived") {
+      return `${block.channel} is archived, so its announcement cannot be changed. Unarchive ${block.channel} first, or push a copy as a new artifact into an active conversation.`;
+    }
+    return `Only a channel admin of ${block.channel} or a Workspace owner or admin can push updates to this artifact while it is pinned there.`;
+  }
+  if (block.reason === "archived") {
+    return `${block.target} is archived, so its pinned content cannot be changed. Push a copy as a new artifact into an active conversation.`;
+  }
+  if (block.reason === "peer_not_member") {
+    return `The other participant in ${block.target} is no longer an active member of this Workspace, so its pinned content cannot be changed. Push a copy as a new artifact into an active conversation.`;
+  }
+  return `You cannot send messages in ${block.target}, so its pinned content cannot be changed. Push a copy as a new artifact into a conversation you can post in.`;
 }
 
 function invalid(errorId: string): never {
@@ -155,7 +176,24 @@ export class Artifacts {
     const { homeKey } = live;
     if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
     if ((input.label?.length ?? 0) > ARTIFACT_LABEL_LIMIT) invalid("artifact-label");
-    await requireArtifactRead(this.db, input.workspaceId, input.publisher, live);
+    const [readError, pinBlock] = await Promise.all([
+      requireArtifactRead(this.db, input.workspaceId, input.publisher, live).then(
+        () => null,
+        (error: unknown) => error,
+      ),
+      pinnedChannelPushBlock(this.db, input.workspaceId, input.artifactId, input.publisher),
+    ]);
+    if (readError) throw readError;
+    if (pinBlock) {
+      throw new AppError("ACCESS_DENIED", {
+        errorId: "channel-announcement-push-forbidden",
+        details: {
+          channel: pinBlock.kind === "channel" ? pinBlock.channel : pinBlock.target,
+          reason: pinBlock.reason,
+        },
+        hint: pinnedPushBlockHint(pinBlock),
+      });
+    }
     const added = [...(input.files ?? [])];
     const deleted = [...new Set(input.deletedPaths ?? [])];
     const touched = [...added.map((file) => file.path), ...deleted];
@@ -182,14 +220,15 @@ export class Artifacts {
         this.db.$transaction(async (tx) => {
           await lockComments(tx, input.artifactId);
           const [locked] = await tx.$queryRaw<
-            {
+            ({
               id: string;
               currentVersion: number;
               entryPath: string;
               title: string;
               description: string;
-            }[]
-          >`SELECT "id", "currentVersion", "entryPath", "title", "description"
+            } & ArtifactSettlementRow)[]
+          >`SELECT "id", "currentVersion", "entryPath", "title", "description",
+                   "settledAt", "settledVersion", "settledByKind", "settledById", "reopenedAtVersion"
          FROM "artifacts"
          WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
            AND "deletedAt" IS NULL
@@ -327,6 +366,14 @@ export class Artifacts {
           }
           if (!filesChanged && !settingsChanged && !input.label)
             return { status: "nothing" } as const;
+          await requireNotSettledOrSeen(tx, {
+            workspaceId: input.workspaceId,
+            artifactId: locked.id,
+            agentId: input.publisher.agentId,
+            current,
+            title: locked.title,
+            settlement: locked,
+          });
           const gone = await this.blobs.use(tx, input.workspaceId, [
             ...new Set(added.map((file) => result.get(file.path)!.sha256)),
           ]);
@@ -345,6 +392,12 @@ export class Artifacts {
             idempotencyKey: input.idempotencyKey,
             files: result.values(),
           });
+          if (locked.settledAt !== null && locked.reopenedAtVersion === null) {
+            await tx.artifact.update({
+              where: { id: locked.id },
+              data: { reopenedAtVersion: current + 1 },
+            });
+          }
           return {
             status: "created",
             versionId: version.id,

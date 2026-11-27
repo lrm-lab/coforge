@@ -18,7 +18,6 @@ export type TaskFilter = {
   owners: readonly string[];
   projects: readonly string[];
   labels: readonly string[];
-  channels?: readonly string[];
 };
 
 function labelsMatch(task: FilterableTask, picked: readonly string[]) {
@@ -39,28 +38,8 @@ export function taskMatches(task: FilterableTask, filter: TaskFilter) {
   return (
     (filter.owners.length === 0 || filter.owners.includes(ownerKey(task))) &&
     (filter.projects.length === 0 || filter.projects.includes(projectKey(task))) &&
-    labelsMatch(task, filter.labels) &&
-    (!filter.channels?.length ||
-      (task.conversationId !== undefined && filter.channels.includes(task.conversationId)))
+    labelsMatch(task, filter.labels)
   );
-}
-
-export type ChannelOption = { id: string; name: string; count: number };
-
-export function channelOptions(tasks: readonly FilterableTask[]): ChannelOption[] {
-  const byId = new Map<string, ChannelOption>();
-  for (const task of tasks) {
-    if (!task.conversationId) continue;
-    const known = byId.get(task.conversationId);
-    if (known) known.count += task.count ?? 1;
-    else
-      byId.set(task.conversationId, {
-        id: task.conversationId,
-        name: task.source?.label ?? "",
-        count: task.count ?? 1,
-      });
-  }
-  return [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export type OwnerOption = {

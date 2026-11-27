@@ -215,6 +215,29 @@ test("a private channel's line says so; one from an older server reads as public
   expect(text).toContain("#old [public, not joined, not muted, not archived, no posts yet]");
 });
 
+test("lists a channel's pinned announcement pointer without its body", () => {
+  const result = {
+    ...BASE,
+    channels: [
+      channel("#release", {
+        joined: true,
+        announcement: {
+          artifactId: "11111111-0000-0000-0000-000000000000",
+          title: "Release Checklist",
+          version: 4,
+          updatedAt: "2026-11-27T08:15:00Z",
+        },
+      }),
+      channel("#ops", { announcement: null }),
+    ],
+  };
+  const text = info(["--channels"], result);
+  expect(text).toContain(
+    '#release [public, joined, not muted, not archived, no posts yet] [announcement: "Release Checklist" (11111111-0000-0000-0000-000000000000, v4)]',
+  );
+  expect(text).toContain("#ops [public, not joined, not muted, not archived, no posts yet]\n");
+});
+
 test("lists agents and humans with role labels, status and descriptions", () => {
   expect(info(["--agents"])).toContain(
     "@scout (online) (admin) — Reviews pull requests.\n@helper (unknown)\n",

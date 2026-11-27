@@ -6,10 +6,10 @@ import {
   useRef,
   useState,
   type MouseEvent,
-  type PointerEvent,
 } from "react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ChevronLeft, ChevronRight, Download01, XClose } from "@untitledui/icons";
+import type { ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -22,16 +22,29 @@ import {
   cancelFlipAnimation,
   type SharedRect,
 } from "#src/lib/shared-element-rect";
-import { DURATION_MS } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { takesComments } from "./attachment-preview-kind";
 import { AttachmentCommentsPane } from "./attachment-comments";
+import { LightboxZoomStage, ZOOM_SCALE_EPSILON } from "./image-lightbox-stage";
 import { lightboxStepTarget } from "./image-lightbox-step";
+import {
+  LightboxZoomFooterBar,
+  LightboxZoomHeaderControls,
+  keepFocusInside,
+} from "./image-lightbox-zoom-controls";
 import { LoadingImage } from "./loading-image";
 import { ReviewCommentsToggle, ReviewSplitLayout, useReviewComments } from "./review-comments";
 import { PANEL_HEADER_CLASS } from "./review-chrome";
 import { ReviewTitle } from "./review-title";
+import {
+  KEYBOARD_PAN_STEP_PX,
+  MIN_ZOOM_SCALE,
+  ZOOM_ANIMATION_MS,
+  ZOOM_STEP,
+  formatZoomPercent,
+  useLightboxDismissSwipe,
+} from "./use-lightbox-dismiss-swipe";
 
 export type LightboxImage = {
   id: string;
@@ -42,16 +55,6 @@ export type LightboxImage = {
   thumbnailUrl?: string;
   largeUrl?: string;
 };
-
-const DRAG_DISMISS_DISTANCE_PX = 96;
-const DRAG_DISMISS_VELOCITY = 0.45;
-const DRAG_SCALE_RANGE_PX = 260;
-const DRAG_MIN_SCALE = 0.82;
-const VELOCITY_WINDOW_MS = 100;
-
-function keepFocusInside(arrow: HTMLElement) {
-  arrow.closest<HTMLElement>('[role="dialog"]')?.focus();
-}
 
 export function ImageLightbox({
   images,
@@ -80,6 +83,7 @@ export function ImageLightbox({
   const [dragProgress, setDragProgress] = useState(0);
   const closingRef = useRef(false);
   const stageRef = useRef<HTMLDivElement>(null);
+  const zoomedRef = useRef(false);
 
   const finishClose = useCallback(() => {
     closingRef.current = false;
@@ -96,7 +100,7 @@ export function ImageLightbox({
       }
       const origin = reduced ? null : (getOriginRect?.(image.id) ?? null);
       const img = stageRef.current?.querySelector<HTMLElement>("img");
-      if (!origin || !img) {
+      if (zoomedRef.current || !origin || !img) {
         finishClose();
         return;
       }
@@ -168,6 +172,7 @@ export function ImageLightbox({
             requestDragClose={requestClose}
             getOriginRect={getOriginRect}
             stageRef={stageRef}
+            zoomedRef={zoomedRef}
             closing={closing}
             desktop={desktop}
             reduced={reduced}
@@ -189,6 +194,7 @@ function LightboxContent({
   requestDragClose,
   getOriginRect,
   stageRef,
+  zoomedRef,
   closing,
   desktop,
   reduced,
@@ -203,6 +209,7 @@ function LightboxContent({
   requestDragClose: (fromTransform?: string) => void;
   getOriginRect?: (imageId: string) => SharedRect | null;
   stageRef: React.RefObject<HTMLDivElement | null>;
+  zoomedRef: React.RefObject<boolean>;
   closing: boolean;
   desktop: boolean;
   reduced: boolean;
@@ -210,24 +217,90 @@ function LightboxContent({
 }) {
   const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
   const [chromeVisible, setChromeVisible] = useState(() => reduced || !getOriginRect);
+  const [displayScale, setDisplayScale] = useState(MIN_ZOOM_SCALE);
+  const [isPanning, setIsPanning] = useState(false);
   const comments = useReviewComments(commentsOpen);
   const image = images[index]!;
   const href = `/api/attachments/${image.id}`;
   const paged = images.length > 1 && onIndexChange !== undefined;
   const commentable = takesComments(image);
+  const isFailed = failed.has(image.id);
+  const isZoomed = displayScale > MIN_ZOOM_SCALE + ZOOM_SCALE_EPSILON;
   const didEntrance = useRef(false);
-  const drag = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    active: boolean;
-    dx: number;
-    dy: number;
-    samples: { t: number; y: number }[];
-  } | null>(null);
+  const zoomRef = useRef<ReactZoomPanPinchContentRef>(null);
+
+  useEffect(() => {
+    setDisplayScale(MIN_ZOOM_SCALE);
+    zoomedRef.current = false;
+    setIsPanning(false);
+  }, [image.id, zoomedRef]);
+
+  const step = useCallback(
+    (delta: -1 | 1) => {
+      const next = lightboxStepTarget(index, delta, images.length);
+      if (next !== undefined) onIndexChange?.(next);
+    },
+    [images.length, index, onIndexChange],
+  );
+
+  const zoomDuration = useCallback(
+    (instant = false) => (instant || reduced ? 0 : ZOOM_ANIMATION_MS),
+    [reduced],
+  );
+
+  const zoomIn = useCallback(
+    (instant = false) => {
+      zoomRef.current?.zoomIn(ZOOM_STEP, zoomDuration(instant));
+    },
+    [zoomDuration],
+  );
+
+  const zoomOut = useCallback(
+    (instant = false) => {
+      const instance = zoomRef.current;
+      if (!instance) return;
+      const ms = zoomDuration(instant);
+      if (instance.state.scale - ZOOM_STEP <= MIN_ZOOM_SCALE + 0.05) {
+        instance.resetTransform(ms);
+        return;
+      }
+      instance.zoomOut(ZOOM_STEP, ms);
+    },
+    [zoomDuration],
+  );
+
+  const resetZoom = useCallback(
+    (instant = false) => {
+      zoomRef.current?.resetTransform(zoomDuration(instant));
+    },
+    [zoomDuration],
+  );
+
+  const panBy = useCallback((dx: number, dy: number) => {
+    zoomRef.current?.panBy(dx, dy, 0);
+  }, []);
+
+  const { onStagePointerDown, onStagePointerMove, onStagePointerEnd } = useLightboxDismissSwipe({
+    stageRef,
+    zoomedRef,
+    imageId: image.id,
+    index,
+    imageCount: images.length,
+    paged,
+    failed: isFailed,
+    closing,
+    commentsShown: comments.shown,
+    reduced,
+    onDragProgress,
+    onRequestDragClose: requestDragClose,
+    onStep: step,
+  });
 
   useLayoutEffect(() => {
-    if (didEntrance.current) return;
+    if (didEntrance.current) {
+      setChromeVisible(true);
+      return;
+    }
     didEntrance.current = true;
     if (reduced) {
       setChromeVisible(true);
@@ -256,97 +329,37 @@ function LightboxContent({
   useEffect(() => {
     if (commentsOpen) showComments();
   }, [commentsOpen, image.id]);
-  const step = (delta: -1 | 1) => {
-    const next = lightboxStepTarget(index, delta, images.length);
-    if (next !== undefined) onIndexChange?.(next);
-  };
+
   useHotkeys(
     [
-      { hotkey: "ArrowLeft", callback: () => step(-1) },
-      { hotkey: "ArrowRight", callback: () => step(1) },
+      {
+        hotkey: "ArrowLeft",
+        callback: () => (zoomedRef.current ? panBy(KEYBOARD_PAN_STEP_PX, 0) : step(-1)),
+      },
+      {
+        hotkey: "ArrowRight",
+        callback: () => (zoomedRef.current ? panBy(-KEYBOARD_PAN_STEP_PX, 0) : step(1)),
+      },
     ],
-    { enabled: paged },
+    { enabled: !isFailed && !closing && (paged || isZoomed), ignoreInputs: true },
   );
-
-  const onStagePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (reduced || closing || comments.shown || event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest("button, a")) return;
-    drag.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      active: false,
-      dx: 0,
-      dy: 0,
-      samples: [{ t: event.timeStamp, y: event.clientY }],
-    };
-  };
-
-  const onStagePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const current = drag.current;
-    if (!current || current.pointerId !== event.pointerId) return;
-    const dx = event.clientX - current.startX;
-    const dy = event.clientY - current.startY;
-    if (!current.active) {
-      if (dy < 8 || Math.abs(dy) < Math.abs(dx) * 1.2) return;
-      current.active = true;
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
-    current.dx = dx;
-    current.dy = Math.max(0, dy);
-    current.samples.push({ t: event.timeStamp, y: event.clientY });
-    while (
-      current.samples.length > 2 &&
-      event.timeStamp - current.samples[0]!.t > VELOCITY_WINDOW_MS
-    )
-      current.samples.shift();
-    const progress = Math.min(1, current.dy / DRAG_SCALE_RANGE_PX);
-    const scale = 1 - progress * (1 - DRAG_MIN_SCALE);
-    const img = stageRef.current?.querySelector<HTMLElement>("img");
-    if (img) {
-      img.style.transition = "none";
-      img.style.transform = `translate3d(${dx * 0.25}px, ${current.dy}px, 0) scale(${scale})`;
-    }
-    onDragProgress(progress);
-  };
-
-  const onStagePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
-    const current = drag.current;
-    if (!current || current.pointerId !== event.pointerId) return;
-    drag.current = null;
-    if (!current.active) return;
-    const first = current.samples[0]!;
-    const elapsed = event.timeStamp - first.t;
-    const velocity = elapsed > 0 ? (event.clientY - first.y) / elapsed : 0;
-    const img = stageRef.current?.querySelector<HTMLElement>("img");
-    const shouldDismiss =
-      event.type === "pointerup" &&
-      (current.dy > DRAG_DISMISS_DISTANCE_PX ||
-        (current.dy > 16 && velocity > DRAG_DISMISS_VELOCITY));
-    if (shouldDismiss) {
-      const fromTransform = img?.style.transform || undefined;
-      if (img) {
-        img.style.transition = "";
-        img.style.transform = "";
-      }
-      requestDragClose(fromTransform);
-      return;
-    }
-    if (img) {
-      img.style.transition = "transform calc(var(--duration-md) * 1.5) var(--ease-spring)";
-      img.style.transform = "translate3d(0, 0, 0) scale(1)";
-      window.setTimeout(
-        () => {
-          if (img.isConnected) {
-            img.style.transition = "";
-            img.style.transform = "";
-          }
-        },
-        Math.round(DURATION_MS.md * 1.5) + 20,
-      );
-    }
-    onDragProgress(0);
-  };
+  useHotkeys(
+    [
+      { hotkey: "ArrowUp", callback: () => panBy(0, KEYBOARD_PAN_STEP_PX) },
+      { hotkey: "ArrowDown", callback: () => panBy(0, -KEYBOARD_PAN_STEP_PX) },
+    ],
+    { enabled: !isFailed && !closing && isZoomed, ignoreInputs: true },
+  );
+  useHotkeys(
+    [
+      { hotkey: "+", callback: () => zoomIn(true) },
+      { hotkey: "=", callback: () => zoomIn(true) },
+      { hotkey: "-", callback: () => zoomOut(true) },
+      { hotkey: "_", callback: () => zoomOut(true) },
+      { hotkey: "0", callback: () => resetZoom(true) },
+    ],
+    { enabled: !isFailed && !closing, ignoreInputs: true },
+  );
 
   const chromeHidden = closing || !chromeVisible;
 
@@ -369,6 +382,14 @@ function LightboxContent({
               {m.image_lightbox_position({ index: index + 1, count: images.length })}
             </span>
           </span>
+        )}
+        {!isFailed && (
+          <LightboxZoomHeaderControls
+            scale={displayScale}
+            onZoomIn={() => zoomIn(false)}
+            onZoomOut={() => zoomOut(false)}
+            onReset={() => resetZoom(false)}
+          />
         )}
         {commentable && <ReviewCommentsToggle comments={comments} />}
         <ButtonUtility
@@ -394,30 +415,39 @@ function LightboxContent({
           <>
             <div
               ref={stageRef}
+              data-lightbox-stage=""
+              data-zoom-scale={formatZoomPercent(displayScale)}
               onPointerDown={onStagePointerDown}
               onPointerMove={onStagePointerMove}
               onPointerUp={onStagePointerEnd}
               onPointerCancel={onStagePointerEnd}
-              className="relative flex min-h-0 flex-1 touch-pan-x items-center justify-center p-4 sm:px-20"
+              className={cn(
+                "relative flex min-h-0 flex-1 touch-none items-center justify-center select-none",
+                isZoomed ? "overflow-hidden" : "overflow-visible",
+                !isFailed && isZoomed && (isPanning ? "cursor-grabbing" : "cursor-grab"),
+              )}
             >
-              {failed.has(image.id) ? (
+              {isFailed ? (
                 <Empty className="rounded-xl bg-primary">
                   <EmptyTitle>{m.attachment_comments_no_preview()}</EmptyTitle>
                 </Empty>
               ) : (
-                <LoadingImage
-                  key={image.id}
+                <LightboxZoomStage
+                  imageId={image.id}
                   src={image.largeUrl ?? image.previewUrl ?? href}
                   placeholderSrc={image.thumbnailUrl}
                   fallbackSrc={image.largeUrl || image.previewUrl ? href : undefined}
+                  fileName={image.fileName}
+                  zoomRef={zoomRef}
+                  zoomedRef={zoomedRef}
+                  isZoomed={isZoomed}
+                  reduced={reduced}
+                  onPanningChange={setIsPanning}
+                  onScaleChange={setDisplayScale}
                   onFailed={() => setFailed((ids) => new Set(ids).add(image.id))}
-                  alt={image.fileName}
-                  className="flex size-full items-center justify-center overflow-visible"
-                  imgClassName="max-h-full max-w-full object-contain will-change-transform"
-                  skeletonClassName="m-auto size-[min(24rem,100%)]"
                 />
               )}
-              {paged && (
+              {paged && !isZoomed && (
                 <>
                   <ButtonUtility
                     icon={ChevronLeft}
@@ -450,6 +480,16 @@ function LightboxContent({
                 </>
               )}
             </div>
+            {!isFailed && (
+              <LightboxZoomFooterBar
+                scale={displayScale}
+                paged={paged}
+                chromeHidden={chromeHidden}
+                onZoomIn={() => zoomIn(false)}
+                onZoomOut={() => zoomOut(false)}
+                onReset={() => resetZoom(false)}
+              />
+            )}
             {paged && (
               <div
                 data-lightbox-thumbnails

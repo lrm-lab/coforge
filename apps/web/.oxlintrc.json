@@ -19,6 +19,10 @@
     "coforge/no-raw-toast-library": "error",
     "coforge/no-raw-file-type-icon": "error",
     "coforge/no-distracting-animations": "error",
-    "coforge/no-handrolled-date-math": "error"
+    "coforge/no-handrolled-date-math": "error",
+    "coforge/no-dt-colon": "error",
+    "coforge/no-ragged-dl": "error",
+    "coforge/no-hinted-radio-button": "error",
+    "coforge/no-raw-otp-input": "error"
   }
 }

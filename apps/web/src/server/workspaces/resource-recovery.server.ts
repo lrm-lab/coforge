@@ -4,6 +4,7 @@ import { AppError } from "#src/lib/app-error";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { workspaceResourceState } from "#src/server/db/repositories/workspace-resource-recovery.repositories.server";
 import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
+import { isWeeklyReportsEnabledInValue } from "#src/server/records/weekly-reports-gate.server";
 export async function recoverWorkspaceResourcesOnOpen(
   db: PrismaClient,
   input: {
@@ -15,7 +16,10 @@ export async function recoverWorkspaceResourcesOnOpen(
   const state = await workspaceResourceState(db, { ...input, platformAgentId: session.agentId });
   if (!state) throw new AppError("ACCESS_DENIED");
   if (!roleCan(state.role, "recoverWorkspaceResources")) return;
-  if (!state.weeklyAgentId || (!state.weeklyComputerId && state.platformComputerId))
+  if (
+    isWeeklyReportsEnabledInValue(state.experiments) &&
+    (!state.weeklyAgentId || (!state.weeklyComputerId && state.platformComputerId))
+  )
     await ensureWeeklyReportAssistant(db, {
       ...input,
       ...(state.platformComputerId ? { computerId: state.platformComputerId } : {}),

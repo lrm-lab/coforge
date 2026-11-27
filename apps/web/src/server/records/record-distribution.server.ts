@@ -18,6 +18,7 @@ import {
 } from "./weekly-report-distribution.server";
 import { ensureFormatForSettings } from "./record-catalog-format.server";
 import { requireMembership } from "./record-catalog-access.server";
+import { isWeeklyReportsEnabledInValue } from "./weekly-reports-gate.server";
 
 type Db = PrismaClient;
 
@@ -192,6 +193,7 @@ export function recordDistribution(db: Db, notifier?: WeeklyReportNotifier) {
         ownerId: true,
         sendTime: true,
         sendWeekday: true,
+        workspace: { select: { experiments: true } },
       },
     });
 
@@ -206,6 +208,15 @@ export function recordDistribution(db: Db, notifier?: WeeklyReportNotifier) {
     }> = [];
 
     for (const row of settings) {
+      if (!isWeeklyReportsEnabledInValue(row.workspace?.experiments)) {
+        results.push({
+          workspaceId: row.workspaceId,
+          templateId: row.id,
+          status: "skipped",
+          reason: "disabled",
+        });
+        continue;
+      }
       if (
         !isWeeklyScheduleDue({
           now,

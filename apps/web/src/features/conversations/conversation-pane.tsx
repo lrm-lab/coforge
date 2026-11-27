@@ -44,6 +44,7 @@ import { useIsHostTaskMessage } from "#src/features/tasks/use-conversation-tasks
 export function ConversationPane({
   conversation,
   header,
+  pinnedStrip,
   readOnlyNotice,
   emptyState,
   streamRead = "settled",
@@ -52,6 +53,7 @@ export function ConversationPane({
   inTaskPopup = false,
   lead,
   onClose,
+  threadShowBack,
   threadContext,
   composerTarget,
   onViewInConversation,
@@ -271,6 +273,7 @@ export function ConversationPane({
                 context={threadContext}
                 onScrollToTop={() => historyRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
                 onClose={onClose}
+                showBack={threadShowBack}
                 onViewInConversation={onViewInConversation}
                 onMarkUnread={
                   markThreadUnread && !rootIsHostTask ? () => markThreadUnread(root.id) : undefined
@@ -279,7 +282,10 @@ export function ConversationPane({
                 action={threadHeaderAction}
               />
             ) : (
-              header
+              <>
+                {header}
+                {pinnedStrip}
+              </>
             )}
 
             <div className="group/history relative min-h-24 flex-1 overflow-x-clip">

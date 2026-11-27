@@ -12,20 +12,43 @@ import { RecordsPending } from "#src/features/records/records-pending";
 import { loadRecordsCatalog } from "#src/features/records/records.functions";
 import { latestWeeklyLanding } from "#src/features/records/records-sidebar";
 import { catalogShouldReload } from "#src/features/records/use-record-refresh";
+import { WeeklyReportsOff } from "#src/features/records/weekly-reports-off";
+import {
+  ensureWeeklyReportsEnabled,
+  fetchWeeklyReportsEnabled,
+  useWeeklyReportsEnabled,
+} from "#src/features/records/weekly-reports-gate";
+import { AppError, isAppErrorCode } from "#src/lib/app-error";
 
 export const Route = createFileRoute("/w/$workspaceSlug/records")({
   validateSearch: (search: Record<string, unknown>): { tab: RecordsTab } => ({
     tab: search.tab === "notes" ? "notes" : "weekly",
   }),
+  beforeLoad: async ({ context, preload, cause }) => {
+    if (preload) return;
+    const enabled =
+      cause === "enter"
+        ? await fetchWeeklyReportsEnabled(context.queryClient)
+        : await ensureWeeklyReportsEnabled(context.queryClient);
+    if (!enabled) {
+      throw new AppError("ACCESS_DENIED");
+    }
+  },
   loader: () => loadRecordsCatalog(),
   shouldReload: catalogShouldReload,
   pendingComponent: RecordsPending,
-  errorComponent: PageLoadError,
+  errorComponent: (props) =>
+    isAppErrorCode(props.error, "ACCESS_DENIED") ? (
+      <WeeklyReportsOff />
+    ) : (
+      <PageLoadError {...props} />
+    ),
   component: RecordsPage,
 });
 
 function RecordsPage() {
   const catalog = Route.useLoaderData();
+  const weeklyReports = useWeeklyReportsEnabled(true);
   const { tab } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const params = useParams({
@@ -53,6 +76,8 @@ function RecordsPage() {
         })
       : undefined;
   const landingReportId = landing?.kind === "report" ? landing.id : undefined;
+
+  if (!weeklyReports) return <WeeklyReportsOff />;
 
   return (
     <RecordsLayout

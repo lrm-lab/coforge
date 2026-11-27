@@ -42,6 +42,7 @@ import {
   SectionEyebrow,
   SettingsCard,
 } from "./settings-panel-parts";
+import { PinnedArtifactSettingsSection } from "./pinned-artifact-settings-section";
 import { useSidebarActions, useSidebarLists } from "./sidebar-lists";
 import { SidebarSectionSelect } from "./sidebar-section-select";
 import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
@@ -250,6 +251,10 @@ export function ChannelSettingsPanel({
                     canAdd={isMember && !conversation.archived}
                     onOpenMembers={() => changeMembersView("members")}
                     onAddMembers={() => changeMembersView("add")}
+                  />
+                  <PinnedArtifactSettingsSection
+                    conversationId={channelId}
+                    channelName={conversation.name}
                   />
                   <ChannelSettingsGroup
                     conversation={conversation}

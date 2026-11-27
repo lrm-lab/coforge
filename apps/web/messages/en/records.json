@@ -319,5 +319,8 @@
   "records_editor_link": "Link",
   "records_editor_no_matching_commands": "No matching commands",
   "records_editor_no_commands": "No commands",
-  "records_page_status": "{start}–{end} of {total}"
+  "records_page_status": "{start}–{end} of {total}",
+  "records_off_title": "Weekly reports is off",
+  "records_off_description": "This Workspace has weekly reports turned off. Saved reports and assistants are preserved and return when turned back on.",
+  "records_off_settings": "Turn it on in Settings"
 }

@@ -62,5 +62,14 @@
   "system_notice_task_blockers_changed": "{actor} made {task} wait for {added} instead of {removed}",
   "system_notice_task_renamed": "{actor} renamed {task} from \"{from}\" to \"{to}\"",
   "system_notice_task_described": "{actor} updated the description of {task}",
-  "system_notice_task_renamed_described": "{actor} renamed {task} from \"{from}\" to \"{to}\" and updated its description"
+  "system_notice_task_renamed_described": "{actor} renamed {task} from \"{from}\" to \"{to}\" and updated its description",
+  "system_notice_pinned_artifact_set": "{actor} pinned {title}",
+  "system_notice_pinned_artifact_replaced": "{actor} replaced the pinned content with {title}",
+  "system_notice_pinned_artifact_removed": "{actor} unpinned {title}",
+  "system_notice_pinned_artifact_set_untitled": "{actor} pinned content in this channel",
+  "system_notice_pinned_artifact_replaced_untitled": "{actor} replaced the channel's pinned content",
+  "system_notice_pinned_artifact_removed_untitled": "{actor} unpinned the channel's pinned content",
+  "system_notice_pinned_artifact_set_untitled_dm": "{actor} pinned content in this conversation",
+  "system_notice_pinned_artifact_replaced_untitled_dm": "{actor} replaced the pinned content",
+  "system_notice_pinned_artifact_removed_untitled_dm": "{actor} unpinned the pinned content"
 }

@@ -1,13 +1,14 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useRef, useState } from "react";
 import type { Key } from "react-aria-components";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
 import { HintText } from "#src/components/base/input/hint-text";
-import { Input } from "#src/components/base/input/input";
+import { setFieldServerError, useAppForm, visibleFieldError } from "#src/components/ui/form";
 import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { isSignInCode, parseCodeDestination } from "./code-destination";
 import { isNewPassword } from "./new-password";
@@ -26,19 +27,11 @@ const problemText = {
   failed: () => m.login_reset_failed(),
 };
 
-/**
- * Setting a new password with a code sent to a phone number or an email, one tab each (jing,
- * 11-12): the destination, the code with the button that sends it, the new password and the same
- * again. Asking for a code looks the same whether or not an account has the destination. A refusal
- * stays under the form; success goes back to the sign-in page (keeping `returnTo` and `prompt`) and
- * says so there, signing nobody in.
- */
 export function PasswordResetForm({
   returnTo,
   prompt,
 }: {
   returnTo?: string | undefined;
-  /** `"login"` when the sign-in page was asked to sign the person in afresh: the way back asks too. */
   prompt?: "login" | undefined;
 }) {
   const [tab, setTab] = useState<Key>("phone");
@@ -75,7 +68,6 @@ export function PasswordResetForm({
   );
 }
 
-/** One tab's form: its destination is worded for a phone or an email, and either is accepted. */
 function ResetFields({
   kind,
   returnTo,
@@ -88,111 +80,204 @@ function ResetFields({
   const requestCode = useServerFn(requestPasswordResetCode);
   const submit = useServerFn(resetPassword);
   const navigate = useNavigate();
-  const [destination, setDestination] = useState("");
-  const [code, setCode] = useState("");
-  const [password, setPassword] = useState("");
-  const [again, setAgain] = useState("");
-  const [problem, setProblem] = useState<Problem | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [formProblem, setFormProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
-  const codeSending = useCodeSending<Problem>({
-    destination,
-    request: (typed) => requestCode({ data: { destination: typed } }),
-    setProblem,
+
+  const form = useAppForm({
+    defaultValues: { destination: "", code: "", password: "", again: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const parsed = parseCodeDestination(value.destination);
+      if (!parsed) return;
+      await guard(async () => {
+        setFormProblem(null);
+        try {
+          const result = await submit({
+            data: { destination: value.destination, code: value.code, password: value.password },
+          });
+          if (result.ok) {
+            const passwordUpdated: PasswordUpdated = {
+              destination: parsed.kind === "email" ? parsed.email : parsed.phone,
+            };
+            await navigate({
+              to: "/login",
+              search: { returnTo, prompt },
+              state: { passwordUpdated },
+            });
+            return STAY_PENDING;
+          }
+          reportProblem(result.problem);
+        } catch {
+          setFormProblem("failed");
+        }
+      });
+    },
   });
 
-  // Typing again clears what the last attempt said.
-  const edit = (set: (value: string) => void) => (value: string) => {
-    set(value);
-    setProblem(null);
-  };
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await guard(async () => {
-      const parsed = parseCodeDestination(destination);
-      if (!parsed) return setProblem("invalid_destination");
-      if (!isSignInCode(code.trim())) return setProblem("invalid_code");
-      if (!isNewPassword(password)) return setProblem("invalid_password");
-      if (again !== password) return setProblem("password_mismatch");
-      setProblem(null);
-      try {
-        const result = await submit({ data: { destination, code, password } });
-        if (result.ok) {
-          const passwordUpdated: PasswordUpdated = {
-            destination: parsed.kind === "email" ? parsed.email : parsed.phone,
-          };
-          // Stay busy through the navigation: the page is replaced, not returned to.
-          await navigate({
-            to: "/login",
-            search: { returnTo, prompt },
-            state: { passwordUpdated },
-          });
-          return STAY_PENDING;
-        }
-        setProblem(result.problem);
-      } catch {
-        setProblem("failed");
-      }
-    });
+  function reportProblem(next: Problem | null) {
+    if (!next) {
+      setFormProblem(null);
+      return;
+    }
+    setFormProblem(null);
+    if (next === "invalid_destination") {
+      setFieldServerError(form, "destination", problemText.invalid_destination(), formRef.current);
+    } else if (next === "invalid_code") {
+      setFieldServerError(form, "code", problemText.invalid_code(), formRef.current);
+    } else if (next === "invalid_password" || next === "password_refused") {
+      setFieldServerError(form, "password", problemText[next](), formRef.current);
+    } else if (next === "password_mismatch") {
+      setFieldServerError(form, "again", problemText.password_mismatch(), formRef.current);
+    } else {
+      setFormProblem(next);
+    }
   }
 
   return (
-    <form noValidate onSubmit={onSubmit}>
-      <div className="flex flex-col gap-5">
-        <Input
-          size="lg"
-          placeholder={kind === "email" ? m.login_email_placeholder() : m.login_phone_placeholder()}
-          name="destination"
-          autoComplete="username"
-          value={destination}
-          onChange={edit(setDestination)}
-          isInvalid={problem === "invalid_destination"}
-        />
-        <SendCodeRow codeSending={codeSending} size="lg">
-          <CodeInput
-            size="lg"
-            hideLabel
-            className="min-w-0 flex-1"
-            value={code}
-            onChange={edit(setCode)}
-            isInvalid={problem === "invalid_code"}
-          />
-        </SendCodeRow>
-        <Input
-          size="lg"
-          placeholder={m.login_reset_password_placeholder()}
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={edit(setPassword)}
-          isInvalid={problem === "invalid_password" || problem === "password_refused"}
-        />
-        <Input
-          size="lg"
-          placeholder={m.login_reset_again_placeholder()}
-          name="password-again"
-          type="password"
-          autoComplete="new-password"
-          value={again}
-          onChange={edit(setAgain)}
-          isInvalid={problem === "password_mismatch"}
-        />
-        {problem ? (
-          <HintText isInvalid role="alert" className="text-md">
-            {problemText[problem]()}
-          </HintText>
-        ) : null}
-      </div>
-      <Button
-        type="submit"
-        size="lg"
-        className="mt-10 h-12 w-full"
-        isLoading={submitting}
-        showTextWhileLoading
+    <form.AppForm>
+      <form
+        ref={formRef}
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
       >
-        {m.login_reset_submit()}
-      </Button>
-    </form>
+        <div className="flex flex-col gap-5">
+          <form.AppField
+            name="destination"
+            validators={{
+              onSubmit: ({ value }) =>
+                parseCodeDestination(value) ? undefined : problemText.invalid_destination(),
+            }}
+          >
+            {(field) => (
+              <field.Input
+                size="lg"
+                placeholder={
+                  kind === "email" ? m.login_email_placeholder() : m.login_phone_placeholder()
+                }
+                autoComplete="username"
+                onChange={() => setFormProblem(null)}
+              />
+            )}
+          </form.AppField>
+          <form.Subscribe selector={(state) => state.values.destination}>
+            {(destination) => (
+              <ResetCodeRow
+                destination={destination}
+                requestCode={(typed) => requestCode({ data: { destination: typed } })}
+                reportProblem={reportProblem}
+                onCodeEdit={() => setFormProblem(null)}
+                renderField={(codeSending) => (
+                  <form.AppField
+                    name="code"
+                    validators={{
+                      onSubmit: ({ value }) =>
+                        isSignInCode(value.trim()) ? undefined : problemText.invalid_code(),
+                    }}
+                  >
+                    {(field) => {
+                      const codeError = visibleFieldError(
+                        field.state.meta,
+                        field.form.state.submissionAttempts,
+                      );
+                      return (
+                        <SendCodeRow
+                          codeSending={codeSending}
+                          error={codeError}
+                          errorClassName="text-md"
+                        >
+                          <CodeInput
+                            size="lg"
+                            value={field.state.value}
+                            onChange={(next) => {
+                              field.handleChange(next);
+                              setFormProblem(null);
+                            }}
+                            isInvalid={Boolean(codeError)}
+                          />
+                        </SendCodeRow>
+                      );
+                    }}
+                  </form.AppField>
+                )}
+              />
+            )}
+          </form.Subscribe>
+          <form.AppField
+            name="password"
+            validators={{
+              onSubmit: ({ value }) =>
+                isNewPassword(value) ? undefined : problemText.invalid_password(),
+            }}
+          >
+            {(field) => (
+              <field.Input
+                size="lg"
+                placeholder={m.login_reset_password_placeholder()}
+                type="password"
+                autoComplete="new-password"
+                onChange={() => setFormProblem(null)}
+              />
+            )}
+          </form.AppField>
+          <form.AppField
+            name="again"
+            validators={{
+              onSubmit: ({ value, fieldApi }) =>
+                value === fieldApi.form.getFieldValue("password")
+                  ? undefined
+                  : problemText.password_mismatch(),
+            }}
+          >
+            {(field) => (
+              <field.Input
+                size="lg"
+                placeholder={m.login_reset_again_placeholder()}
+                type="password"
+                autoComplete="new-password"
+                onChange={() => setFormProblem(null)}
+              />
+            )}
+          </form.AppField>
+          {formProblem ? (
+            <HintText isInvalid role="alert" className="text-md">
+              {problemText[formProblem]()}
+            </HintText>
+          ) : null}
+        </div>
+        <Button
+          type="submit"
+          size="lg"
+          className="mt-10 h-12 w-full"
+          isLoading={submitting}
+          showTextWhileLoading
+        >
+          {m.login_reset_submit()}
+        </Button>
+      </form>
+    </form.AppForm>
   );
+}
+
+function ResetCodeRow({
+  destination,
+  requestCode,
+  reportProblem,
+  renderField,
+}: {
+  destination: string;
+  requestCode: (typed: string) => Promise<{ ok: true } | { ok: false; problem: Problem }>;
+  reportProblem: (problem: Problem | null) => void;
+  onCodeEdit: () => void;
+  renderField: (codeSending: ReturnType<typeof useCodeSending<Problem>>) => React.ReactNode;
+}) {
+  const codeSending = useCodeSending<Problem>({
+    destination,
+    request: requestCode,
+    setProblem: reportProblem,
+  });
+  return <>{renderField(codeSending)}</>;
 }

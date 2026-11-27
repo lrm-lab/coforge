@@ -1,3 +1,4 @@
+import { getCodexCompatibleCapabilityLease } from "./codex-compatible-capability.server";
 import {
   RUNTIME_PROVIDER,
   parseRuntimeUnavailableCode,
@@ -9,6 +10,7 @@ import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/com
 import type { AgentRuntimeConfig } from "./agent-runtime-config.server";
 import {
   agentRuntimeSelectionRefusal,
+  codexCompatibleSelection,
   type AgentRuntimeRefusalWithoutModel,
   type AgentRuntimeSelection,
   type AgentRuntimeSelectionRefusal,
@@ -100,6 +102,14 @@ export async function computerRuntimeRefusal(
     ),
     providers,
     models: models ?? [],
+    ...(connection && providers.has(RUNTIME_PROVIDER.CODEX) && codexCompatibleSelection(config)
+      ? {
+          codexCompatible: await getCodexCompatibleCapabilityLease().supports(
+            workspaceId,
+            computerId,
+          ),
+        }
+      : {}),
   };
   return options.requireModel === false
     ? agentRuntimeSelectionRefusal(config, facts, { requireModel: false })
@@ -113,7 +123,9 @@ export function storedRuntimeSelection(config: AgentRuntimeConfig): AgentRuntime
     model: config.model,
     modelProvider: config.modelProvider,
     reasoning: config.reasoning,
-    hasApiKey: config.provider.kind === "coforge" && Boolean(config.provider.apiKey),
+    hasApiKey:
+      config.provider.kind === "codex-compatible" ||
+      (config.provider.kind === "coforge" && Boolean(config.provider.apiKey)),
     fastMode: config.fastMode === true,
   };
 }

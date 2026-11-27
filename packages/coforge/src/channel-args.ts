@@ -9,7 +9,14 @@ export type ChannelManagementInvocation = {
   json?: boolean;
 };
 
-const CHANNEL_MANAGEMENT_BOOLEAN_FLAGS = new Set(["--private", "--public", "--json"]);
+const CHANNEL_MANAGEMENT_BOOLEAN_FLAGS = new Set([
+  "--private",
+  "--public",
+  "--no-announcement",
+  "--json",
+]);
+
+const DM_ANNOUNCEMENT_TARGET = /^(?:dm:)?@[a-z0-9][a-z0-9_-]{0,63}(?:~(?:human|agent))?$/;
 
 /** `--public`/`--private` as a visibility, or none; both at once is refused, as Raft does. */
 function visibilityFlag(values: Map<string, string>, command: string) {
@@ -150,32 +157,58 @@ export function parseChannelManagementArgs(args: readonly string[]): ChannelMana
     };
   }
   if (sub === "update") {
-    const values = parseChannelFlags(args.slice(1), [
-      "--target",
-      "--name",
-      "--description",
-      "--public",
-      "--private",
-      "--json",
-    ]);
+    const values = parseChannelFlags(
+      args.slice(1),
+      [
+        "--target",
+        "--name",
+        "--description",
+        "--public",
+        "--private",
+        "--announcement",
+        "--no-announcement",
+        "--json",
+      ],
+      "channel update",
+    );
     const visibility = visibilityFlag(values, "channel update");
     const target = values.get("--target");
     if (!target) throw invalidArgument("channel update", "--target is required.");
     const name = values.get("--name");
     const description = values.get("--description");
-    if (name === undefined && description === undefined && visibility === undefined)
+    if (values.has("--announcement") && values.has("--no-announcement"))
       throw invalidArgument(
         "channel update",
-        "Provide at least one of --name, --description, --public, or --private.",
+        "Use either --announcement or --no-announcement, not both.",
       );
+    const announcement = values.has("--no-announcement") ? null : values.get("--announcement");
+    if (
+      name === undefined &&
+      description === undefined &&
+      visibility === undefined &&
+      announcement === undefined
+    )
+      throw invalidArgument(
+        "channel update",
+        "Provide at least one of --name, --description, --public, --private, --announcement, or --no-announcement.",
+      );
+    const isDmTarget = DM_ANNOUNCEMENT_TARGET.test(target);
+    if (isDmTarget) {
+      if (name !== undefined || description !== undefined || visibility !== undefined)
+        throw invalidArgument(
+          "channel update",
+          "A DM has no name, description, or visibility to change; only --announcement or --no-announcement is supported.",
+        );
+    }
     return {
       command: "channel-manage",
       channel: {
         operation: "update",
-        target: requireRegularChannelTarget(target),
+        target: isDmTarget ? target : requireRegularChannelTarget(target),
         name,
         description,
         ...(visibility ? { visibility } : {}),
+        ...(announcement !== undefined ? { announcement } : {}),
       },
       json: values.has("--json"),
     };

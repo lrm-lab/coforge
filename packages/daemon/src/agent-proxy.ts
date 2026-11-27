@@ -233,6 +233,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     body: "json-object",
     handler: "agentChannel",
     parse: ({ fields }) => parseChannelCommand(fields),
+    domainFailure: domain.channelDomainFailure,
   }),
   defineRoute({
     family: "agent-api/action-prepare",

@@ -39,6 +39,19 @@ export async function advanceReadPosition(
     WHERE "artifact_read_positions"."version" < EXCLUDED."version"`;
 }
 
+export async function markSeenSettled(
+  db: Pick<PositionDb, "$executeRaw">,
+  input: { artifactId: string; agentId: string; settledAt: Date },
+): Promise<void> {
+  await db.$executeRaw`
+    INSERT INTO "artifact_read_positions" ("artifactId", "agentId", "version", "seenSettledAt")
+    VALUES (${input.artifactId}::uuid, ${input.agentId}::uuid, 0, ${input.settledAt})
+    ON CONFLICT ("artifactId", "agentId") DO UPDATE
+    SET "seenSettledAt" = EXCLUDED."seenSettledAt"
+    WHERE "artifact_read_positions"."seenSettledAt" IS NULL
+       OR "artifact_read_positions"."seenSettledAt" < EXCLUDED."seenSettledAt"`;
+}
+
 export async function noteReadPosition(
   db: Pick<PositionDb, "$executeRaw">,
   input: { artifactId: string; agentId: string; version: number },

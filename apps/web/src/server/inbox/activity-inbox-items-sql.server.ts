@@ -94,15 +94,19 @@ function conversationItemVisibleSql(userId: string) {
 
 export const conversationPastDoneSql = Prisma.sql`(latest."sequence" > COALESCE(cm."doneThroughSequence", 0))`;
 
-const mutedChannelItemSql = Prisma.sql`(cm."notificationLevel" = 'muted' AND c."channelName" IS NOT NULL)`;
+export function activityMentionsOnlySql(channelName: Prisma.Sql) {
+  return Prisma.sql`(${channelName} IS NOT NULL AND cm."notificationLevel" IN ('muted', 'relevant'))`;
+}
+
+const channelMentionsOnlySql = activityMentionsOnlySql(Prisma.sql`c."channelName"`);
 
 const conversationListedActivitySql = Prisma.sql`(${conversationPastDoneSql}
-  AND (NOT ${mutedChannelItemSql} OR mention."firstId" IS NOT NULL))`;
+  AND (NOT ${channelMentionsOnlySql} OR mention."firstId" IS NOT NULL))`;
 
 function conversationLatestSql(mentionColumn: string, latestColumn: string) {
   const mention = Prisma.raw(`mention."${mentionColumn}"`);
   const latest = Prisma.raw(`latest."${latestColumn}"`);
-  return Prisma.sql`CASE WHEN ${mutedChannelItemSql} AND mention."firstId" IS NOT NULL
+  return Prisma.sql`CASE WHEN ${channelMentionsOnlySql} AND mention."firstId" IS NOT NULL
     THEN ${mention} ELSE ${latest} END`;
 }
 
@@ -249,7 +253,7 @@ export function conversationItemRowsSql(workspaceId: string, userId: string) {
       ${conversationListedActivitySql} AS "pastDone",
       pin."sortOrder" AS "pinOrder",
       pin."createdAt" AS "pinnedAt",
-      CASE WHEN ${mutedChannelItemSql} THEN mention."unread"
+      CASE WHEN ${channelMentionsOnlySql} THEN mention."unread"
         ELSE unread."found" IS NOT NULL END AS "hasUnread",
       mention."unread" AS "unreadMention",
       mention."firstId" AS "firstMentionMessageId",
@@ -262,7 +266,7 @@ export function conversationItemRowsSql(workspaceId: string, userId: string) {
      AND pin."conversationId" = cm."conversationId"
     ${unreadProbeLateral(
       conversationUnreadMessageSql,
-      Prisma.sql`NOT ${mutedChannelItemSql} AND ${conversationUnreadGateSql}`,
+      Prisma.sql`NOT ${channelMentionsOnlySql} AND ${conversationUnreadGateSql}`,
     )}
     ${conversationMentionLateral}
     WHERE ${conversationItemVisibleSql(userId)}
@@ -304,12 +308,12 @@ export function conversationUnreadAttentionRowsSql(workspaceId: string, userId: 
   return Prisma.sql`
     SELECT
       'conversation:' || cm."conversationId" AS "key",
-      CASE WHEN ${mutedChannelItemSql} THEN mention."lastAt" ELSE latest."createdAt" END AS "latestAt",
-      CASE WHEN ${mutedChannelItemSql} THEN mention."lastSequence" ELSE latest."sequence" END AS "latestSequence"
+      CASE WHEN ${channelMentionsOnlySql} THEN mention."lastAt" ELSE latest."createdAt" END AS "latestAt",
+      CASE WHEN ${channelMentionsOnlySql} THEN mention."lastSequence" ELSE latest."sequence" END AS "latestSequence"
     FROM ${conversationItemsSql(workspaceId, userId)}
     ${unreadProbeLateral(
       conversationUnreadMessageSql,
-      Prisma.sql`NOT ${mutedChannelItemSql}
+      Prisma.sql`NOT ${channelMentionsOnlySql}
         AND ${conversationItemVisibleSql(userId)}
         AND ${conversationActiveUnreadGateSql}`,
     )}
@@ -322,12 +326,12 @@ export function conversationUnreadAttentionRowsSql(workspaceId: string, userId: 
       WHERE mm."memberId" = cm."id"
         AND m."threadRootId" IS NULL
         AND m."sequence" > COALESCE(cm."doneThroughSequence", 0)
-    ) mention ON ${mutedChannelItemSql}
+    ) mention ON ${channelMentionsOnlySql}
       AND ${conversationActiveUnreadGateSql}
     WHERE ${conversationItemVisibleSql(userId)}
       AND ${conversationActiveUnreadGateSql}
       AND (
-        CASE WHEN ${mutedChannelItemSql}
+        CASE WHEN ${channelMentionsOnlySql}
           THEN COALESCE(mention."unread", FALSE)
           ELSE unread."found" IS NOT NULL
         END

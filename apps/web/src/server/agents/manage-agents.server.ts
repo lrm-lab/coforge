@@ -1,3 +1,5 @@
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
+import { configureCodexCompatibleProvider } from "./codex-compatible-config.server";
 import { logAgentCreated } from "#src/server/conversations/direct-conversation-log.server";
 import {
   RUNTIME_PROVIDER,
@@ -45,6 +47,7 @@ export type AgentCreateInput = {
   maxOutputTokens?: number;
   computerId: string;
   apiKey?: string;
+  baseUrl?: string;
   /** Defaults to public when omitted, matching every creation path except the
    * weekly-report Collector Agent, which is created private outside this use case. */
   visibility?: AgentVisibility;
@@ -108,6 +111,9 @@ export class ManageAgents {
       | Promise<Pick<AgentRuntimeCredentials, "encrypt">>,
     /** Pushes a running Agent's new configuration instead of restarting it; the default restarts. */
     private readonly configApply = new AgentConfigApply(),
+    private readonly environmentEncryptionKey = async (): Promise<Uint8Array<ArrayBuffer>> => {
+      throw new AppError("INTERNAL_ERROR", { errorId: "agent-credential-unavailable" });
+    },
   ) {}
 
   list(principal: AgentPrincipal) {
@@ -143,6 +149,7 @@ export class ManageAgents {
       ...(input.maxOutputTokens === undefined ? {} : { maxOutputTokens: input.maxOutputTokens }),
       hasApiKey: Boolean(apiKeyInput),
     };
+    const compatible = selectsCodexCompatible(selection.provider, selection.modelProvider);
     if (selection.provider === RUNTIME_PROVIDER.COFORGE && !apiKeyInput)
       throw new AppError("INVALID_INPUT", { errorId: "agent-api-key-required" });
     if (
@@ -155,18 +162,28 @@ export class ManageAgents {
     )
       throw new AppError("INVALID_INPUT", { errorId: "agent-runtime-unavailable" });
     const agentId = crypto.randomUUID();
-    const encryptedApiKey = apiKeyInput
-      ? await this.#encrypt(agentId, selection.modelProvider, apiKeyInput)
+    const compatibleProvider = compatible
+      ? await configureCodexCompatibleProvider(
+          agentId,
+          { ...input, model: selection.model },
+          undefined,
+          this.environmentEncryptionKey,
+        )
       : undefined;
+    const encryptedApiKey =
+      apiKeyInput && !compatible
+        ? await this.#encrypt(agentId, selection.modelProvider, apiKeyInput)
+        : undefined;
     const storedProvider =
-      selection.modelProvider &&
+      compatibleProvider ??
+      (selection.modelProvider &&
       (selection.provider === RUNTIME_PROVIDER.COFORGE || encryptedApiKey)
         ? {
             kind: "coforge" as const,
             providerId: selection.modelProvider,
             ...(encryptedApiKey ? { apiKey: encryptedApiKey } : {}),
           }
-        : { kind: "default" as const };
+        : { kind: "default" as const });
     const agent = await this.agents.create({
       id: agentId,
       workspaceId: principal.workspaceId,
@@ -231,6 +248,15 @@ export class ManageAgents {
       // task #517: a full re-selection rewrites the config without reading the old one — an
       // unreadable stored config cannot block the repair that would replace it.
       const currentConfig = readableRuntimeConfig(current.runtimeConfig, current.id);
+      const compatible = selectsCodexCompatible(selection.provider, selection.modelProvider);
+      const compatibleProvider = compatible
+        ? await configureCodexCompatibleProvider(
+            current.id,
+            { ...input, model: selection.model },
+            currentConfig?.provider,
+            this.environmentEncryptionKey,
+          )
+        : undefined;
       const sameProvider =
         currentConfig?.provider.kind === "coforge" &&
         currentConfig.runtime === selection.provider &&
@@ -239,21 +265,23 @@ export class ManageAgents {
         sameProvider && currentConfig?.provider.kind === "coforge"
           ? currentConfig.provider.apiKey
           : undefined;
-      const encryptedApiKey = apiKeyInput
-        ? await this.#encrypt(current.id, selection.modelProvider, apiKeyInput)
-        : undefined;
+      const encryptedApiKey =
+        apiKeyInput && !compatible
+          ? await this.#encrypt(current.id, selection.modelProvider, apiKeyInput)
+          : undefined;
       const apiKey = encryptedApiKey ?? preservedApiKey;
       if (selection.provider === RUNTIME_PROVIDER.COFORGE && !apiKey)
         throw new AppError("INVALID_INPUT", { errorId: "agent-api-key-required" });
       const runtimeConfig = agentRuntimeConfig(
         selection,
-        selection.modelProvider && (selection.provider === RUNTIME_PROVIDER.COFORGE || apiKey)
-          ? {
-              kind: "coforge",
-              providerId: selection.modelProvider,
-              ...(apiKey ? { apiKey } : {}),
-            }
-          : { kind: "default" },
+        compatibleProvider ??
+          (selection.modelProvider && (selection.provider === RUNTIME_PROVIDER.COFORGE || apiKey)
+            ? {
+                kind: "coforge",
+                providerId: selection.modelProvider,
+                ...(apiKey ? { apiKey } : {}),
+              }
+            : { kind: "default" }),
         currentConfig?.environment,
       );
       const runtimeChanged = JSON.stringify(currentConfig) !== JSON.stringify(runtimeConfig);
@@ -262,11 +290,11 @@ export class ManageAgents {
         (runtimeChanged || computerChanged) &&
         ((await this.availability.refusal?.(principal.workspaceId, principal.userId, computerId, {
           ...selection,
-          hasApiKey: Boolean(apiKey),
+          hasApiKey: Boolean(apiKey || compatibleProvider),
         })) ??
           ((await this.availability.canRun(principal.workspaceId, principal.userId, computerId, {
             ...selection,
-            hasApiKey: Boolean(apiKey),
+            hasApiKey: Boolean(apiKey || compatibleProvider),
           }))
             ? null
             : "unavailable"));
@@ -294,7 +322,10 @@ export class ManageAgents {
         {
           changed: runtimeChanged,
           computerChanged,
-          providerChanged: currentConfig?.runtime !== runtimeConfig.runtime,
+          providerChanged:
+            currentConfig?.runtime !== runtimeConfig.runtime ||
+            ((currentConfig?.provider.kind === "codex-compatible" || compatible) &&
+              JSON.stringify(currentConfig?.provider) !== JSON.stringify(runtimeConfig.provider)),
         },
         (fence) => this.agents.update(current.id, data, fence),
       );

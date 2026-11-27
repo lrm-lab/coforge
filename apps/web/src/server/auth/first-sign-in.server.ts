@@ -20,7 +20,7 @@ import { isFallbackUsername } from "#src/server/auth/username-allocation.server"
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isWorkspaceSlugFree } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
-import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
+import { ensureWeeklyReportAssistantIfEnabled } from "#src/server/records/weekly-reports-gate.server";
 import {
   PrismaWorkspaceEnrollmentStore,
   WorkspaceEnrollment,
@@ -326,7 +326,7 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
         startIfOwed: true,
         locale,
       });
-      return ensureWeeklyReportAssistant(db, request);
+      return ensureWeeklyReportAssistantIfEnabled(db, request);
     },
     ({ workspaceId, userId, locale }) =>
       provisionWorkspaceEnrollment(db, workspaceId, userId, { locale }),

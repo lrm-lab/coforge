@@ -1,13 +1,6 @@
 import { z } from "zod";
 import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
 
-/**
- * The profile panel's URL state, shared by the Members directory and every conversation page:
- * `profile=agent:<uuid>` opens the panel on a given Agent, `agentTab` selects its tab, and
- * `profile=user:<uuid>` opens a person's panel in the same slot. Kept in its own module so the search-param shape, its zod validators and the tiny encode/decode helpers have
- * one home the routes and the panel both import, instead of separate copies of the same regex.
- */
-
 const AGENT_PROFILE_PREFIX = "agent:";
 const UUID_SOURCE = UUID_LIKE_SOURCE;
 const UUID_PATTERN = new RegExp(`^${UUID_SOURCE}$`, "i");
@@ -28,44 +21,29 @@ export const AGENT_PROFILE_TABS = [
 ] as const;
 export type AgentProfileTab = (typeof AGENT_PROFILE_TABS)[number];
 
-/** Validates the raw `profile` search param: `undefined`, `agent:<uuid>` or `user:<uuid>`.
- * Malformed values fall back to `undefined` (closed) rather than erroring, matching the routes'
- * existing `.catch()` convention for `threadRootId`/`message`. */
 export const profileParamSchema = z.string().regex(PROFILE_PATTERN).optional().catch(undefined);
 
 export const agentProfileTabParamSchema = z.enum(AGENT_PROFILE_TABS).optional().catch(undefined);
 
-/** The `profile` search param value that opens the panel on one Agent. */
 export function formatAgentProfileParam(agentId: string): string {
   return `${AGENT_PROFILE_PREFIX}${agentId}`;
 }
 
-/** The `profile` search param value that opens the panel on one person. */
 export function formatPersonProfileParam(userId: string): string {
   return `${PERSON_PROFILE_PREFIX}${userId}`;
 }
 
-/** The person's id encoded in a `profile` search param, or `undefined` when it names no person. */
 export function personIdFromProfileParam(profile: string | undefined): string | undefined {
   return idFromProfileParam(profile, PERSON_PROFILE_PREFIX);
 }
 
-export function agentProfileSearchWithoutThread<
-  T extends { threadRootId?: string; details?: unknown; doc?: string; docFull?: boolean },
->(previous: T): Omit<T, "threadRootId" | "details" | "doc" | "docFull"> {
-  const {
-    threadRootId: _threadRootId,
-    details: _details,
-    doc: _doc,
-    docFull: _docFull,
-    ...rest
-  } = previous;
+export function agentProfileSearchBase<
+  T extends { details?: unknown; doc?: string; docFull?: boolean },
+>(previous: T): Omit<T, "details" | "doc" | "docFull"> {
+  const { details: _details, doc: _doc, docFull: _docFull, ...rest } = previous;
   return rest;
 }
 
-/** The Agent id encoded in a `profile` search param, or `undefined` when the panel is closed or
- * the param does not name an Agent (already validated by `profileParamSchema`, but callers
- * that read raw search state — e.g. before validation — can use this defensively too). */
 export function agentIdFromProfileParam(profile: string | undefined): string | undefined {
   return idFromProfileParam(profile, AGENT_PROFILE_PREFIX);
 }
@@ -94,8 +72,6 @@ export function visibleAgentProfileTabs(
   return AGENT_PROFILE_TABS.filter((tab) => visible[tab]);
 }
 
-/** The tab the panel shows: the requested one when the viewer can see it, otherwise the first of
- * `tabs` — the viewer's visible tabs in their saved order. */
 export function resolveAgentProfileTab(
   requested: AgentProfileTab | undefined,
   tabs: readonly AgentProfileTab[],

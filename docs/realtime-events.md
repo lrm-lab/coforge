@@ -15,8 +15,8 @@ omitted from the receiver column; it only routes each event to the feature files
 | `agent.changed.v1` | `server/agents/agent-visibility-realtime.server.ts` | `features/agents/agent-status-channel.ts` |
 | `agent.control.v1` | `server/agents/agent-control-events.server.ts` (via `agent-control-operations.server.ts`, `agent-control-receiver.server.ts`) | `features/agents/agent-status-realtime.ts`, `features/agents/agent-control-realtime.ts` |
 | `agent.token_usage.recorded.v1` | `server/centrifugo/agent-token-usage-receiver.server.ts` | `features/agents/agent-status-channel.ts`, `features/agents/agent-status-realtime.ts`, `features/agents/workspace-agents-realtime.tsx` |
-| `artifact.version.published.v1` | `server/artifacts/artifact-signals.server.ts` | `features/artifacts/artifact-realtime.ts` |
-| `artifact.access.changed.v1` | `server/artifacts/artifact-signals.server.ts` | `features/artifacts/artifact-realtime.ts` |
+| `artifact.version.published.v1` | `server/artifacts/artifact-signals.server.ts` | `features/artifacts/artifact-realtime.ts`, `features/conversations/pinned-artifact-queries.ts` |
+| `artifact.access.changed.v1` | `server/artifacts/artifact-signals.server.ts` | `features/artifacts/artifact-realtime.ts`, `features/conversations/pinned-artifact-queries.ts` |
 | `artifact.data.changed.v1` | `server/artifacts/artifact-signals.server.ts` | `features/artifacts/artifact-realtime.ts` |
 | `artifact.comments.changed.v1` | `server/artifacts/artifact-signals.server.ts` | `features/artifacts/artifact-realtime.ts` |
 | `channel.created.v1` | `server/conversations/conversation-realtime.server.ts` | `features/tasks/use-task-overview.ts`, `features/conversations/use-channel-unread.ts`, `features/conversations/conversation-unread.ts`, `features/conversations/conversation-queries.ts`, `features/conversations/sidebar-collections.ts`, `features/conversations/channel-signals.ts`, `features/conversations/channels.functions.ts`, `features/conversations/conversation-navigation.tsx`, `routes/w.$workspaceSlug/_chat.tsx` |
@@ -30,6 +30,7 @@ omitted from the receiver column; it only routes each event to the feature files
 | `conversation.thread-unread.changed.v1` | `server/conversations/thread-unread-marks.server.ts` | `features/conversations/use-channel-unread.ts`, `features/inbox/use-activity-inbox-realtime.ts` |
 | `conversation.thread-unread.invalidated.v1` | `server/conversations/channel-thread-unread-events.server.ts` | — |
 | `conversation.read.v1` | `server/conversations/conversation-read-realtime.server.ts` | `features/conversations/use-read-ticks.ts` |
+| `conversation.pinned_artifact.changed.v1` | `server/conversations/conversation-pinned-artifact.server.ts` | `features/conversations/pinned-artifact-queries.ts` |
 | `dm.created.v1` | `server/conversations/direct-conversations.server.ts`, `server/db/repositories/user-agent-direct.repositories.server.ts` | — |
 | `dm.opened.v1` | `server/conversations/direct-conversations.server.ts`, `server/conversations/chat-sections.server.ts` | `features/conversations/sidebar-lists.ts`, `features/conversations/sidebar-signals.ts` |
 | `dm.closed.v1` | `server/conversations/direct-conversations.server.ts` | `features/conversations/sidebar-lists.ts`, `features/conversations/sidebar-signals.ts` |

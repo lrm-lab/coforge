@@ -34,10 +34,12 @@ import {
   formatArtifactMoved,
   formatArtifactRead,
   formatArtifactSaved,
+  formatArtifactSettled,
   type ArtifactDeletedAnswer,
   type ArtifactMovedAnswer,
   type ArtifactReadAnswer,
   type ArtifactSavedAnswer,
+  type ArtifactSettledAnswer,
 } from "#src/artifact-format";
 import { formatFollow, type FollowAnswer } from "#src/artifact-follow-format";
 
@@ -51,7 +53,18 @@ export type ArtifactRequestInvocation = {
   command: "artifact";
   request: Extract<
     AgentArtifactRequest,
-    { operation: "list" | "read" | "move" | "delete" | "follow" | "unfollow" | "save" }
+    {
+      operation:
+        | "list"
+        | "read"
+        | "move"
+        | "delete"
+        | "follow"
+        | "unfollow"
+        | "settle"
+        | "unsettle"
+        | "save";
+    }
   >;
   allFiles?: boolean;
   output?: string;
@@ -75,9 +88,20 @@ const OPERATIONS = [
   ...COMMENT_OPERATIONS,
   "follow",
   "unfollow",
+  "settle",
+  "unsettle",
 ] as const;
 type Operation = (typeof OPERATIONS)[number];
-type RequestOperation = "list" | "read" | "move" | "delete" | "follow" | "unfollow" | "save";
+type RequestOperation =
+  | "list"
+  | "read"
+  | "move"
+  | "delete"
+  | "follow"
+  | "unfollow"
+  | "settle"
+  | "unsettle"
+  | "save";
 
 const FLAGS: Record<RequestOperation, FlagSpec> = {
   list: { text: ["--target", "--query", "--after"], count: ["--limit"], positionals: 0 },
@@ -87,6 +111,8 @@ const FLAGS: Record<RequestOperation, FlagSpec> = {
   save: { positionals: 1 },
   follow: { positionals: 1 },
   unfollow: { positionals: 1 },
+  settle: { positionals: 1 },
+  unsettle: { positionals: 1 },
 };
 
 const LINK_SHARING_TARGETS = ["public", "anyone-with-link"];
@@ -138,9 +164,14 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
       };
     case "follow":
     case "unfollow":
+    case "settle":
+    case "unsettle":
       return {
         command: "artifact",
-        request: { operation: operation as "follow" | "unfollow", artifact: artifact! },
+        request: {
+          operation: operation as "follow" | "unfollow" | "settle" | "unsettle",
+          artifact: artifact!,
+        },
         ...options,
       };
     case "list":
@@ -220,6 +251,11 @@ export async function runArtifact(
     case "follow":
     case "unfollow":
       return json ? result : formatFollow(result as FollowAnswer);
+    case "settle":
+    case "unsettle":
+      return json
+        ? result
+        : formatArtifactSettled(result as ArtifactSettledAnswer, request.operation === "settle");
     case "read": {
       const read = result as ArtifactReadAnswer;
       if (invocation.output !== undefined) await writeFile(invocation.output, read.text);

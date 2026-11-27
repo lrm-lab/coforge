@@ -52,12 +52,14 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 export function PersonProfilePanel({
   userId,
   onClose,
+  hideClose = false,
   back,
   onOpenAgent,
   pageHeading = false,
 }: {
   userId: string;
   onClose: () => void;
+  hideClose?: boolean;
   back?: PanelBack;
   onOpenAgent?: (agentId: string) => void;
   pageHeading?: boolean;
@@ -101,7 +103,7 @@ export function PersonProfilePanel({
         <div className="flex h-12 shrink-0 items-center gap-2 px-5">
           {back && <BackButton back={back} />}
           <span className="flex-1" />
-          <CloseButton onClose={onClose} />
+          {!hideClose && <CloseButton onClose={onClose} />}
         </div>
         {missing ? (
           <Empty className="px-6">
@@ -147,7 +149,7 @@ export function PersonProfilePanel({
           tooltip={m.agent_profile_panel_message()}
           onClick={() => void openDirectConversation({ userId: profile.id })}
         />
-        <CloseButton onClose={onClose} />
+        {!hideClose && <CloseButton onClose={onClose} />}
       </header>
       <PersonProfileBody profile={profile} onRemoved={onClose} onOpenAgent={onOpenAgent} />
     </aside>

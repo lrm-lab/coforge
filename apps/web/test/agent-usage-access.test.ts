@@ -31,10 +31,19 @@ const reading: NonNullable<UsageReadResult["result"]> = {
   },
 };
 
-function fixture({ owner = true, computerAllowed = true, supported = true, balance = true } = {}) {
+function fixture({
+  owner = true,
+  computerAllowed = true,
+  supported = true,
+  balance = true,
+  compatible = false,
+} = {}) {
   const published: Uint8Array[] = [];
   const access = new AgentUsageAccess({
-    resolve: async () => (owner ? target : undefined),
+    resolve: async () =>
+      owner
+        ? { ...target, ...(compatible ? { billing: "provider-api-key" as const } : {}) }
+        : undefined,
     usageOffer: async () =>
       computerAllowed
         ? { offered: true, runtime: { ownerId: balance ? "owner" : "another-owner" } as never }
@@ -178,4 +187,15 @@ test("a pre-capability worker cannot write an Agent scan's unscoped reply into t
     ),
   ).toBeInstanceOf(Uint8Array);
   expect(put).toEqual(["computer-scan"]);
+});
+
+test("a compatible Codex Agent reports provider billing without scanning subscription usage", async () => {
+  const { access, published } = fixture({ compatible: true });
+  expect(await access.read(principal, target.agentId)).toEqual({
+    state: "fresh",
+    billing: "provider-api-key",
+    target: { computerId: target.computerId, runtimeConfigRevision: target.runtimeConfigRevision },
+  });
+  expect(await access.scan(principal, target.agentId)).toEqual({ status: "unavailable" });
+  expect(published).toHaveLength(0);
 });

@@ -1,4 +1,4 @@
-import { useCallback, useState, type FC, type ReactNode } from "react";
+import { useCallback, useRef, useState, type FC, type ReactNode, type RefObject } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Text } from "react-aria-components";
@@ -7,10 +7,11 @@ import { AlertTriangle, LogOut01, Trash01 } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { SettingsCard, SettingsGroup } from "#src/components/settings-layout";
 import { SaveErrorMessage, saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { isAppError, type AppError, type AppErrorCode } from "#src/lib/app-error";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { DepartureImpact, useDepartureImpact } from "./departure-impact-view";
 import { leaveWorkspace, previewWorkspaceLeave } from "./members.functions";
@@ -97,12 +98,12 @@ function DangerAction({
   );
 }
 
-function useWorkspaceDeparture({
+function useWorkspaceDeparture<TInput = void>({
   write,
   outAlready,
   messageFor,
 }: {
-  write: () => Promise<{ nextWorkspaceSlug: string | null }>;
+  write: (input: TInput) => Promise<{ nextWorkspaceSlug: string | null }>;
   outAlready: readonly AppErrorCode[];
   messageFor: (refusal: AppError | undefined) => string;
 }) {
@@ -110,14 +111,18 @@ function useWorkspaceDeparture({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<SaveError | null>(null);
 
-  async function depart() {
+  async function depart(input: TInput, onRefusal?: (refusal: AppError) => boolean) {
     setBusy(true);
     setError(null);
     let next: string | null;
     try {
-      next = (await write()).nextWorkspaceSlug;
+      next = (await write(input)).nextWorkspaceSlug;
     } catch (cause) {
       const refusal = isAppError(cause) ? cause : undefined;
+      if (refusal && onRefusal?.(refusal)) {
+        setBusy(false);
+        return;
+      }
       if (!refusal || !outAlready.includes(refusal.code)) {
         setError(saveErrorFrom(messageFor(refusal), cause));
         setBusy(false);
@@ -145,7 +150,7 @@ function LeaveWorkspaceDialog({ open, workspaceName, onClose }: DialogProps) {
   const preview = useServerFn(previewWorkspaceLeave);
   const load = useCallback(() => preview(), [preview]);
   const impact = useDepartureImpact({ open, subject: "leave", load });
-  const { busy, error, depart, clearError } = useWorkspaceDeparture({
+  const { busy, error, depart, clearError } = useWorkspaceDeparture<void>({
     write: () => leave(),
     outAlready: ["NOT_FOUND", "ACCESS_DENIED"],
     messageFor: (refusal) =>
@@ -154,24 +159,38 @@ function LeaveWorkspaceDialog({ open, workspaceName, onClose }: DialogProps) {
         : m.settings_leave_workspace_error(),
   });
 
+  const form = useAppForm({
+    defaultValues: {},
+    onSubmit: async () => {
+      if (impact.state.kind === "loading" || busy) return;
+      await depart();
+    },
+  });
+
   return (
-    <DangerDialog
-      open={open}
-      busy={busy}
-      title={m.settings_leave_workspace()}
-      description={m.settings_leave_workspace_confirm({ name: workspaceName })}
-      detail={
-        <DepartureImpact state={impact.state} subject={{ kind: "leave" }} onRetry={impact.retry} />
-      }
-      isConfirmDisabled={impact.state.kind === "loading"}
-      error={error}
-      onClose={() => {
-        clearError();
-        onClose();
-      }}
-      confirmLabel={busy ? m.settings_leave_workspace_leaving() : m.settings_leave_workspace()}
-      onConfirm={() => void depart()}
-    />
+    <form.AppForm>
+      <DangerDialog
+        open={open}
+        busy={busy}
+        title={m.settings_leave_workspace()}
+        description={m.settings_leave_workspace_confirm({ name: workspaceName })}
+        detail={
+          <DepartureImpact
+            state={impact.state}
+            subject={{ kind: "leave" }}
+            onRetry={impact.retry}
+          />
+        }
+        isConfirmDisabled={impact.state.kind === "loading"}
+        error={error}
+        onClose={() => {
+          clearError();
+          onClose();
+        }}
+        confirmLabel={busy ? m.settings_leave_workspace_leaving() : m.settings_leave_workspace()}
+        onConfirm={() => void form.handleSubmit()}
+      />
+    </form.AppForm>
   );
 }
 
@@ -190,51 +209,91 @@ function DeleteWorkspaceDialog({
   onClose,
 }: DialogProps & { workspaceSlug: string }) {
   const controlSize = useDialogControlSize();
+  const formRef = useRef<HTMLFormElement>(null);
   const remove = useServerFn(deleteWorkspace);
-  const [typed, setTyped] = useState("");
-  const { busy, error, depart, clearError } = useWorkspaceDeparture({
-    write: () => remove({ data: { confirmSlug: typed } }),
+
+  const { busy, error, depart, clearError } = useWorkspaceDeparture<string>({
+    write: (confirmSlug) => remove({ data: { confirmSlug } }),
     outAlready: ["NOT_FOUND"],
     messageFor: (refusal) => deleteRefusalMessage(refusal, workspaceSlug),
   });
 
+  const form = useAppForm({
+    defaultValues: { confirmSlug: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      if (busy) return;
+      await depart(value.confirmSlug, (refusal) => {
+        if (refusal.code !== "INVALID_INPUT") return false;
+        setFieldServerError(
+          form,
+          "confirmSlug",
+          m.settings_delete_workspace_mismatch({ slug: workspaceSlug }),
+          formRef.current,
+        );
+        return true;
+      });
+    },
+  });
+
   return (
-    <DangerDialog
-      open={open}
-      busy={busy}
-      title={m.settings_delete_workspace()}
-      description={m.settings_delete_workspace_confirm({ name: workspaceName })}
-      error={error}
-      onClose={() => {
-        setTyped("");
-        clearError();
-        onClose();
-      }}
-      confirmLabel={busy ? m.settings_delete_workspace_deleting() : m.settings_delete_workspace()}
-      isConfirmDisabled={typed !== workspaceSlug}
-      onConfirm={() => void depart()}
-    >
-      <div className="mx-6 mt-4">
-        <Input
-          size={controlSize}
-          label={m.settings_delete_workspace_type_slug({ slug: workspaceSlug })}
-          placeholder={workspaceSlug}
-          autoFocus
-          autoComplete="off"
-          spellCheck="false"
-          inputClassName="font-mono"
-          value={typed}
-          onChange={setTyped}
-          isDisabled={busy}
-        />
-      </div>
-    </DangerDialog>
+    <form.AppForm>
+      <form.Subscribe selector={(state) => state.values.confirmSlug !== workspaceSlug}>
+        {(slugMismatch) => (
+          <DangerDialog
+            open={open}
+            busy={busy}
+            formRef={formRef}
+            title={m.settings_delete_workspace()}
+            description={m.settings_delete_workspace_confirm({ name: workspaceName })}
+            error={error}
+            onClose={() => {
+              form.reset();
+              clearError();
+              onClose();
+            }}
+            confirmLabel={
+              busy ? m.settings_delete_workspace_deleting() : m.settings_delete_workspace()
+            }
+            isConfirmDisabled={slugMismatch}
+            onConfirm={() => void form.handleSubmit()}
+          >
+            <div className="mx-6 mt-4">
+              <form.AppField
+                name="confirmSlug"
+                validators={{
+                  onSubmit: ({ value }) =>
+                    value === workspaceSlug
+                      ? undefined
+                      : m.settings_delete_workspace_mismatch({ slug: workspaceSlug }),
+                }}
+              >
+                {(field) => (
+                  <field.Input
+                    size={controlSize}
+                    label={m.settings_delete_workspace_type_slug({ slug: workspaceSlug })}
+                    placeholder={workspaceSlug}
+                    autoFocus
+                    autoComplete="off"
+                    spellCheck="false"
+                    inputClassName="font-mono"
+                    isDisabled={busy}
+                    onChange={() => clearError()}
+                  />
+                )}
+              </form.AppField>
+            </div>
+          </DangerDialog>
+        )}
+      </form.Subscribe>
+    </form.AppForm>
   );
 }
 
 function DangerDialog({
   open,
   busy,
+  formRef,
   title,
   description,
   detail,
@@ -247,6 +306,7 @@ function DangerDialog({
 }: {
   open: boolean;
   busy: boolean;
+  formRef?: RefObject<HTMLFormElement | null>;
   title: string;
   description: string;
   detail?: ReactNode;
@@ -271,10 +331,12 @@ function DangerDialog({
         <Dialog className="text-left">
           {({ close }) => (
             <form
+              ref={formRef}
+              noValidate
               className="contents"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!isConfirmDisabled && !busy) onConfirm();
+                if (!busy) onConfirm();
               }}
             >
               <DialogHeader title={title} onClose={busy ? undefined : close} />

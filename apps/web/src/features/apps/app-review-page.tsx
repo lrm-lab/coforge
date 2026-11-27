@@ -9,6 +9,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Alert } from "#src/components/ui/alert";
 import { EmptyState } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { KeyValueList, KeyValueRow } from "#src/components/ui/key-value-list";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -105,7 +106,6 @@ function ReviewCard({ request }: { request: ReviewRequestSummary }) {
   const homepage = app.homepageUrl === null ? null : new URL(app.homepageUrl);
   const groups = checkPermissionGroups(app.permissionGroups) ?? [];
 
-  /** Sends the decision; the list is read again after it, and after a request someone else decided. */
   async function send(outcome: "approved" | "rejected", reason?: string) {
     try {
       await decide({ data: { requestId: request.requestId, outcome, reason } });
@@ -136,10 +136,14 @@ function ReviewCard({ request }: { request: ReviewRequestSummary }) {
           )}
         </div>
       </div>
-      <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-        <Fact label={m.apps_review_publisher()}>{request.publisherWorkspaceName}</Fact>
-        <Fact label={m.apps_review_category()}>{APP_CATEGORY_LABELS[app.category]()}</Fact>
-        <Fact label={m.apps_review_homepage()}>
+      <KeyValueList labelWidth="wide">
+        <KeyValueRow label={m.apps_review_publisher()}>
+          {request.publisherWorkspaceName}
+        </KeyValueRow>
+        <KeyValueRow label={m.apps_review_category()}>
+          {APP_CATEGORY_LABELS[app.category]()}
+        </KeyValueRow>
+        <KeyValueRow label={m.apps_review_homepage()}>
           {homepage ? (
             <a
               href={homepage.href}
@@ -152,28 +156,28 @@ function ReviewCard({ request }: { request: ReviewRequestSummary }) {
           ) : (
             m.apps_review_none()
           )}
-        </Fact>
-        <Fact label={m.apps_review_requested()}>
+        </KeyValueRow>
+        <KeyValueRow label={m.apps_review_requested()}>
           <time dateTime={request.requestedAt}>
             {hydrated ? formatDateForDisplay(request.requestedAt, null, getLocale()) : ""}
           </time>
-        </Fact>
-        <Fact label={m.apps_review_scopes()}>
-          <span className="font-mono text-xs">{app.allowedScopes.join(", ")}</span>
-        </Fact>
-        <Fact label={m.apps_review_groups()}>
+        </KeyValueRow>
+        <KeyValueRow label={m.apps_review_scopes()} mono valueClassName="text-xs">
+          {app.allowedScopes.join(", ")}
+        </KeyValueRow>
+        <KeyValueRow label={m.apps_review_groups()}>
           {groups.length > 0 ? permissionGroupList(groups) : m.apps_review_none()}
-        </Fact>
-        <Fact label={m.apps_review_events()}>
-          {app.notificationEvents.length > 0 ? (
-            <span className="font-mono text-xs break-words">
-              {app.notificationEvents.join(", ")}
-            </span>
-          ) : (
-            m.apps_review_none()
-          )}
-        </Fact>
-      </dl>
+        </KeyValueRow>
+        <KeyValueRow
+          label={m.apps_review_events()}
+          mono={app.notificationEvents.length > 0}
+          valueClassName={app.notificationEvents.length > 0 ? "text-xs" : undefined}
+        >
+          {app.notificationEvents.length > 0
+            ? app.notificationEvents.join(", ")
+            : m.apps_review_none()}
+        </KeyValueRow>
+      </KeyValueList>
       {error && <Alert color="warning" title={error} />}
       <div className="flex justify-end gap-3">
         <Button
@@ -215,14 +219,5 @@ function ReviewCard({ request }: { request: ReviewRequestSummary }) {
         }}
       />
     </li>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid min-w-0 gap-0.5">
-      <dt className="text-tertiary">{label}</dt>
-      <dd className="text-primary">{children}</dd>
-    </div>
   );
 }

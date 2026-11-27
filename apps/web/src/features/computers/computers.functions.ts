@@ -1,10 +1,15 @@
+import { getCodexCompatibleCapabilityLease } from "#src/server/agents/codex-compatible-capability.server";
 import {
   getComputerUpgradeProgressStore,
   latestComputerUpgradeProgressIds,
   readVisibleComputerUpgradeProgress,
 } from "#src/server/computers/computer-upgrade-progress-wire.server";
 import { createServerFn } from "@tanstack/react-start";
-import { requireRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  requireRuntimeProvider,
+  RUNTIME_PROVIDER,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
 import { machineStatusView } from "#src/features/computers/computer-machine-status";
 import { readCloudComputerImages } from "#src/server/hosts/cloud-image-inventory.server";
@@ -216,7 +221,10 @@ export const listComputers = createServerFn({ method: "GET" })
               avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
               ownedByCurrentUser: agent.ownerId === user.id,
               stopped: agent.stoppedAt !== null,
-              hasApiKey: config?.provider.kind === "coforge" && Boolean(config.provider.apiKey),
+              hasApiKey:
+                (config?.provider.kind === "coforge" && Boolean(config.provider.apiKey)) ||
+                (config?.provider.kind === "codex-compatible" &&
+                  Boolean(config.provider.environment)),
               provider: config?.runtime,
               runtimeAuthSource,
               runtimeConfig: config ? publicAgentRuntimeConfig(config) : undefined,
@@ -247,7 +255,6 @@ export const listComputers = createServerFn({ method: "GET" })
           connectedAt: createdAt,
           ownedByCurrentUser: computer.ownerId === user.id,
           canManageAgents: canManage,
-          // The account and plan only for whoever may sign the runtimes in or out (task #94).
           runtimeAuth: runtimeAuthView(computer.runtimeAuth, {
             showAccount: computer.ownerId === user.id || canManage,
             runtimes: computerRuntimes,
@@ -264,7 +271,6 @@ export const listComputers = createServerFn({ method: "GET" })
     );
   });
 
-/** A Computer owner can ask the connected Daemon for a fresh local workspace inventory. */
 export const scanAgentWorkspaces = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(scanAgentWorkspacesInputSchema)
@@ -277,8 +283,6 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
     );
   });
 
-/** The budgeted file counts and sizes for that same inventory. It never blocks the listing: the
- * page renders the rows first and merges these in when they arrive. */
 export const scanAgentWorkspaceStats = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(scanAgentWorkspacesInputSchema)
@@ -323,6 +327,22 @@ export const upgradeComputer = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(upgradeComputerInputSchema)
   .handler(async ({ context, data }) => runUpgradeComputerAction(context, data));
+
+export const getComputerCodexCompatible = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(computerIdInputSchema)
+  .handler(async ({ context, data }) => {
+    declareNoStore();
+    const { user, db, workspaceId } = context;
+    const { computerId } = data;
+    return (
+      (await runtimeVisibility(db).canSelect(
+        { workspaceId, userId: user.id },
+        computerId,
+        RUNTIME_PROVIDER.CODEX,
+      )) && (await getCodexCompatibleCapabilityLease().supports(workspaceId, computerId))
+    );
+  });
 
 export const getComputerRuntimeCatalog = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])

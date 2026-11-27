@@ -18,6 +18,7 @@ export function useKeptOpenRow(
   opened: HostedConversationTarget | undefined,
   workspaceId: string,
   selectedItem: ActivityInboxItem | undefined,
+  isPlaceholderData = false,
 ) {
   const [selected, setSelected] = useState<string>();
   const [kept, setKept] = useState<KeptRow>();
@@ -31,7 +32,10 @@ export function useKeptOpenRow(
     return [...items, selectedItem];
   }, [filter, items, selectedItem]);
   const openKey = openedItemKey(candidates, opened);
-  const at = filter === "all" || !openKey ? -1 : items.findIndex((item) => item.key === openKey);
+  const at =
+    isPlaceholderData || filter === "all" || !openKey
+      ? -1
+      : items.findIndex((item) => item.key === openKey);
   const retain =
     filter !== "all" &&
     kept &&
@@ -55,10 +59,22 @@ export function useKeptOpenRow(
       return selectedItem && selectedItem.key === (opened ? openKey : selected)
         ? candidates
         : items;
-    if (at >= 0 || !kept || !retain) return items;
+    if (isPlaceholderData || at >= 0 || !kept || !retain) return items;
     const index = items.findIndex((item) => item.key === kept.after) + 1;
     const read = { ...kept.item, unreadCount: 0, firstUnreadMessageId: null, unreadMention: false };
     return [...items.slice(0, index), read, ...items.slice(index)];
-  }, [at, candidates, filter, items, kept, openKey, opened, retain, selected, selectedItem]);
+  }, [
+    at,
+    candidates,
+    filter,
+    isPlaceholderData,
+    items,
+    kept,
+    openKey,
+    opened,
+    retain,
+    selected,
+    selectedItem,
+  ]);
   return { items: shown, release, selected, setSelected };
 }

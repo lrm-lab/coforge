@@ -10,6 +10,12 @@ import {
 } from "#src/server/conversations/channel-read-access.server";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
 import { actorNames, actorOf } from "./artifact-actor-names.server";
+import {
+  resolveSettlementViews,
+  SETTLEMENT_SELECT,
+  type ArtifactSettlementRow,
+  type ArtifactSettlementView,
+} from "./artifact-settlement.server";
 import { epochTimestamp, visibleToReaderSql } from "./artifact-visible.server";
 import {
   artifactAuthorOwnerId,
@@ -76,6 +82,7 @@ const CARD_SELECT = {
   entryFacts: true,
   authorAgentId: true,
   updatedAt: true,
+  ...SETTLEMENT_SELECT,
 } as const;
 
 function card(
@@ -91,11 +98,21 @@ function card(
     entryFacts: Prisma.JsonValue;
     authorAgentId: string | null;
     updatedAt: Date;
-  },
+  } & ArtifactSettlementRow,
   canChange: boolean,
+  settlement: ArtifactSettlementView,
   homeKey: string | null = artifactTier(row) === "workspace" ? "workspace" : row.homeKey,
 ) {
-  const { authorAgentId, entryFacts, ...shown } = row;
+  const {
+    authorAgentId,
+    entryFacts,
+    settledAt: _sa,
+    settledVersion: _sv,
+    settledByKind: _sk,
+    settledById: _si,
+    reopenedAtVersion: _rv,
+    ...shown
+  } = row;
   return {
     ...shown,
     entryFacts: entryFacts as ArtifactEntryFacts | null,
@@ -104,6 +121,8 @@ function card(
     access: artifactAccessTier(row),
     canChange,
     author: authorAgentId ? { agentId: authorAgentId } : null,
+    settled: settlement.settled,
+    reopened: settlement.reopened,
   };
 }
 
@@ -160,6 +179,7 @@ export class ArtifactReads {
           currentVersion: true,
           authorAgentId: true,
           originMessageId: true,
+          ...SETTLEMENT_SELECT,
         },
       }),
       artifactViewer(this.db, workspaceId, reader),
@@ -173,11 +193,24 @@ export class ArtifactReads {
     const canChange = canManageArtifactSharingWithRole(reader, viewer.role, {
       authorAgentOwnerId,
     });
-    const { originMessageId, ...shown } = artifact;
+    const {
+      originMessageId,
+      settledAt: _sa,
+      settledVersion: _sv,
+      settledByKind: _sk,
+      settledById: _si,
+      reopenedAtVersion: _rv,
+      ...shown
+    } = artifact;
     const originHome = artifactHomeConversationId(view.homeKey ?? "");
-    const origin = await this.#origin(originMessageId, originHome, view.homeKind);
+    const [origin, [settlement]] = await Promise.all([
+      this.#origin(originMessageId, originHome, view.homeKind),
+      resolveSettlementViews(this.db, workspaceId, [artifact]),
+    ]);
     return {
       ...shown,
+      settled: settlement?.settled ?? null,
+      reopened: settlement?.reopened ?? null,
       origin,
       homeKey: view.homeKey,
       access: view.tier,
@@ -317,13 +350,17 @@ export class ArtifactReads {
     });
     const foundById = new Map(found.map((row) => [row.id, row]));
     const page = ids.slice(0, input.limit).flatMap((id) => foundById.get(id) ?? []);
-    const owners = await this.#authorOwners(page);
+    const [owners, settlements] = await Promise.all([
+      this.#authorOwners(page),
+      resolveSettlementViews(this.db, input.workspaceId, page),
+    ]);
     const last = page.at(-1);
     return {
-      artifacts: page.map((row) =>
+      artifacts: page.map((row, index) =>
         card(
           row,
           canManageArtifactSharingWithRole(input.reader, viewer.role, accessRuleInput(row, owners)),
+          settlements[index]!,
         ),
       ),
       ...(ids.length > input.limit && last ? { nextCursor: writeCursor(last) } : {}),
@@ -347,12 +384,13 @@ export class ArtifactReads {
       artifactViewer(this.db, input.workspaceId, input.reader),
     ]);
     if (!viewer.member) return [];
-    const [owners, homes] = await Promise.all([
+    const [owners, homes, settlements] = await Promise.all([
       this.#authorOwners(rows),
       this.#homeReads(input.workspaceId, input.reader, rows),
+      resolveSettlementViews(this.db, input.workspaceId, rows),
     ]);
     const kept = new Map<string, ReturnType<typeof card>>();
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
       const home = homes.get(artifactHomeConversationId(row.homeKey) ?? "");
       const rule = accessRuleInput(row, owners);
       if (
@@ -370,6 +408,7 @@ export class ArtifactReads {
         card(
           row,
           canManageArtifactSharingWithRole(input.reader, viewer.role, rule),
+          settlements[index]!,
           artifactHomeView(row, home).homeKey,
         ),
       );

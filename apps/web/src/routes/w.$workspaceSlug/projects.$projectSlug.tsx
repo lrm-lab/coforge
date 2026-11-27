@@ -21,18 +21,19 @@ export const Route = createFileRoute("/w/$workspaceSlug/projects/$projectSlug")(
   loader: async ({ params, context: { queryClient }, parentMatchPromise, cause, deps }) => {
     const workspaceId = (await parentMatchPromise).loaderData?.currentWorkspace?.id ?? "";
     const staleTime = cause === "preload" ? "static" : 0;
-    // The board's rows, as the Tasks page reads them (its loader explains the cache).
-    const [project] = await Promise.all([
-      getProject({ data: { slug: params.projectSlug } }),
+    const overview =
       cause === "stay"
         ? undefined
-        : queryClient.query({ ...taskOverviewQuery(workspaceId), staleTime }),
+        : queryClient.query({ ...taskOverviewQuery(workspaceId), staleTime });
+    const project = await getProject({ data: { slug: params.projectSlug } });
+    if (!project) throw notFound();
+    await Promise.all([
+      overview,
       queryClient.query({
-        ...finishedSummaryQuery({ workspaceId }, deps.completed ?? "week"),
+        ...finishedSummaryQuery({ workspaceId }, deps.completed ?? "week", [], [project.id]),
         staleTime,
       }),
     ]);
-    if (!project) throw notFound();
     return {
       project,
       repository: getProjectRepository({ data: { slug: params.projectSlug } }).catch(() => ({

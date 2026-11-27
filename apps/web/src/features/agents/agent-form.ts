@@ -18,24 +18,20 @@ import { runtimeRequiresModel } from "./agent-runtime-fields-state";
 export function agentCreateModelError(
   provider: RuntimeProvider,
   model: string,
+  modelProvider?: string,
 ): string | undefined {
-  return runtimeRequiresModel(provider) && model.trim() === ""
+  return runtimeRequiresModel(provider, modelProvider) && model.trim() === ""
     ? m.agent_form_model_required()
     : undefined;
 }
 
-/**
- * Builds `UpdateAgentInput` from a runtime-edit form. `displayName`/`description` are only
- * read from the form when it actually carries those fields (the full-page edit dialog does);
- * a caller whose form omits them — the Profile panel's runtime-only form — supplies the
- * current value through `fallback` so the Agent's name/description are never blanked.
- */
 export function updateAgentInputFromForm(
   form: FormData,
   fallback: { agentId: string; computerId?: string; displayName?: string; description?: string },
 ): UpdateAgentInput {
   const computerId = String(form.get("computerId") ?? fallback.computerId ?? "").trim();
   const apiKey = String(form.get("apiKey") ?? "").trim();
+  const baseUrl = String(form.get("baseUrl") ?? "").trim();
   const displayName = String(form.get("displayName") ?? fallback.displayName ?? "").trim();
   const description = form.has("description")
     ? String(form.get("description") ?? "")
@@ -48,15 +44,14 @@ export function updateAgentInputFromForm(
     model: String(form.get("model") ?? ""),
     reasoning: String(form.get("reasoning") ?? ""),
     fastMode: form.get("fastMode") === "true",
-    // The size fields submit a number each, or nothing when left empty (task #30).
     ...sizesFromForm(form),
     ...(apiKey ? { apiKey } : {}),
+    ...(baseUrl ? { baseUrl } : {}),
     ...(displayName ? { displayName } : {}),
     ...(computerId ? { computerId } : {}),
   };
 }
 
-/** The two model size fields, as the runtime form submits them: a number, or nothing at all. */
 export function sizesFromForm(form: FormData) {
   const contextWindow = submittedModelSize(String(form.get("contextWindow") ?? ""));
   const maxOutputTokens = submittedModelSize(String(form.get("maxOutputTokens") ?? ""));
@@ -66,7 +61,6 @@ export function sizesFromForm(form: FormData) {
   };
 }
 
-/** The copy for each rule an Agent environment can break; a `Record` so a new rule cannot ship without it. */
 const AGENT_ENVIRONMENT_ERROR_MESSAGES: Record<AgentEnvironmentViolation, () => string> = {
   "too-many": () => m.agent_env_too_many({ max: AGENT_ENVIRONMENT_MAX_VARIABLES }),
   "invalid-name": () => m.agent_env_invalid_name({ max: AGENT_ENVIRONMENT_MAX_NAME_LENGTH }),
@@ -75,11 +69,6 @@ const AGENT_ENVIRONMENT_ERROR_MESSAGES: Record<AgentEnvironmentViolation, () => 
   "too-large": m.agent_env_too_large,
 };
 
-/**
- * The copy for each `errorId` an Agent create or update can fail with, shared by the create
- * dialog, the full-page edit dialog and the Profile panel's in-place runtime editor so the
- * surfaces never drift.
- */
 const AGENT_RUNTIME_UNAVAILABLE_REASONS = new Map<string, () => string>([
   ["not_connected", m.agent_form_runtime_unavailable_not_connected],
   ["runtime_unconfirmed", m.agent_form_runtime_unavailable_unconfirmed],
@@ -102,10 +91,57 @@ const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
   ["agent-model-provider-required", m.agent_form_model_provider_required],
   ["antigravity-model-effort-suffix", m.agent_form_model_effort_suffix],
   ["agent-credential-unavailable", m.agent_form_credential_unavailable],
+  ["agent-codex-compatible-endpoint-required", m.agent_form_codex_compatible_endpoint_required],
+  ["agent-codex-compatible-key-required", m.agent_form_codex_compatible_key_required],
   ...Object.entries(AGENT_ENVIRONMENT_ERROR_MESSAGES).map(
     ([violation, message]) => [`agent-environment-${violation}`, message] as const,
   ),
 ]);
+
+export type AgentFormField =
+  | "name"
+  | "computerId"
+  | "provider"
+  | "modelProvider"
+  | "model"
+  | "baseUrl"
+  | "apiKey";
+
+export type AgentFormErrorTarget = {
+  field?: AgentFormField;
+  message: string;
+};
+
+const AGENT_RUNTIME_UNAVAILABLE_FIELDS = new Map<string, AgentFormField>([
+  ["not_connected", "computerId"],
+  ["runtime_unconfirmed", "provider"],
+  ["runtime_missing", "provider"],
+  ["runtime_unusable", "provider"],
+  ["runtime_not_shared", "provider"],
+  ["model_missing", "model"],
+]);
+
+const AGENT_FORM_ERROR_FIELDS = new Map<string, AgentFormField>([
+  ["agent-name-taken", "name"],
+  ["agent-name-required", "name"],
+  ["agent-computer-required", "computerId"],
+  ["agent-computer-locked", "computerId"],
+  ["agent-provider-unsupported", "provider"],
+  ["agent-model-provider-required", "modelProvider"],
+  ["antigravity-model-effort-suffix", "model"],
+  ["agent-codex-compatible-endpoint-required", "baseUrl"],
+  ["agent-codex-compatible-key-required", "apiKey"],
+  ["agent-api-key-required", "apiKey"],
+]);
+
+function agentFormErrorField(cause: unknown): AgentFormField | undefined {
+  if (!isAppError(cause)) return undefined;
+  if (cause.errorId === "agent-runtime-unavailable") {
+    const reason = (cause.details as { reason?: string } | undefined)?.reason;
+    return AGENT_RUNTIME_UNAVAILABLE_FIELDS.get(reason ?? "");
+  }
+  return AGENT_FORM_ERROR_FIELDS.get(cause.errorId ?? "");
+}
 
 function agentFormErrorMessage(cause: unknown, fallback: () => string): string {
   if (isAppError(cause)) {
@@ -125,6 +161,14 @@ export function agentUpdateErrorMessage(cause: unknown): string {
   return agentFormErrorMessage(cause, m.agent_update_error);
 }
 
+export function agentUpdateErrorTarget(cause: unknown): AgentFormErrorTarget {
+  const field = agentFormErrorField(cause);
+  return {
+    ...(field ? { field } : {}),
+    message: agentUpdateErrorMessage(cause),
+  };
+}
+
 export function agentCreateErrorMessage(cause: unknown): string {
   return (
     externalCredentialRateLimitMessage(cause) ??
@@ -132,22 +176,22 @@ export function agentCreateErrorMessage(cause: unknown): string {
   );
 }
 
-/**
- * The inline error for one env row's name, from the same SDK rule the server applies. A blank name
- * is not an error: that row is dropped on save.
- */
+export function agentCreateErrorTarget(cause: unknown): AgentFormErrorTarget {
+  const rateLimit = externalCredentialRateLimitMessage(cause);
+  if (rateLimit) return { message: rateLimit };
+  const field = agentFormErrorField(cause);
+  return {
+    ...(field ? { field } : {}),
+    message: agentFormErrorMessage(cause, m.agent_form_server_error),
+  };
+}
+
 export function agentEnvironmentNameError(key: string): string | undefined {
   const name = key.trim();
   const violation = name ? agentEnvironmentNameViolation(name) : undefined;
   return violation && AGENT_ENVIRONMENT_ERROR_MESSAGES[violation]();
 }
 
-/**
- * The Runtime config dialog's Advanced env rows are plain `[name="envKey"]`/`[name="envValue"]`
- * inputs (`agent-runtime-config-dialog.tsx`), read back here as parallel `FormData.getAll()`
- * arrays. Empty keys are dropped; the last duplicate key wins. The dialog flags bad names per row
- * (`agentEnvironmentNameError`); the server's `validateAgentEnvironment` enforces the whole rule.
- */
 export function parseAgentEnvironmentFromForm(form: FormData): Record<string, string> {
   const keys = form.getAll("envKey").map(String);
   const values = form.getAll("envValue").map(String);
@@ -160,8 +204,6 @@ export function parseAgentEnvironmentFromForm(form: FormData): Record<string, st
   return result;
 }
 
-/** Order-insensitive comparison the Advanced disclosure uses to decide its own dirty state, and
- * the panel reuses to know whether a save should call `saveAgentEnvironment` at all. */
 export function agentEnvironmentRowsChanged(
   rows: { key: string; value: string }[],
   initial: Record<string, string>,

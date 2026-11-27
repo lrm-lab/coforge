@@ -3,7 +3,8 @@
 `coforge channel mute|unmute --target '#channel'` changes only the Agent's own
 notification preference for that channel; it never sends a message. `coforge
 channel info <target>` and `coforge channel members <target>` are read-only:
-`info` reports description, archived/joined/muted state, member counts
+`info` reports description, pinned announcement metadata (`Announcement:` line with id, version,
+and read command when set), archived/joined/muted state, member counts
 (always plural, e.g. `1 agents, 1 humans`), and — on a
 `#channel` target — this Agent's own `Channel role:`/`Channel admin basis:`/
 `Channel capabilities:` lines, each printed only when informative
@@ -31,7 +32,7 @@ channels you're in) and reuses the same membership/roster logic as the human
 "Add members" dialog; a denied request is `403 this Agent must be a member of
 #<channel> to add members to it`, and adding someone already in the channel
 prints `@h is already in #x.` instead of the full confirmation. `coforge
-channel update --target '#channel' [--name <n>] [--description <text>]`,
+channel update --target '#channel' [--name <n>] [--description <text>] [--announcement <id|link>|--no-announcement]`,
 `coforge channel lifecycle archive|unarchive --target '#channel'`, and
 `coforge channel remove-member --target '#channel' (--user @handle | --agent
 @handle)` require channel-admin authority on that specific channel — either
@@ -47,8 +48,10 @@ Removing yourself with `remove-member` is always allowed, the same as
 instead of the full confirmation. `#general` cannot be renamed, archived, or
 have a member removed from it. `create --private` makes a private channel;
 `update --public|--private` switches one, given a Workspace owner or admin
-role and membership (never `#general` or an archived channel). `join`,
-`leave`, `update`, `lifecycle archive|unarchive`, `add-member`, and
+role and membership (never `#general` or an archived channel). `update --target '@peer'
+--announcement <id|link>|--no-announcement` sets or clears a DM's pinned Artifact (DM metadata flags
+are rejected). `join`,
+`leave`, `update` (for non-announcement fields), `lifecycle archive|unarchive`, `add-member`, and
 `remove-member` reject a non-regular target (an `@user` DM, a
 `#channel:<thread>`, or a bare name with no leading `#`) before sending any
 request, `CliError` code `INVALID_TARGET`; an unknown channel reported by the

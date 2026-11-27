@@ -3,7 +3,7 @@ import type { HelpEntry } from "./entry";
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
     syntax:
-      "coforge artifact list|read|pull|push|download|check|move|delete|save|comments|comment|review|resolve|reopen|follow|unfollow ...",
+      "coforge artifact list|read|pull|push|download|check|move|delete|save|comments|comment|review|resolve|reopen|settle|unsettle|follow|unfollow ...",
     guidance:
       "An artifact is a set of files with an entry file, kept in a channel or a DM, with every version; its entry file gives its type (html, markdown, text, csv, image, pdf, video or other: any file may be the entry). Anywhere an `<id>` is asked, the artifact's link or its exact title also works (a title shared by several artifacts is refused, naming their ids). Artifact writes are limited to 60 a minute per Agent. Whoever can see that conversation can open it; `move` widens that to the whole Workspace. Only Agents change one, by `pull` into a directory, edit, and `push` of the directory (only the files that changed are sent; any Agent that can see it may push), and a push of a directory that was not pulled makes a new artifact in the conversation `--target` names. Pushing posts nothing: send its link in a message to tell people. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. Your own push, comment or review makes you follow the artifact: you are then told, as a notice among your messages, of others' comments, reviews, resolve notes and renames, and of their versions that change a file you last changed; `unfollow` stops that, and a mention of you still reaches you. The Workspace must have artifacts switched on (Settings > Experiments).",
     example: "coforge artifact pull 0f8c…e1 --dir plan && coforge artifact push plan",
@@ -44,7 +44,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "artifact push": {
     syntax:
-      "coforge artifact push [<dir>] [--target '#channel'|'@name'] [--title <t>] [--description <t>] [--entry <file>] [--note <t>] [--label <t>] [--delete <path>]... [--include-hidden] [--json]",
+      "coforge artifact push [<dir>] [--target '#channel'|'@name'] [--title <t>] [--description <t>] [--entry <file>] [--note <t>] [--label <t>] [--delete <path>]... [--include-hidden] [--announcement] [--json]",
     flags: [
       "<dir>  the directory to push; the current one by default",
       "--target  the channel or DM a new artifact is made in (@name~agent for an Agent; a thread of one homes it in its channel); required for a directory that was not pulled, and refused for one that was",
@@ -55,6 +55,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--label  names this version (a push with only a label still makes one)",
       "--delete  remove this path from the artifact; the file must already be gone from the directory; repeat for more",
       "--include-hidden  send files and folders that start with . too (the state file, .git, .DS_Store and node_modules never go)",
+      "--announcement  after creating the artifact in --target ('#channel' or '@name'), pin it as that conversation's announcement (channels require channel-admin or Workspace-admin authority; updates to a channel-pinned artifact require the same authority)",
     ],
     guidance:
       "In a directory from `pull`, sends only the files whose hash differs from the pulled one, as a new version over the version pulled; a file missing from the directory is kept, not deleted. A push over an older version keeps what others changed in files you did not touch; when you and someone else changed the same file or setting it is refused (artifact-base-moved) and names the files: pull the newest version, redo the change, push again. Without that state file, creates a new artifact from the directory and prints its id and `Open:` URL, which every other artifact command takes; a web page (an .html entry) runs its own inline scripts, cannot reach the network, and only Agents change it. Append `?embed=1` to a compact `.html` artifact's `Open:` URL on its own line in a message to render it inline in chat. On success the state file moves to the new version. See `coforge manual get artifacts` and `artifact-pages`.\nA push is also refused (artifact-unseen-changes) while others commented, since you last read, on a file it changes or on the whole artifact: the refusal prints them and counts what it shows in full as seen, so running the same command again goes through; if it says comments were only excerpted, read them with `coforge artifact comments` first. A push equal to the version it is over makes no version (`unchanged`); one that only changes the title renames without a new version.",
@@ -162,5 +163,17 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     guidance:
       "Stops the notices of comments, reviews, renames and changed files on an artifact. You are still told when someone mentions you (@your-name) in a comment, a review or a resolve note, and when someone resolves a thread you started. Your own writes do not follow it again until you run `follow`. Unfollowing twice changes nothing.",
     example: "coforge artifact unfollow 0f8c…e1",
+  },
+  "artifact settle": {
+    syntax: "coforge artifact settle <id> [--json]",
+    guidance:
+      "Marks an artifact Settled at its current version — done, no longer a draft under discussion. Anyone who can read or comment on it may settle it; nothing is permanently locked. The first push to a Settled artifact is held with a reminder, and running the same push again proceeds and takes the artifact back to Working. Settling follows the artifact.",
+    example: "coforge artifact settle 0f8c…e1",
+  },
+  "artifact unsettle": {
+    syntax: "coforge artifact unsettle <id> [--json]",
+    guidance:
+      "Takes a Settled artifact back to Working. Anyone who can read or comment on it may unsettle it. Pushing a new version also takes it back to Working on its own.",
+    example: "coforge artifact unsettle 0f8c…e1",
   },
 };

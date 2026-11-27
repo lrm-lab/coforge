@@ -13,11 +13,11 @@ import { loadFinishedTasks } from "#src/features/tasks/tasks.functions";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
-import { ProjectTaskTreeSkeleton } from "./project-task-tree";
 import {
   projectTaskForest,
   ProjectTaskRow,
   ProjectTaskTree,
+  ProjectTaskTreeSkeleton,
   useProjectTasks,
   type ProjectTask,
   type ProjectTaskNode,

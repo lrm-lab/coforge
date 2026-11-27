@@ -8,18 +8,12 @@ import { useConversationThread } from "./thread-queries";
 
 type PaneProps = ComponentProps<typeof ConversationPane>;
 
-/**
- * One thread's pane: its replies are read the first time it opens (the window carries only the
- * thread's summary), with the thread slot's own loading state until they arrive, and its retry if
- * the read fails. The pane itself mounts once the whole thread is there, so it opens on the first
- * unread reply (or the latest) as it always has. From then on the thread's Query keeps it live and
- * only this pane re-renders for a reply.
- */
 export function ThreadPane({
   conversation,
   root,
   inTaskPopup,
   threadContext,
+  threadShowBack,
   onClose,
   ...pane
 }: Omit<PaneProps, "conversation" | "root"> & {
@@ -30,16 +24,20 @@ export function ThreadPane({
   if (!thread.data) {
     const load = threadRootLoadOf(thread);
     const retry = () => void thread.refetch();
-    // The Task popup shows the Task itself in place of a header, and its thread below it.
     return inTaskPopup ? (
       <ThreadLoadStatus load={load} withRoot={false} onRetry={retry} />
     ) : (
-      <ThreadRootState load={load} context={threadContext} onClose={onClose} onRetry={retry} />
+      <ThreadRootState
+        load={load}
+        context={threadContext}
+        onClose={onClose}
+        onRetry={retry}
+        showBack={threadShowBack}
+      />
     );
   }
   return (
     <>
-      {/* The Tasks its replies name: the window's own read covers only its top-level messages. */}
       <ConversationTaskDemand
         conversationId={conversation.conversationId}
         channelName={pane.channelNames?.get(conversation.conversationId)}
@@ -53,6 +51,7 @@ export function ThreadPane({
         root={root}
         inTaskPopup={inTaskPopup}
         threadContext={threadContext}
+        threadShowBack={threadShowBack}
         onClose={onClose}
         conversation={{ ...conversation, messages: thread.data.replies }}
       />

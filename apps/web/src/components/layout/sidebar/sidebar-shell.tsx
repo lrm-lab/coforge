@@ -32,6 +32,7 @@ const SIDEBAR_RAIL_SIZE = "3.5rem";
 const SIDEBAR_RESIZE_TARGET = { coarse: 44, fine: 12 };
 const SIDEBAR_PANEL_STYLE = { overflow: "hidden" } as const;
 const MAIN_PANEL_STYLE = { overflow: "visible" } as const;
+const INACTIVE_GROUP_STYLE = { height: "auto", overflow: "visible" } as const;
 
 function rootFontSizePx(): number {
   const parsed = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
@@ -79,6 +80,7 @@ export function SidebarShell({
   defaultRail = false,
   initialExpanded,
   initialWidthRem,
+  showSidebar = true,
   expanded,
   rail,
   children,
@@ -86,6 +88,7 @@ export function SidebarShell({
   defaultRail?: boolean;
   initialExpanded?: boolean;
   initialWidthRem?: number;
+  showSidebar?: boolean;
   expanded: ReactNode;
   rail: ReactNode;
   children: ReactNode;
@@ -120,6 +123,7 @@ export function SidebarShell({
   );
 
   useLayoutEffect(() => {
+    if (!showSidebar) return;
     const storedWidth = readStoredExpandedRem();
     const remembered = storedWidth ?? initialWidthRem ?? SIDEBAR_DEFAULT_REM;
     rememberedRemRef.current = remembered;
@@ -134,11 +138,18 @@ export function SidebarShell({
       writeSidebarLayoutCookie({ widthRem: storedWidth });
     }
     syncPanelToExpanded(wantExpanded, storedWidth !== undefined && storedWidth !== initialWidthRem);
-  }, [defaultRail, initialExpanded, initialWidthRem, syncPanelToExpanded]);
-
-  useEffect(() => subscribeSidebarExpanded(syncPanelToExpanded), [syncPanelToExpanded]);
+  }, [showSidebar, defaultRail, initialExpanded, initialWidthRem, syncPanelToExpanded]);
 
   useEffect(() => {
+    if (!showSidebar) return;
+    return subscribeSidebarExpanded(syncPanelToExpanded);
+  }, [showSidebar, syncPanelToExpanded]);
+
+  useEffect(() => {
+    if (!showSidebar) {
+      setReady(false);
+      return;
+    }
     let second = 0;
     const first = requestAnimationFrame(() => {
       second = requestAnimationFrame(() => setReady(true));
@@ -147,7 +158,7 @@ export function SidebarShell({
       cancelAnimationFrame(first);
       cancelAnimationFrame(second);
     };
-  }, []);
+  }, [showSidebar]);
 
   const handleResize = (_size: PanelSize, _id: string | number | undefined, prev?: PanelSize) => {
     if (prev === undefined || syncingRef.current) return;
@@ -191,45 +202,55 @@ export function SidebarShell({
       id={SIDEBAR_GROUP_ID}
       elementRef={groupElementRef}
       orientation="horizontal"
+      disabled={!showSidebar}
       onLayoutChanged={handleLayoutChanged}
       resizeTargetMinimumSize={SIDEBAR_RESIZE_TARGET}
       data-sidebar-group=""
-      data-ready={ready ? "" : undefined}
+      data-sidebar-inactive={!showSidebar ? "" : undefined}
+      data-ready={showSidebar && ready ? "" : undefined}
+      style={showSidebar ? undefined : INACTIVE_GROUP_STYLE}
       className="flex min-h-0 min-w-0 flex-1"
     >
-      <Panel
-        id={SIDEBAR_PANEL_ID}
-        panelRef={panelRef}
-        collapsible
-        collapsedSize={SIDEBAR_RAIL_SIZE}
-        minSize={`${SIDEBAR_MIN_REM}rem`}
-        maxSize={`${SIDEBAR_MAX_REM}rem`}
-        defaultSize={initialSize}
-        groupResizeBehavior="preserve-pixel-size"
-        onResize={handleResize}
-        data-sidebar-shell=""
-        data-default-rail={defaultRail ? "" : undefined}
-        style={SIDEBAR_PANEL_STYLE}
-        className="relative h-full"
-      >
-        <div
-          data-sidebar-panel="expanded"
-          className="absolute inset-y-0 start-0 h-full w-full min-w-40"
+      {showSidebar ? (
+        <Panel
+          key={SIDEBAR_PANEL_ID}
+          id={SIDEBAR_PANEL_ID}
+          panelRef={panelRef}
+          collapsible
+          collapsedSize={SIDEBAR_RAIL_SIZE}
+          minSize={`${SIDEBAR_MIN_REM}rem`}
+          maxSize={`${SIDEBAR_MAX_REM}rem`}
+          defaultSize={initialSize}
+          groupResizeBehavior="preserve-pixel-size"
+          onResize={handleResize}
+          data-sidebar-shell=""
+          data-default-rail={defaultRail ? "" : undefined}
+          style={SIDEBAR_PANEL_STYLE}
+          className="relative h-full"
         >
-          {expanded}
-        </div>
-        <div data-sidebar-panel="rail" className="absolute inset-y-0 start-0 h-full w-14">
-          {rail}
-        </div>
-      </Panel>
-      <Separator
-        aria-label={m.navigation_resize_sidebar()}
-        disableDoubleClick
-        onDoubleClick={handleSeparatorDoubleClick}
-        data-sidebar-resize-handle=""
-        className="relative z-10 w-px shrink-0 cursor-col-resize touch-none bg-transparent outline-hidden"
-      />
+          <div
+            data-sidebar-panel="expanded"
+            className="absolute inset-y-0 start-0 h-full w-full min-w-40"
+          >
+            {expanded}
+          </div>
+          <div data-sidebar-panel="rail" className="absolute inset-y-0 start-0 h-full w-14">
+            {rail}
+          </div>
+        </Panel>
+      ) : null}
+      {showSidebar ? (
+        <Separator
+          key="separator"
+          aria-label={m.navigation_resize_sidebar()}
+          disableDoubleClick
+          onDoubleClick={handleSeparatorDoubleClick}
+          data-sidebar-resize-handle=""
+          className="relative z-10 w-px shrink-0 cursor-col-resize touch-none bg-transparent outline-hidden"
+        />
+      ) : null}
       <Panel
+        key={MAIN_PANEL_ID}
         id={MAIN_PANEL_ID}
         groupResizeBehavior="preserve-relative-size"
         style={MAIN_PANEL_STYLE}

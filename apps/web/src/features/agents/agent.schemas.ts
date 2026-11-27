@@ -1,3 +1,7 @@
+import {
+  CODEX_COMPATIBLE_MODEL_PROVIDER,
+  codexCompatibleBaseUrl,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { z } from "zod";
 import {
   AGENT_ENVIRONMENT_MAX_NAME_LENGTH,
@@ -100,12 +104,21 @@ const agentInputShape = {
   contextWindow: modelSizeSchema,
   maxOutputTokens: modelSizeSchema,
   apiKey: apiKeySchema,
+  baseUrl: z.string().trim().max(2048).optional(),
 };
 
 function validateRuntimeKey(
-  value: { provider: RuntimeProvider; modelProvider?: string; apiKey?: string },
+  value: { provider: RuntimeProvider; modelProvider?: string; apiKey?: string; baseUrl?: string },
   context: z.RefinementCtx,
 ) {
+  if (
+    value.provider === RUNTIME_PROVIDER.CODEX &&
+    value.modelProvider === CODEX_COMPATIBLE_MODEL_PROVIDER
+  ) {
+    if (value.baseUrl !== undefined && !codexCompatibleBaseUrl(value.baseUrl))
+      context.addIssue({ code: "custom", path: ["baseUrl"], message: "Invalid provider endpoint" });
+    return;
+  }
   if (!value.apiKey) return;
   if (RUNTIME_PROVIDER_USES_EXTERNAL_CLI[value.provider]) {
     context.addIssue({ code: "custom", path: ["apiKey"], message: "Unsupported runtime key" });
@@ -226,6 +239,7 @@ const batchRuntimeSelectionSchema = z
     contextWindow: agentInputShape.contextWindow,
     maxOutputTokens: agentInputShape.maxOutputTokens,
     apiKey: agentInputShape.apiKey,
+    baseUrl: agentInputShape.baseUrl,
   })
   .superRefine(validateRuntimeKey);
 

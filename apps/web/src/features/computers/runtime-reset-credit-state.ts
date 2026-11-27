@@ -69,6 +69,11 @@ export function resetCreditPrompt(
 export function canOfferAgentResetCredit(profile: {
   runtimeUsageVisible: boolean;
   runtimeCredential: unknown;
+  runtimeConfig?: { provider?: { kind: string } } | null;
 }): boolean {
-  return profile.runtimeUsageVisible && profile.runtimeCredential == null;
+  return (
+    profile.runtimeUsageVisible &&
+    profile.runtimeCredential == null &&
+    profile.runtimeConfig?.provider?.kind !== "codex-compatible"
+  );
 }

@@ -147,7 +147,7 @@ test("channel management commands reject malformed arguments and require exactly
   expect(() => parseArgs(["channel", "join"])).toThrow("--target is required.");
   expect(() => parseArgs(["channel", "create"])).toThrow("--name is required.");
   expect(() => parseArgs(["channel", "update", "--target", "#a"])).toThrow(
-    "Provide at least one of --name, --description, --public, or --private.",
+    "Provide at least one of --name, --description, --public, --private, --announcement, or --no-announcement.",
   );
   expect(() => parseArgs(["channel", "lifecycle", "delete", "--target", "#a"])).toThrow(
     "Name archive or unarchive.",
@@ -182,7 +182,42 @@ test("--private makes a channel private; --public or --private changes one, neve
     parseArgs(["channel", "update", "--target", "#eng", "--public", "--private"]),
   ).toThrow("Use either --public or --private, not both.");
   expect(() => parseArgs(["channel", "update", "--target", "#eng"])).toThrow(
-    "Provide at least one of --name, --description, --public, or --private.",
+    "Provide at least one of --name, --description, --public, --private, --announcement, or --no-announcement.",
+  );
+});
+
+test("channel update parses --announcement and --no-announcement on channels and DMs", () => {
+  expect(
+    parseArgs(["channel", "update", "--target", "#eng", "--announcement", "art-1"]),
+  ).toMatchObject({
+    channel: { operation: "update", target: "#eng", announcement: "art-1" },
+  });
+  expect(parseArgs(["channel", "update", "--target", "#eng", "--no-announcement"])).toMatchObject({
+    channel: { operation: "update", target: "#eng", announcement: null },
+  });
+  expect(
+    parseArgs(["channel", "update", "--target", "@alice", "--announcement", "art-1"]),
+  ).toMatchObject({
+    channel: { operation: "update", target: "@alice", announcement: "art-1" },
+  });
+  expect(
+    parseArgs(["channel", "update", "--target", "dm:@alice~human", "--no-announcement"]),
+  ).toMatchObject({
+    channel: { operation: "update", target: "dm:@alice~human", announcement: null },
+  });
+  expect(() =>
+    parseArgs([
+      "channel",
+      "update",
+      "--target",
+      "#eng",
+      "--announcement",
+      "art-1",
+      "--no-announcement",
+    ]),
+  ).toThrow("Use either --announcement or --no-announcement, not both.");
+  expect(() => parseArgs(["channel", "update", "--target", "@alice", "--name", "other"])).toThrow(
+    "A DM has no name, description, or visibility to change",
   );
 });
 

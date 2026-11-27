@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback } from "react";
 
@@ -58,20 +58,47 @@ export function useWorkspaceLabels(enabled: boolean) {
   };
 }
 
-/**
- * A label as the Workspace's labels now have it, read from the cache without fetching: a chip
- * follows a recolor, or an archive, without its Task being read again. Without the query's data (a
- * card on a page that never opened a picker) it is the color the Task came with.
- */
-export function useCachedLabel(label: { id: string; color: string }) {
+export type CachedLabelEntry = { color: string; archived: boolean };
+export type WorkspaceLabelsIndex = ReadonlyMap<string, CachedLabelEntry>;
+
+const EMPTY_LABELS_INDEX: WorkspaceLabelsIndex = new Map();
+const labelsIndexCache = new WeakMap<WorkspaceLabels["labels"], WorkspaceLabelsIndex>();
+
+export function indexWorkspaceLabels(
+  labels: WorkspaceLabels["labels"] | undefined,
+): WorkspaceLabelsIndex {
+  if (!labels || labels.length === 0) return EMPTY_LABELS_INDEX;
+  let index = labelsIndexCache.get(labels);
+  if (!index) {
+    const map = new Map<string, CachedLabelEntry>();
+    for (const entry of labels) {
+      map.set(entry.id, { color: entry.color, archived: entry.archivedAt != null });
+    }
+    index = map;
+    labelsIndexCache.set(labels, index);
+  }
+  return index;
+}
+
+export function useCachedLabelsIndex(): WorkspaceLabelsIndex {
   const workspaceId = useCurrentWorkspaceId() ?? "";
-  const cached = useQuery<WorkspaceLabels, Error, { color: string; archived: boolean } | null>({
+  const cached = useQuery<WorkspaceLabels>({
     queryKey: workspaceLabelsKey(workspaceId),
-    enabled: false,
-    select: (data) => {
-      const found = data.labels.find((each) => each.id === label.id);
-      return found ? { color: found.color, archived: found.archivedAt != null } : null;
-    },
+    queryFn: skipToken,
+  });
+  return indexWorkspaceLabels(cached.data?.labels);
+}
+
+export function useCachedLabel(label: { id: string; color: string }): CachedLabelEntry {
+  const workspaceId = useCurrentWorkspaceId() ?? "";
+  const select = useCallback(
+    (data: WorkspaceLabels) => indexWorkspaceLabels(data.labels).get(label.id) ?? null,
+    [label.id],
+  );
+  const cached = useQuery<WorkspaceLabels, Error, CachedLabelEntry | null>({
+    queryKey: workspaceLabelsKey(workspaceId),
+    queryFn: skipToken,
+    select,
   });
   return cached.data ?? { color: label.color, archived: false };
 }

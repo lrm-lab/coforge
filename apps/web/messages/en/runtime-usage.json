@@ -90,5 +90,7 @@
   "computer_runtime_detection_rescanning": "Showing the last result for now.",
   "computer_runtime_detection_empty": "Detecting runtimes…",
   "computer_runtimes": "Runtimes",
-  "computer_runtime_visibility_error": "Runtime visibility could not be changed. Try again."
+  "computer_runtime_visibility_error": "Runtime visibility could not be changed. Try again.",
+  "computer_usage_provider_api_key": "Billed by your configured API provider. Check usage with that provider.",
+  "computer_runtime_codex_sign_in_hint": "Sign in to share this Computer’s {runtime} account and read usage, or skip sign-in and configure a custom API key on each Agent."
 }

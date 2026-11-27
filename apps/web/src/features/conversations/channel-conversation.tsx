@@ -15,6 +15,10 @@ import type { ChannelCapabilities } from "#src/server/conversations/channel-auth
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { ConversationFocusButton } from "./conversation-focus-button";
 import { ConversationListButton } from "./conversation-list-button";
+import {
+  ConversationPinnedArtifactStrip,
+  PinnedArtifactRestoreButton,
+} from "./conversation-pinned-artifact-strip";
 import { ThreadFollowingAgents } from "./thread-following-agents";
 import {
   conversationHeaderTabs,
@@ -138,6 +142,7 @@ export function ChannelConversationHeader({
       }
       actions={
         <div className="-mr-1.5 flex shrink-0 items-center gap-3">
+          <PinnedArtifactRestoreButton conversationId={conversation.conversationId} />
           <ButtonUtility
             icon={SearchLg}
             size="sm"
@@ -371,6 +376,12 @@ export function ChannelConversation({
           settingsOpen={details.open}
           onOpenSettings={openSettings}
           onCloseSettings={details.closeDetails}
+        />
+      }
+      pinnedStrip={
+        <ConversationPinnedArtifactStrip
+          conversationId={conversation.conversationId}
+          channelName={conversation.name}
         />
       }
       readOnlyNotice={

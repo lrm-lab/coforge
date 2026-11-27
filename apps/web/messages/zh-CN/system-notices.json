@@ -61,5 +61,14 @@
   "system_notice_task_blockers_changed": "{actor} 让{task}改为先等{added}，不用再等{removed}",
   "system_notice_task_renamed": "{actor} 把{task}的标题从「{from}」改为「{to}」",
   "system_notice_task_described": "{actor} 更新了{task}的描述",
-  "system_notice_task_renamed_described": "{actor} 把{task}的标题从「{from}」改为「{to}」，并更新了描述"
+  "system_notice_task_renamed_described": "{actor} 把{task}的标题从「{from}」改为「{to}」，并更新了描述",
+  "system_notice_pinned_artifact_set": "{actor} 置顶了 {title}",
+  "system_notice_pinned_artifact_replaced": "{actor} 将置顶内容更换为 {title}",
+  "system_notice_pinned_artifact_removed": "{actor} 取消置顶了 {title}",
+  "system_notice_pinned_artifact_set_untitled": "{actor} 在此群聊中置顶了内容",
+  "system_notice_pinned_artifact_replaced_untitled": "{actor} 更换了群聊的置顶内容",
+  "system_notice_pinned_artifact_removed_untitled": "{actor} 取消了群聊的置顶内容",
+  "system_notice_pinned_artifact_set_untitled_dm": "{actor} 在此私聊中置顶了内容",
+  "system_notice_pinned_artifact_replaced_untitled_dm": "{actor} 更换了私聊的置顶内容",
+  "system_notice_pinned_artifact_removed_untitled_dm": "{actor} 取消了私聊的置顶内容"
 }

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { weeklyReportsMiddleware } from "./weekly-reports-middleware";
 import { AppError } from "#src/lib/app-error";
 import { recordSideChat } from "#src/server/records/record-side-chat.server";
 import { recordAssistantOffer } from "#src/server/records/record-assistant-offer.server";
@@ -19,7 +19,7 @@ import { looksLikeMemberReportRuleIntent } from "./weekly-highlight-extract";
 // sessions and messages, and the suggestions it makes.
 
 export const loadWeeklyReportAssistantStatus = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     return readWeeklyReportAssistantStatus(db, user.id, workspaceId);
   });
@@ -62,7 +62,7 @@ export function assistantReady(
 }
 
 export const addRecordComment = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       subjectType: z.enum(["report", "cycle"]),
@@ -87,7 +87,7 @@ function weeklyReportAssistantChat(db: Parameters<typeof recordSideChat>[0]) {
 }
 
 export const ensureWeeklyReportAssistantChatSessions = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       subjectType: z.enum(["report", "cycle"]),
@@ -106,7 +106,7 @@ export const ensureWeeklyReportAssistantChatSessions = createServerFn({ method: 
   });
 
 export const createWeeklyReportAssistantChatSessionFn = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       subjectType: z.enum(["report", "cycle"]),
@@ -127,7 +127,7 @@ export const createWeeklyReportAssistantChatSessionFn = createServerFn({ method:
   });
 
 export const renameWeeklyReportAssistantChatSessionFn = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       sessionId: z.uuid(),
@@ -146,7 +146,7 @@ export const renameWeeklyReportAssistantChatSessionFn = createServerFn({ method:
   });
 
 export const archiveWeeklyReportAssistantChatSessionFn = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ sessionId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { archiveWeeklyReportAssistantChatSession } =
@@ -159,7 +159,7 @@ export const archiveWeeklyReportAssistantChatSessionFn = createServerFn({ method
   });
 
 export const postWeeklyReportAssistantRequest = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       subjectType: z.enum(["report", "cycle"]),
@@ -219,7 +219,7 @@ export const postWeeklyReportAssistantRequest = createServerFn({ method: "POST" 
   });
 
 export const loadWeeklyReportAssistantMessages = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       subjectType: z.enum(["report", "cycle"]),
@@ -240,7 +240,7 @@ export const loadWeeklyReportAssistantMessages = createServerFn({ method: "GET" 
   });
 
 export const ensureRecordAssistantIntro = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       subjectType: z.enum(["report", "cycle"]),
@@ -261,7 +261,7 @@ export const ensureRecordAssistantIntro = createServerFn({ method: "POST" })
   });
 
 export const dismissWeeklyFormatSend = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),
@@ -278,7 +278,7 @@ export const dismissWeeklyFormatSend = createServerFn({ method: "POST" })
   });
 
 export const acceptMemberGenerateHelp = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),
@@ -295,7 +295,7 @@ export const acceptMemberGenerateHelp = createServerFn({ method: "POST" })
   });
 
 export const confirmMemberReportIntent = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),
@@ -316,7 +316,7 @@ export const confirmMemberReportIntent = createServerFn({ method: "POST" })
   });
 
 export const declineMemberReportIntent = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(
     z.object({
       reportId: z.uuid(),

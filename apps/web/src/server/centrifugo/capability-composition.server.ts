@@ -1,3 +1,4 @@
+import { getCodexCompatibleCapabilityLease } from "#src/server/agents/codex-compatible-capability.server";
 import { getAgentMemoryCapabilityLease } from "./agent-memory-results.server";
 import { getAgentMigrationCapabilityLease } from "#src/server/agent-migrations/agent-migration-capability.server";
 import { getAppRegistrationNoticeCapabilityLease } from "#src/server/apps/app-registration-notice-capability.server";
@@ -37,6 +38,7 @@ export function daemonCapabilityLeases() {
     getAgentControlAcceptedCapabilityLease(),
     getAgentSessionRejectionCapabilityLease(),
     getAgentConfigCapabilityLease(),
+    getCodexCompatibleCapabilityLease(),
     getRuntimeAuthCapabilityLease(),
     getRuntimeAuthStatusReadCapabilityLease(),
     getKiroIdentityCenterCapabilityLease(),

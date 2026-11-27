@@ -1,4 +1,8 @@
 import {
+  CODEX_COMPATIBLE_MODEL_PROVIDER,
+  codexCompatibleBaseUrl,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
+import {
   RUNTIME_PROVIDER,
   RUNTIME_PROVIDER_VALUES,
   type RuntimeProvider,
@@ -27,6 +31,12 @@ export type AgentRuntimeProviderConfig =
       kind: "coforge";
       providerId: string;
       apiKey?: EncryptedRuntimeApiKey;
+    }
+  | {
+      kind: "codex-compatible";
+      baseUrl: string;
+      environment?: EncryptedAgentEnvironment;
+      hasKey?: true;
     };
 
 export type AgentRuntimeConfig = {
@@ -133,23 +143,38 @@ const encryptedRuntimeApiKeySchema = z.object({
 const providerConfigSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("default") }),
   z.object({
+    kind: z.literal("codex-compatible"),
+    baseUrl: z.string().refine((url) => codexCompatibleBaseUrl(url) === url),
+    environment: encryptedAgentEnvironmentSchema,
+  }),
+  z.object({
     kind: z.literal("coforge"),
     providerId: z.string().min(1),
     apiKey: encryptedRuntimeApiKeySchema.optional(),
   }),
 ]);
 
-const storedAgentRuntimeConfigSchema = z.object({
-  runtime: z.enum(RUNTIME_PROVIDER_VALUES),
-  provider: providerConfigSchema.optional(),
-  model: z.string(),
-  modelProvider: z.string().optional(),
-  reasoning: z.string(),
-  fastMode: z.boolean().optional(),
-  contextWindow: positiveIntSchema.optional(),
-  maxOutputTokens: positiveIntSchema.optional(),
-  environment: encryptedAgentEnvironmentSchema.optional(),
-});
+const storedAgentRuntimeConfigSchema = z
+  .object({
+    runtime: z.enum(RUNTIME_PROVIDER_VALUES),
+    provider: providerConfigSchema.optional(),
+    model: z.string(),
+    modelProvider: z.string().optional(),
+    reasoning: z.string(),
+    fastMode: z.boolean().optional(),
+    contextWindow: positiveIntSchema.optional(),
+    maxOutputTokens: positiveIntSchema.optional(),
+    environment: encryptedAgentEnvironmentSchema.optional(),
+  })
+  .refine(
+    ({ runtime, provider, modelProvider, model }) =>
+      provider?.kind === "codex-compatible"
+        ? runtime === RUNTIME_PROVIDER.CODEX &&
+          modelProvider === CODEX_COMPATIBLE_MODEL_PROVIDER &&
+          Boolean(model)
+        : runtime !== RUNTIME_PROVIDER.CODEX || modelProvider !== CODEX_COMPATIBLE_MODEL_PROVIDER,
+    { path: ["provider"] },
+  );
 
 export function parseAgentRuntimeConfig(value: unknown, agentId?: string): AgentRuntimeConfig {
   const parsed = storedAgentRuntimeConfigSchema.parse(value);
@@ -194,7 +219,9 @@ export function publicAgentRuntimeConfig(
             kind: config.provider.kind,
             providerId: config.provider.providerId,
           }
-        : config.provider,
+        : config.provider.kind === "codex-compatible"
+          ? { kind: "codex-compatible", baseUrl: config.provider.baseUrl, hasKey: true }
+          : config.provider,
   };
 }
 
@@ -243,7 +270,7 @@ export function runtimeStartFields(config: AgentRuntimeConfig, agentConfigRevisi
   const launchProviderConfig =
     config.provider.kind === "coforge"
       ? { kind: config.provider.kind, providerId: config.provider.providerId }
-      : config.provider;
+      : { kind: "default" as const };
   // A pair saved before sizes were limited to the picks that read them is left out (task #124).
   const sized = sizesApply(config.runtime, config.provider);
   return {

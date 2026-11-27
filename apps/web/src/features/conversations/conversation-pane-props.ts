@@ -9,6 +9,7 @@ import type { ThreadFollow } from "./thread-pane-header";
 export type ConversationPaneProps = Omit<ConversationProps, "conversation"> & {
   conversation: Omit<DirectConversationView, "agent">;
   header?: ReactNode;
+  pinnedStrip?: ReactNode;
   readOnlyNotice?: ReactNode;
   emptyState: {
     title: string;
@@ -21,6 +22,7 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation"> & {
   inTaskPopup?: boolean;
   lead?: ReactNode;
   onClose?: () => void;
+  threadShowBack?: boolean;
   threadContext?: string;
   composerTarget?: string;
   onViewInConversation?: () => void;

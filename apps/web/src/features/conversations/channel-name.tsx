@@ -1,10 +1,22 @@
-import { Fragment, type ComponentProps, type ReactNode } from "react";
+import { createContext, Fragment, useContext, type ComponentProps, type ReactNode } from "react";
 import { Hash01, Lock01 } from "@untitledui/icons";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
-import { useChannelMembers, useChannelName } from "./channel-members";
+import {
+  useChannelMembers,
+  useChannelName,
+  useChannelNamesIndex,
+  type ChannelNamesIndex,
+} from "./channel-members";
 import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+
+const ChannelNamesIndexContext = createContext<ChannelNamesIndex | undefined>(undefined);
+
+export function ChannelNamesIndexProvider({ children }: { children: ReactNode }) {
+  const index = useChannelNamesIndex();
+  return <ChannelNamesIndexContext value={index}>{children}</ChannelNamesIndexContext>;
+}
 
 /** The icon a channel goes by where it has one: `#`, or a lock for a private channel, as Slack
  * marks it. */
@@ -75,39 +87,53 @@ export function ChannelTitle({
   );
 }
 
-/**
- * A channel named in a line beside other text (a search result's or a saved message's place): its
- * group avatar at 20px, then its name with no `#` (Frank, 11-10: a channel is never a `#`, task
- * #55); a private one keeps its lock. A channel no one is in reads its name alone. Sentences keep
- * `#name` (`withChannelTitle`).
- */
-export function ChannelPlace({
-  id,
-  name,
-  visibility,
-  members,
-}: {
-  /** Looked up in the channel names by id, or by `name` where the caller has none. */
+type ChannelPlaceProps = {
   id?: string;
   name: string;
-  /** When the caller's data lacks it, the channel names' say. */
   visibility?: ChannelVisibility;
-  /** Its members from the caller's own server read, for a page rendered on the server, where the
-   * channel names are not read; else the channel names'. */
   members?: readonly GroupAvatarMember[];
-}) {
+};
+
+export function ChannelPlace(props: ChannelPlaceProps) {
+  const index = useContext(ChannelNamesIndexContext);
+  if (index !== undefined) {
+    const listed = props.id ? index.byId.get(props.id) : index.byName.get(props.name);
+    return (
+      <ChannelPlaceView
+        name={props.name}
+        visibility={props.visibility ?? listed?.visibility ?? "public"}
+        faces={props.members ?? listed?.members}
+      />
+    );
+  }
+  return <ChannelPlaceWithQuery {...props} />;
+}
+
+function ChannelPlaceWithQuery({ id, name, visibility, members }: ChannelPlaceProps) {
   const listed = useChannelName(id ? { id } : { name });
-  const faces = members ?? listed?.members;
+  return (
+    <ChannelPlaceView
+      name={name}
+      visibility={visibility ?? listed?.visibility ?? "public"}
+      faces={members ?? listed?.members}
+    />
+  );
+}
+
+function ChannelPlaceView({
+  name,
+  visibility,
+  faces,
+}: {
+  name: string;
+  visibility: ChannelVisibility;
+  faces: readonly GroupAvatarMember[] | undefined;
+}) {
   return (
     <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-bottom">
       {faces?.length ? <GroupAvatar members={faces} className="avatar-group-xs" /> : null}
       <span data-channel-name="" className="min-w-0 truncate">
-        <ChannelTitle
-          name={name}
-          visibility={visibility ?? listed?.visibility ?? "public"}
-          hash={false}
-          lockClassName="size-3.5"
-        />
+        <ChannelTitle name={name} visibility={visibility} hash={false} lockClassName="size-3.5" />
       </span>
     </span>
   );

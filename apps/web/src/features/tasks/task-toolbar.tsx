@@ -1,5 +1,5 @@
 import { TASK_WRITE_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
-import { useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Columns03, FilterLines, List } from "@untitledui/icons";
 import { Tag, TagGroup, TagList } from "react-aria-components";
 
@@ -22,7 +22,6 @@ import { m } from "#src/paraglide/messages";
 import {
   NO_OWNER,
   NO_PROJECT,
-  channelOptions,
   labelOptions,
   NO_LABEL,
   ownerOptions,
@@ -47,7 +46,6 @@ export function TaskToolbar({
   onLayoutChange,
   currentMemberId,
   project = false,
-  tree = false,
   action,
 }: {
   tasks: readonly FilterableTask[];
@@ -60,57 +58,56 @@ export function TaskToolbar({
   onLayoutChange: (layout: TaskLayout) => void;
   currentMemberId?: string | null;
   project?: boolean;
-  tree?: boolean;
   action?: ReactNode;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const needOwners = menuOpen || filter.owners.length > 0;
+  const needProjects = !project && (menuOpen || filter.projects.length > 0);
+  const needLabels = menuOpen || filter.labels.length > 0;
   const owners = useMemo(
     () =>
-      ownerOptions(tasks, currentMemberId).map((option): PickerOption => ({
-        id: option.id,
-        label: ownerLabel(option),
-        face:
-          option.kind === "none"
-            ? undefined
-            : {
-                kind: "identity",
-                name: option.name,
-                src: option.avatarUrl,
-                ...(option.kind === "agent" ? { agentId: option.id } : { userId: option.id }),
-              },
-        ...(option.handle !== undefined && agentHandle(option.handle)),
-        count: option.count,
-      })),
-    [tasks, currentMemberId],
+      needOwners
+        ? ownerOptions(tasks, currentMemberId).map((option): PickerOption => ({
+            id: option.id,
+            label: ownerLabel(option),
+            face:
+              option.kind === "none"
+                ? undefined
+                : {
+                    kind: "identity",
+                    name: option.name,
+                    src: option.avatarUrl,
+                    ...(option.kind === "agent" ? { agentId: option.id } : { userId: option.id }),
+                  },
+            ...(option.handle !== undefined && agentHandle(option.handle)),
+            count: option.count,
+          }))
+        : [],
+    [needOwners, tasks, currentMemberId],
   );
   const projects = useMemo(
     () =>
-      projectOptions(tasks).map((option): PickerOption => ({
-        ...(option.id === NO_PROJECT
-          ? { id: option.id, label: m.tasks_overview_no_project() }
-          : projectOption(option)),
-        count: option.count,
-      })),
-    [tasks],
+      needProjects
+        ? projectOptions(tasks).map((option): PickerOption => ({
+            ...(option.id === NO_PROJECT
+              ? { id: option.id, label: m.tasks_overview_no_project() }
+              : projectOption(option)),
+            count: option.count,
+          }))
+        : [],
+    [needProjects, tasks],
   );
   const labels = useMemo(
     () =>
-      labelOptions(tasks).map((option): PickerOption => ({
-        id: option.id,
-        label: option.id === NO_LABEL ? m.tasks_labels_none() : option.name,
-        count: option.count,
-      })),
-    [tasks],
+      needLabels
+        ? labelOptions(tasks).map((option): PickerOption => ({
+            id: option.id,
+            label: option.id === NO_LABEL ? m.tasks_labels_none() : option.name,
+            count: option.count,
+          }))
+        : [],
+    [needLabels, tasks],
   );
-  const channels = useMemo(
-    () =>
-      channelOptions(tasks).map((option): PickerOption => ({
-        id: option.id,
-        label: option.name,
-        count: option.count,
-      })),
-    [tasks],
-  );
-  const pickedChannels = tree ? (filter.channels ?? []) : [];
   const labelsOf = (options: readonly PickerOption[], picked: readonly string[], none: string) =>
     picked.map(
       (id) =>
@@ -138,13 +135,6 @@ export function TaskToolbar({
         }),
         remove: () => onFilterChange({ ...filter, projects: [] }),
       },
-    pickedChannels.length > 0 && {
-      id: "channels",
-      label: m.tasks_filter_channel_is({
-        names: namesLabel(labelsOf(channels, pickedChannels, m.tasks_filter_other())),
-      }),
-      remove: () => onFilterChange({ ...filter, channels: [] }),
-    },
     filter.labels.length > 0 && {
       id: "labels",
       label: m.tasks_filter_labels_are({
@@ -163,7 +153,7 @@ export function TaskToolbar({
   return (
     <div className="flex min-h-11 shrink-0 items-center justify-between gap-1.5 px-page py-1.5 max-sm:flex-wrap sm:gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
-        <Dropdown.Root>
+        <Dropdown.Root isOpen={menuOpen} onOpenChange={setMenuOpen}>
           <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ms-3">
             {m.tasks_filter()}
           </Button>
@@ -181,14 +171,6 @@ export function TaskToolbar({
                   options={projects}
                   picked={filter.projects}
                   onChange={(picked) => onFilterChange({ ...filter, projects: picked })}
-                />
-              )}
-              {tree && (
-                <FilterSubmenu
-                  name={m.tasks_filter_channel()}
-                  options={channels}
-                  picked={pickedChannels}
-                  onChange={(picked) => onFilterChange({ ...filter, channels: picked })}
                 />
               )}
               <FilterSubmenu

@@ -3,9 +3,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { isChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
+  centrifugoServerApiConfigured,
+  createCentrifugoServerApi,
+} from "#src/server/centrifugo/server-api.server";
+import {
   AgentChannelManagement,
   type AgentChannelManagementRepository,
 } from "#src/server/conversations/agent-channel-management.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import {
   channelManagementErrorResponse,
   readJsonBody,
@@ -43,11 +48,20 @@ export async function handleAgentChannelPatch(
     return textResponse("description must be a string", { status: 400 });
   if (body?.visibility !== undefined && !isChannelVisibility(body.visibility))
     return textResponse('visibility must be "public" or "private"', { status: 400 });
+  if (
+    body?.announcement !== undefined &&
+    body.announcement !== null &&
+    typeof body.announcement !== "string"
+  )
+    return textResponse("announcement must be a string or null", { status: 400 });
   try {
     const info = await repository.update(principal.workspaceId, principal.agentId, channel, {
       name: body?.name as string | undefined,
       description: body?.description as string | undefined,
       visibility: body?.visibility,
+      ...(body?.announcement !== undefined
+        ? { announcement: body.announcement as string | null }
+        : {}),
     });
     return Response.json({ idempotencyKey, channel: info });
   } catch (error) {
@@ -62,7 +76,19 @@ export const Route = createFileRoute("/api/agent/v1/channels_/$channel")({
       GET: ({ request, context: { principal, db }, params }) =>
         handleAgentChannelGet(request, params.channel, principal, new AgentChannelManagement(db)),
       PATCH: ({ request, context: { principal, db }, params }) =>
-        handleAgentChannelPatch(request, params.channel, principal, new AgentChannelManagement(db)),
+        handleAgentChannelPatch(
+          request,
+          params.channel,
+          principal,
+          new AgentChannelManagement(
+            db,
+            undefined,
+            undefined,
+            centrifugoServerApiConfigured()
+              ? new CentrifugoConversationRealtime(createCentrifugoServerApi())
+              : undefined,
+          ),
+        ),
     },
   },
 });

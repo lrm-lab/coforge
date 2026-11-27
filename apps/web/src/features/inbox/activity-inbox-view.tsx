@@ -142,6 +142,7 @@ export function ActivityInboxView({
     opened,
     workspaceId,
     firstPage?.selectedItem,
+    query.isPlaceholderData,
   );
   const onDoneStarted = useCallback(
     (item: ActivityCompletionItem) => {
@@ -210,13 +211,14 @@ export function ActivityInboxView({
   }, [markAllRead, loadedAt, refresh]);
 
   const { rows } = useActivityInboxGroups(filter, items, pinned);
+  const leavingResetKey = `${filter}:${query.isPlaceholderData ? "placeholder" : "ready"}`;
   const visibleItemRows = useLeavingItems(items, {
     getKey: (item) => item.key,
-    resetKey: filter,
+    resetKey: leavingResetKey,
   });
   const visiblePinnedRows = useLeavingItems(pinned, {
     getKey: (item) => item.key,
-    resetKey: filter,
+    resetKey: leavingResetKey,
   });
   const activeItemKeys = useMemo(
     () => new Set([...items.map((item) => item.key), ...pinned.map((item) => item.key)]),

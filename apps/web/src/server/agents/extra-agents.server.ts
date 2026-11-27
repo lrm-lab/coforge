@@ -5,6 +5,7 @@ import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.ser
 import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import { HELD_AGENT_IDS_LIMIT, type ExtraAgent } from "#src/features/agents/extra-agent";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "./active-agent.server";
+import { WEEKLY_REPORTS_VISIBLE_AGENT_WHERE } from "#src/server/records/weekly-reports-gate.server";
 import { agentDisplayScope } from "./external-agent-presence.server";
 import type { AgentDisplay } from "./agent-display.server";
 import {
@@ -92,6 +93,7 @@ export async function listExtraAgents(
             ...visibleAgentWhere(viewer),
           },
           ROSTER_AGENT_WHERE,
+          WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
         ],
       },
       select: {
