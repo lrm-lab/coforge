@@ -15,7 +15,6 @@ import {
 import {
   AgentChannelManagementError,
   channelAuthorityDeniedError,
-  visibilityDeniedError,
 } from "./agent-channel-management-error.server";
 import { PublicChannels } from "./public-channels.server";
 import { softLeaveMember } from "./channel-changes.server";
@@ -24,12 +23,9 @@ import { announceMemberChanged, type ConversationRealtime } from "./conversation
 import { announceJoinedOrLeft } from "./channel-membership-signals.server";
 import { announceMessageBestEffort } from "./conversation-activity.server";
 import { assertCallerNotPrivate, createAgentChannel } from "./agent-channel-create.server";
+import { updateAgentChannel } from "./agent-channel-announcement.server";
 
-import {
-  canChangeChannelVisibility,
-  hasChannelAdminAuthority,
-  resolveChannelAuthority,
-} from "./channel-authority.server";
+import { hasChannelAdminAuthority } from "./channel-authority.server";
 import type { ChannelActor } from "./channel-actor.server";
 import { visibleChannelWhere } from "./channel-read-access.server";
 import type { AgentDisplay } from "#src/server/agents/agent-display.server";
@@ -42,7 +38,6 @@ import {
 } from "./agent-channel-reads.server";
 import {
   memberNotFound,
-  normalizeChannelName,
   parseChannelTarget,
   parseMemberInput,
   USER_TARGET,
@@ -203,63 +198,13 @@ export class AgentChannelManagement {
     target: string,
     patch: { name?: string; description?: string; visibility?: ChannelVisibility },
   ): Promise<AgentChannelInfo> {
-    const changesInfo = patch.name !== undefined || patch.description !== undefined;
-    if (!changesInfo && patch.visibility === undefined)
-      throw new AgentChannelManagementError(
-        400,
-        "update requires --name, --description, --public or --private",
-      );
     const actor = await agentChannelReader(this.db, workspaceId, agentId);
-    const { channelName, channel } = await this.targetChannel(workspaceId, actor, target);
-    // Authority before the input is judged, so an Agent without it learns nothing else; both
-    // before any write, so a denied visibility change leaves the name and description alone.
-    if (changesInfo && !(await hasChannelAdminAuthority(this.db, workspaceId, actor, channel)))
-      throw channelAuthorityDeniedError("update");
-    if (patch.visibility !== undefined) {
-      if (channelName === "general")
-        throw new AgentChannelManagementError(400, "#general is always public");
-      const authority = await resolveChannelAuthority(this.db, workspaceId, actor, channel);
-      if (!canChangeChannelVisibility(channelName, authority.serverRole, authority.isActiveMember))
-        throw visibilityDeniedError();
-    }
-    if (channel.archivedAt) throw new AgentChannelManagementError(409, "channel is archived");
-    let nextName: string | undefined;
-    if (patch.name !== undefined) {
-      if (channelName === "general")
-        throw new AgentChannelManagementError(400, "cannot rename #general");
-      nextName = normalizeChannelName(patch.name);
-      if (nextName === "general") throw new AgentChannelManagementError(409, "general is reserved");
-    }
-    // Shared with the human settings panel, which applies the same authority and archive rules.
-    if (changesInfo)
-      try {
-        await this.channels.updateInfo(workspaceId, actor, channel.id, {
-          name: nextName,
-          description: patch.description,
-        });
-      } catch (error) {
-        if (isAppErrorCode(error, "ACCESS_DENIED")) throw channelAuthorityDeniedError("update");
-        if (isAppErrorCode(error, "CONFLICT"))
-          throw new AgentChannelManagementError(409, "channel name is already in use");
-        throw error;
-      }
-    if (patch.visibility !== undefined)
-      try {
-        await this.channels.setVisibility(workspaceId, actor, channel.id, patch.visibility);
-      } catch (error) {
-        if (isAppErrorCode(error, "ACCESS_DENIED")) throw visibilityDeniedError();
-        if (isAppErrorCode(error, "CONFLICT"))
-          throw new AgentChannelManagementError(409, "channel is archived");
-        // It left the channel since the check above, and so no longer reads a private one.
-        if (isAppErrorCode(error, "NOT_FOUND"))
-          throw new AgentChannelManagementError(404, "channel not found");
-        throw error;
-      }
-    return agentChannelInfo(
-      this.db,
+    return updateAgentChannel(
+      { db: this.db, channels: this.channels },
       workspaceId,
-      await this.findChannel(workspaceId, actor, nextName ?? channelName),
       actor,
+      target,
+      patch,
     );
   }
 
