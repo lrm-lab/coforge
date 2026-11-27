@@ -72,7 +72,7 @@ export type ColdIdleSweepPorts = Readonly<{
   agent(agentId: string): ColdIdleAgent | undefined;
   provider(provider: RuntimeProvider): CodeAgentProvider;
   providerCapabilities?(provider: RuntimeProvider): ColdIdleProviderCapabilities | undefined;
-  stop(stop: ColdIdleStop): Promise<void>;
+  stop(stop: ColdIdleStop): Promise<boolean | void>;
   readSummaryFacts?(agentId: string, sessionId: string): SessionResumeFacts | undefined;
   now?(): number;
 }>;
@@ -242,14 +242,18 @@ export class ColdIdleSweep {
         skipped.became_busy = (skipped.became_busy ?? 0) + 1;
         continue;
       }
-      stopped++;
-      await this.#ports.stop(stop).catch((error: unknown) =>
-        logger.warn("Agent cold idle stop failed", {
-          event: "agent.runtime.cold_idle_stop_failed",
-          agent_id: stop.agentId,
-          error: thrownMessage(error),
-        }),
-      );
+      await this.#ports
+        .stop(stop)
+        .then((released) => {
+          if (released !== false) stopped++;
+        })
+        .catch((error: unknown) =>
+          logger.warn("Agent cold idle stop failed", {
+            event: "agent.runtime.cold_idle_stop_failed",
+            agent_id: stop.agentId,
+            error: thrownMessage(error),
+          }),
+        );
     }
     if (views.length > 0)
       logger.info("Agent cold idle sweep", {

@@ -7,6 +7,7 @@ import {
 import type { AgentSession } from "@lrm/coforge-anvil";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { AgentRestartConfig, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
+import type { countLiveProcessDescendants } from "#src/agent-runtime/process-descendants";
 import type { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
 import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import type { ColdIdleStop } from "#src/agent-runtime/wake-session-recycle";
@@ -85,6 +86,7 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   carryMentions(agentId: string, freshSession: boolean): ReadonlyMap<string, number>;
   abortMentionCarry(agentId: string): void;
   release(agentId: string, timeoutMs: number): Promise<void>;
+  countLiveDescendants?: typeof countLiveProcessDescendants;
   reconcileIdleTurn?(agentId: string, launch: L): boolean;
 }>;
 export class RuntimeRelease<L extends ReleasableLaunch> {
@@ -208,13 +210,31 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
         : {}),
     };
   }
-  async stopColdIdle(stop: ColdIdleStop): Promise<void> {
+  async stopColdIdle(stop: ColdIdleStop): Promise<boolean> {
     const { agentId } = stop;
     const launch = this.#ports.launch(agentId);
     const session = this.#ports.runtime(agentId)?.session;
     const restart = this.#ports.restartConfig(agentId);
-    if (!launch || !session || !restart) return;
-    await this.#endAndWake(agentId, launch, session, coldIdleRuntimePlan(restart, stop));
+    if (!launch || !session || !restart) return false;
+    const tools = launch.toolCalls;
+    const startedAfterMs = tools?.unfinishedCommandStartedAtMs;
+    const countLiveDescendants = this.#ports.countLiveDescendants;
+    if (tools && startedAfterMs !== undefined && countLiveDescendants) {
+      const lastEventAtMs = launch.progress?.lastEventAtMs;
+      const live = await countLiveDescendants(session.processId, { startedAfterMs });
+      if (live !== 0) return false;
+      const current = this.coldIdleAgent(agentId);
+      if (
+        this.#ports.launch(agentId) !== launch ||
+        this.#ports.runtime(agentId)?.session !== session ||
+        current?.busyReason !== undefined ||
+        current?.sessionId !== stop.sessionId ||
+        current.lastEventAtMs !== lastEventAtMs
+      )
+        return false;
+      tools.clearUnfinishedCommand(startedAfterMs);
+    }
+    return this.#endAndWake(agentId, launch, session, coldIdleRuntimePlan(restart, stop));
   }
   configApplyAgent(agentId: string): ColdIdleAgent | undefined {
     const hold = this.#ports.explicitHold?.(agentId);
