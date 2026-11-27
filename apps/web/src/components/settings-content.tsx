@@ -60,7 +60,6 @@ export interface SettingsContentProps {
   bindArrival?: BindArrival;
   onBindArrivalHandled?: () => void;
   profile: AccountProfile;
-  createdAgents: Array<{ id: string; name: string; avatarUrl: string | null }>;
   members: {
     actorUserId: string;
     actorRole: string;

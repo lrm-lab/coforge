@@ -38,9 +38,8 @@ test("Account settings shows the person plainly: no banner, no empty fields", as
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "800");
     await browser("open", `${origin}/en/w/${membership.workspace.slug}/settings?section=account`);
-    // Joined is written once the page is hydrated, in the browser's time zone.
     await wait(
-      `(() => { const dds = [...document.querySelectorAll("section:has(> header h2) dd:not(:has(img))")]; return dds.length > 0 && dds.every((dd) => dd.textContent.trim() !== ""); })()`,
+      `(() => { const dds = [...document.querySelectorAll("section:has(> header h2) dd")]; return dds.length > 0 && dds.every((dd) => dd.textContent.trim() !== ""); })()`,
     );
 
     const page = await evaluate<{
@@ -66,6 +65,7 @@ test("Account settings shows the person plainly: no banner, no empty fields", as
     expect(page.canvases).toBe(0);
     expect(page.labels).not.toContain("Description");
     expect(page.labels).not.toContain("Display name");
+    expect(page.labels).not.toContain("Agents you created");
     expect(page.values).not.toContain("-");
     expect(page.labels).toContain("Joined");
   } finally {

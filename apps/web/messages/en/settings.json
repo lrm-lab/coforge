@@ -138,7 +138,6 @@
   "settings_avatar_dialog_title": "Change avatar",
   "settings_avatar_dialog_error": "Your avatar wasn't changed. Pictures must be JPG, PNG, or WebP, 5 MB at most. Try again.",
   "settings_joined_at": "Joined",
-  "settings_created_agents": "Agents you created",
   "settings_description_remaining": "{count} characters left",
   "settings_avatar_preset_label": "Avatar {number}",
   "settings_profile_edit": "Edit",

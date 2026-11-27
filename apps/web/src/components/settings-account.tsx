@@ -4,7 +4,6 @@ import { Camera01, Check } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { AccountPasswordDialog } from "#src/features/profiles/account-password-dialog";
 import { PersonAvatarDialog } from "#src/features/profiles/person-avatar-dialog";
-import { CreatedAgentFaces } from "#src/features/agents/created-agent-faces";
 import { Button } from "#src/components/base/buttons/button";
 import { Badge, BadgeWithIcon } from "#src/components/base/badges/badges";
 import { useAppForm } from "#src/components/ui/form";
@@ -36,7 +35,6 @@ export type AccountProfile = {
 
 export function AccountSettings({
   profile,
-  createdAgents,
   locale,
   timeZone,
   onProfileSave,
@@ -168,16 +166,6 @@ export function AccountSettings({
                 label={m.settings_joined_at()}
                 value={hydrated ? formatCalendarDate(profile.joinedAt, timeZone, locale) : ""}
               />
-              {createdAgents.length > 0 ? (
-                <div className="flex min-w-0 flex-col gap-2">
-                  <dt className="text-sm font-semibold text-primary">
-                    {m.settings_created_agents()}
-                  </dt>
-                  <dd className="min-w-0 text-sm text-primary">
-                    <CreatedAgentFaces agents={createdAgents} />
-                  </dd>
-                </div>
-              ) : null}
             </dl>
           )}
         </div>

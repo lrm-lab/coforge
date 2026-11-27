@@ -138,7 +138,6 @@
   "settings_avatar_dialog_title": "更换头像",
   "settings_avatar_dialog_error": "头像没有换成，请重试。图片要是 JPG、PNG 或 WebP，最大 5 MB。",
   "settings_joined_at": "加入时间",
-  "settings_created_agents": "创建过的 Agent",
   "settings_description_remaining": "还能输入{count}字",
   "settings_avatar_preset_label": "头像 {number}",
   "settings_profile_edit": "编辑",

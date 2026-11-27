@@ -38,7 +38,6 @@ import {
   saveDateTimePreferences,
 } from "#src/features/settings/settings.functions";
 import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
-import { MEMBER_PAGE_SIZE } from "#src/features/workspaces/member-directory";
 import { getLocale, setLocale } from "#src/paraglide/runtime";
 import {
   readHideEmptySidebarSections,
@@ -61,7 +60,6 @@ import { useRefreshSidebarChannels } from "#src/features/conversations/sidebar-l
 import { WorkspaceDangerZone } from "#src/features/workspaces/workspace-danger-zone";
 import {
   changeWorkspaceSlug,
-  loadMemberAgentPage,
   renameWorkspace,
   uploadWorkspaceIcon,
 } from "#src/features/workspaces/workspaces.functions";
@@ -99,30 +97,17 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
   },
   shouldReload: ({ cause }) => cause !== "stay",
   loader: async () => {
-    const [
-      preferences,
-      members,
-      generalChannel,
-      archivedChannels,
-      archivedAgents,
-      createdAgents,
-      feedbackAccess,
-    ] = await Promise.all([
-      getUserPreferences(),
-      loadWorkspaceMembers(),
-      loadGeneralChannelHidden(),
-      loadArchivedChannels(),
-      loadArchivedAgents(),
-      loadMemberAgentPage({ data: { owner: "mine", query: "", limit: MEMBER_PAGE_SIZE } }),
-      loadFeedbackInboxAccess(),
-    ]);
+    const [preferences, members, generalChannel, archivedChannels, archivedAgents, feedbackAccess] =
+      await Promise.all([
+        getUserPreferences(),
+        loadWorkspaceMembers(),
+        loadGeneralChannelHidden(),
+        loadArchivedChannels(),
+        loadArchivedAgents(),
+        loadFeedbackInboxAccess(),
+      ]);
     return {
       ...preferences,
-      createdAgents: createdAgents.items.map(({ id, name, avatarUrl }) => ({
-        id,
-        name,
-        avatarUrl,
-      })),
       generalChannelHidden: generalChannel?.hidden ?? null,
       archivedChannels,
       archivedAgents,
@@ -154,7 +139,6 @@ function SettingsPage() {
     timeFormat: savedTimeFormat,
     language: savedLanguage,
     members,
-    createdAgents,
     generalChannelHidden,
     archivedChannels,
     archivedAgents,
@@ -382,7 +366,6 @@ function SettingsPage() {
       personalMemory={personalMemory}
       onSectionChange={selectSection}
       profile={profile}
-      createdAgents={createdAgents}
       members={members}
       locale={locale}
       theme={theme}
