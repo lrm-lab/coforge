@@ -13,13 +13,14 @@ Part of [Git hooks](README.md): what the [hooks](README.md), the `mise run check
   whitespace check, `scripts/ci/range-checks.ts`), so a violation is reported
   before a push that follows the check. Without `origin` or `origin/main` it says so and skips
   that part; a stale `origin/main` can list others' commits, so a failure names its base and asks
-  for `git fetch origin`. The same range also selects the script-contract suites
-  (`scripts/ci/selection.ts`'s `local` track, the map CI's changes job uses) and runs each as
-  `bun run test:<name>` then `bun run check:<name>`; a path that selects nothing adds only the
-  diff and selection, a few milliseconds, and a diff that cannot be computed fails the gate
-  rather than passing silently. Git command failures also fail with their command and diagnostic;
-  a checkout marker is checked before Git runs, so an invalid Git environment or damaged checkout
-  cannot be mistaken for a build context without Git metadata. It changes no config, and does nothing when `CI` is
+  for `git fetch origin`. The same range selects changed source files for strict lint. The gate
+  and CI both run `oxlint --deny-warnings` using dependencies from that checkout. If the range
+  contains lintable files and Oxlint is missing, the gate fails and asks for `mise run setup` to
+  install the pinned dependencies.
+  The range also selects the script-contract suites (`scripts/ci/selection.ts`'s `local` track)
+  and runs each as `bun run test:<name>` then `bun run check:<name>`. A diff that cannot be
+  computed fails the gate. Git command failures report the command and diagnostic. Checking the
+  checkout marker first distinguishes a damaged checkout from a build context without Git metadata. It changes no config, and does nothing when `CI` is
   set to anything but `false` or `0`, or outside a work tree. It is a convention, and
   `--no-verify` bypasses the hooks: only CI cannot be skipped.
 - A maintainer or an Agent may push directly to `main` (root `AGENTS.md`); CI validates a push only

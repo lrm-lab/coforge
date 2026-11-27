@@ -46,6 +46,62 @@ test("an installed hook and a clean range pass", () => {
   expect(runGate()).toMatchObject({ exitCode: 0, stderr: "" });
 });
 
+const cleanSource = 'export const value = "hi";\n';
+const warningSource = `const unused = 1;\n${cleanSource}`;
+
+for (const { name, source, installedLinter, exitCode, diagnostic } of [
+  {
+    name: "pass clean changes",
+    source: cleanSource,
+    installedLinter: true,
+    exitCode: 0,
+    diagnostic: "",
+  },
+  {
+    name: "reject changed-file warnings",
+    source: warningSource,
+    installedLinter: true,
+    exitCode: 1,
+    diagnostic: "no-unused-vars",
+  },
+  {
+    name: "reject missing Oxlint",
+    source: cleanSource,
+    installedLinter: false,
+    exitCode: 1,
+    diagnostic: "oxlint is missing",
+  },
+]) {
+  test(`local gate and CI strict lint both ${name}`, async () => {
+    installed();
+    const base = repo.seed({
+      ".oxlintrc.json": JSON.stringify({ rules: { "no-unused-vars": "warn" } }),
+      "legacy.ts": warningSource,
+      "scripts/ci/run-checks.ts": await Bun.file(join(import.meta.dir, "run-checks.ts")).text(),
+      "scripts/ci/safe-stdio.ts": await Bun.file(join(import.meta.dir, "safe-stdio.ts")).text(),
+    });
+    withOrigin();
+    const head = repo.seed({ "packages/coforge/src/changed.ts": source });
+    if (installedLinter) {
+      const binDir = join(repo.dir, "node_modules/.bin");
+      mkdirSync(binDir, { recursive: true });
+      symlinkSync(
+        join(import.meta.dir, "../../packages/coforge/node_modules/.bin/oxlint"),
+        join(binDir, "oxlint"),
+      );
+    }
+
+    const result = runGate();
+    const ci = repo.run([process.execPath, "scripts/ci/run-checks.ts", "--lint-range", base, head]);
+    expect(result.exitCode, result.stdout + result.stderr).toBe(exitCode);
+    expect(ci.exitCode, ci.stdout + ci.stderr).toBe(exitCode);
+    for (const { stdout, stderr } of [result, ci]) {
+      expect(stdout + stderr).not.toContain("legacy.ts");
+      if (diagnostic) expect(stdout + stderr).toContain(diagnostic);
+    }
+  });
+}
+
 test("a commit not on origin/main that breaks a rule fails, naming the base and a fetch", () => {
   installed();
   repo.seed({ "README.md": "# Repo\n" });

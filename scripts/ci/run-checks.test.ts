@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { downstreamWorkspaces, lintFilesStrict } from "./run-checks";
+import { downstreamWorkspaces } from "./run-checks";
 
 const repoRoot = join(import.meta.dir, "../..");
 
@@ -17,22 +16,6 @@ describe("downstreamWorkspaces", () => {
     expect(affected).toContain("packages/daemon");
     expect(affected).toContain("packages/computer");
     expect(affected).toContain("apps/web");
-  });
-});
-
-describe("lintFilesStrict", () => {
-  test("fails on oxlint warnings (--deny-warnings) and passes on clean files", () => {
-    const dir = mkdtempSync(join(tmpdir(), "coforge-lint-strict-"));
-    try {
-      mkdirSync(join(dir, "scripts"), { recursive: true });
-      writeFileSync(join(dir, "scripts/warn.ts"), 'const unused = 1;\nexport const ok = "hi";\n');
-      expect(lintFilesStrict(dir, ["scripts/warn.ts"])).toBe(false);
-
-      writeFileSync(join(dir, "scripts/clean.ts"), 'export const ok = "hi";\n');
-      expect(lintFilesStrict(dir, ["scripts/clean.ts"])).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
   });
 });
 

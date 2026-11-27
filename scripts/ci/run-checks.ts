@@ -153,13 +153,19 @@ export function lintFilesStrict(root: string, paths: string[]): boolean {
   if (groups.size === 0) return true;
 
   let ok = true;
-  const fallbackBin = join(import.meta.dir, "../../packages/coforge/node_modules/.bin/oxlint");
+  const fallbackBin = join(root, "packages/coforge/node_modules/.bin/oxlint");
   for (const [owner, files] of groups) {
     const cwd = owner === "." ? root : join(root, owner);
     const localBin = join(cwd, "node_modules/.bin/oxlint");
     const rootBin = join(root, "node_modules/.bin/oxlint");
     const oxlintBin = existsSync(localBin) ? localBin : existsSync(rootBin) ? rootBin : fallbackBin;
-    if (!existsSync(oxlintBin)) continue;
+    if (!existsSync(oxlintBin)) {
+      console.error(
+        `strict lint: oxlint is missing for ${owner}. Run \`mise run setup\` from ${root}.`,
+      );
+      ok = false;
+      continue;
+    }
     if (!runCommand([process.execPath, "--bun", oxlintBin, "--deny-warnings", ...files], cwd))
       ok = false;
   }
