@@ -57,6 +57,8 @@ import { encodeArtifactShortId, publicArtifactPath } from "./artifact-short-id";
 import { useConversationName } from "./use-conversation-name";
 import { useArtifactActions } from "./use-artifact-actions";
 import { useArtifactPageRealtime } from "./use-artifact-page-realtime";
+import { ArtifactReopenedBanner } from "./artifact-settlement-control";
+import { useArtifactSettlement } from "./use-artifact-settlement";
 import { useArtifactVisibility } from "./use-artifact-visibility";
 import { useOptionalInlineEmbedPool } from "./inline-embed-pool-context";
 
@@ -164,6 +166,12 @@ function ArtifactPageFor({
     homeName,
     canChange,
     narrowable: current?.artifact.narrowable === true,
+  });
+  const settlement = useArtifactSettlement({
+    artifactId,
+    homeId: homeId ?? null,
+    settled: current?.artifact.settled ?? null,
+    reopened: current?.artifact.reopened ?? null,
   });
 
   const keepSeen = useKeepSeen(artifactId);
@@ -383,6 +391,7 @@ function ArtifactPageFor({
                   homeName={homeName}
                   nameOf={nameOf}
                   visibility={visibility}
+                  settlement={settlement}
                   presenceReady={opened}
                   framesPage={framesPage}
                   annotating={commentMode.mode}
@@ -421,6 +430,13 @@ function ArtifactPageFor({
                           version={pinned}
                           failed={pinnedRead.isError}
                           onBack={unpin}
+                        />
+                      )}
+                      {current && settlement.settled === null && settlement.reopened !== null && (
+                        <ArtifactReopenedBanner
+                          reopened={settlement.reopened}
+                          pending={settlement.pending}
+                          onSettle={settlement.settle}
                         />
                       )}
                       <ArtifactPageBody

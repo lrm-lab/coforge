@@ -1,0 +1,18 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "av_settle_action": "Settle",
+  "av_settle_again": "Settle again",
+  "av_settled_badge": "Settled",
+  "av_settled_title": "Settled at v{version}",
+  "av_settled_by": "Settled by {name} {time}",
+  "av_settled_hint": "Agents see a notice before pushing a new version, and confirm by pushing again.",
+  "av_unsettle_action": "Mark as working",
+  "av_menu_settle": "Mark as settled",
+  "av_menu_unsettle": "Mark as working",
+  "av_reopened_banner": "Working again — v{version} came after {name} settled v{settledVersion}",
+  "av_details_status": "Status",
+  "av_details_working": "Working",
+  "av_details_latest_version": "Latest v{version}",
+  "av_settle_failed": "Couldn't mark as settled",
+  "av_unsettle_failed": "Couldn't mark as working"
+}

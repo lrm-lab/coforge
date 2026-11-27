@@ -185,6 +185,7 @@ export function ArtifactCardFace({
     access: card.access,
     homeKey: card.homeKey ?? "",
   });
+  const settled = marks?.settled ?? card.settled ?? null;
   return (
     <article
       aria-label={m.doc_card_label({ kind, title })}
@@ -227,7 +228,16 @@ export function ArtifactCardFace({
               <span className="max-w-32 truncate">{scope.label}</span>
             </span>
           )}
-          {marks && <CardBadges card={marks} />}
+          {(marks || settled) && (
+            <CardBadges
+              card={{
+                hasUpdates: marks?.hasUpdates ?? false,
+                newComments: marks?.newComments ?? 0,
+                mentionsYou: marks?.mentionsYou ?? false,
+                settled,
+              }}
+            />
+          )}
         </div>
       </div>
     </article>

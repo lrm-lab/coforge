@@ -2,6 +2,7 @@ import type {
   ArtifactAccessChangedEvent,
   ArtifactCommentsChangedEvent,
   ArtifactDataChangedEvent,
+  ArtifactSettlementChangedEvent,
   ArtifactVersionPublishedEvent,
 } from "#src/features/artifacts/artifact-realtime";
 import {
@@ -21,6 +22,7 @@ import {
 export type ArtifactSignalEvent =
   | ArtifactVersionPublishedEvent
   | ArtifactAccessChangedEvent
+  | ArtifactSettlementChangedEvent
   | ArtifactDataChangedEvent
   | ArtifactCommentsChangedEvent
   | ActivityChangedEvent;
@@ -102,6 +104,28 @@ export async function announceAccessChange(
       artifactId: input.artifactId,
     },
     "artifacts:access_signal_failed",
+  );
+}
+
+export async function announceSettlementChange(
+  signals: ArtifactSignals | undefined,
+  input: {
+    workspaceId: string;
+    homeKey: string;
+    wide: boolean;
+    artifactId: string;
+  },
+) {
+  if (!signals) return;
+  await publishBestEffort(
+    signals,
+    channelsOf(input),
+    {
+      type: REALTIME_EVENTS.artifactSettlementChanged,
+      workspaceId: input.workspaceId,
+      artifactId: input.artifactId,
+    },
+    "artifacts:settlement_signal_failed",
   );
 }
 

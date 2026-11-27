@@ -1,0 +1,18 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "av_settle_action": "定稿",
+  "av_settle_again": "重新定稿",
+  "av_settled_badge": "已定稿",
+  "av_settled_title": "已定稿于 v{version}",
+  "av_settled_by": "{name} 于 {time}定稿",
+  "av_settled_hint": "Agent 推送新版本前会先收到已定稿提示，再次推送才会继续更新。",
+  "av_unsettle_action": "恢复为编辑中",
+  "av_menu_settle": "标记为已定稿",
+  "av_menu_unsettle": "恢复为编辑中",
+  "av_reopened_banner": "已恢复编辑：v{version} 在 {name} 定稿 v{settledVersion} 后更新",
+  "av_details_status": "状态",
+  "av_details_working": "编辑中",
+  "av_details_latest_version": "最新版本 v{version}",
+  "av_settle_failed": "定稿失败，请重试",
+  "av_unsettle_failed": "恢复编辑状态失败，请重试"
+}

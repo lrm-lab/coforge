@@ -8,6 +8,7 @@ import {
   requireConversationHome,
 } from "./artifact-access.server";
 import type { ArtifactReads } from "./artifact-reads.server";
+import { resolveSettlementViews, SETTLEMENT_SELECT } from "./artifact-settlement.server";
 import { epochTimestamp, visibleToReaderSql } from "./artifact-visible.server";
 
 export type GallerySort = "opened" | "updated";
@@ -62,6 +63,7 @@ const CARD_SELECT = {
   preview: true,
   authorAgentId: true,
   updatedAt: true,
+  ...SETTLEMENT_SELECT,
 } as const;
 
 export class ArtifactGallery {
@@ -97,6 +99,8 @@ export class ArtifactGallery {
         hasUpdates: place !== undefined && place.seenVersion < item.currentVersion,
         newComments: place?.newComments ?? 0,
         mentionsYou: place?.mentioned ?? false,
+        settled: item.settled,
+        reopened: item.reopened,
       };
     });
   }
@@ -120,6 +124,7 @@ export class ArtifactGallery {
     const last = page.at(-1);
     return {
       artifacts: await this.cards(
+        input.workspaceId,
         input.userId,
         page.map((row) => row.id),
       ),
@@ -229,7 +234,7 @@ export class ArtifactGallery {
     return new Map(rows.map((row) => [row.artifactId, row]));
   }
 
-  private async cards(userId: string, ids: readonly string[]) {
+  private async cards(workspaceId: string, userId: string, ids: readonly string[]) {
     if (ids.length === 0) return [];
     const [rows, counts, positions] = await Promise.all([
       this.db.artifact.findMany({ where: { id: { in: [...ids] } }, select: CARD_SELECT }),
@@ -241,27 +246,36 @@ export class ArtifactGallery {
       this.#viewerPositions(userId, ids),
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
+    const page = ids.flatMap((id) => byId.get(id) ?? []);
+    const settlements = await resolveSettlementViews(this.db, workspaceId, page);
     const total = new Map(counts.map((row) => [row.artifactId, row._count._all]));
-    return ids.flatMap((id) => {
-      const row = byId.get(id);
-      if (!row) return [];
-      const { authorAgentId, ...shown } = row;
-      const place = positions.get(id);
+    return page.map((row, index) => {
+      const {
+        authorAgentId,
+        settledAt: _sa,
+        settledVersion: _sv,
+        settledByKind: _sk,
+        settledById: _si,
+        reopenedAtVersion: _rv,
+        ...shown
+      } = row;
+      const place = positions.get(row.id);
       const tier = artifactAccessTier(row);
-      return [
-        {
-          ...shown,
-          homeKey: tier === "conversation" ? row.homeKey : "workspace",
-          access: tier,
-          author: authorAgentId ? { agentId: authorAgentId } : null,
-          link: tier === "link",
-          openedAt: place?.openedAt ?? null,
-          commentCount: total.get(id) ?? 0,
-          hasUpdates: place !== undefined && place.seenVersion < row.currentVersion,
-          newComments: place?.newComments ?? 0,
-          mentionsYou: place?.mentioned ?? false,
-        },
-      ];
+      const settlement = settlements[index];
+      return {
+        ...shown,
+        homeKey: tier === "conversation" ? row.homeKey : "workspace",
+        access: tier,
+        author: authorAgentId ? { agentId: authorAgentId } : null,
+        link: tier === "link",
+        openedAt: place?.openedAt ?? null,
+        commentCount: total.get(row.id) ?? 0,
+        hasUpdates: place !== undefined && place.seenVersion < row.currentVersion,
+        newComments: place?.newComments ?? 0,
+        mentionsYou: place?.mentioned ?? false,
+        settled: settlement?.settled ?? null,
+        reopened: settlement?.reopened ?? null,
+      };
     });
   }
 }

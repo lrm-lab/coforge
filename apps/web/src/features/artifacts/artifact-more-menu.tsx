@@ -1,6 +1,7 @@
 import {
   Bell01,
   BellOff01,
+  CheckCircle,
   ClockRewind,
   Copy01,
   DotsHorizontal,
@@ -16,6 +17,7 @@ import {
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { VersionMenu } from "./artifact-version-menu";
 import type { ArtifactVisibility } from "./use-artifact-visibility";
@@ -44,6 +46,9 @@ export function ArtifactMoreMenu({
   canFind,
   following,
   visibility,
+  settled = false,
+  settlementPending = false,
+  onToggleSettlement,
   onChooseVersion,
   onOpenDetails,
   onOpenFullPage,
@@ -60,6 +65,9 @@ export function ArtifactMoreMenu({
   canFind: boolean;
   following: boolean;
   visibility: ArtifactVisibility;
+  settled?: boolean;
+  settlementPending?: boolean;
+  onToggleSettlement?: () => void;
   onChooseVersion: (version: number) => void;
   onOpenDetails?: () => void;
   onOpenFullPage?: () => void;
@@ -79,12 +87,32 @@ export function ArtifactMoreMenu({
         <Dropdown.Menu
           aria-label={m.doc_more()}
           onAction={(key) => {
-            if (key === "details") onOpenDetails?.();
+            if (key === "toggle-settlement") onToggleSettlement?.();
+            else if (key === "details") onOpenDetails?.();
             else if (key === "open-full-page") onOpenFullPage?.();
             else if (key === "display-report") onDisplayReport?.();
             else onAction(key as MoreAction);
           }}
         >
+          {phone && onToggleSettlement && (
+            <>
+              <Dropdown.Item
+                id="toggle-settlement"
+                leading={
+                  <CheckCircle
+                    aria-hidden="true"
+                    className={cn(
+                      "size-[1.125rem] shrink-0 stroke-[1.9px]",
+                      !settled && "text-utility-green-500",
+                    )}
+                  />
+                }
+                isDisabled={settlementPending}
+                label={settled ? m.av_menu_unsettle() : m.av_menu_settle()}
+              />
+              <Dropdown.Separator />
+            </>
+          )}
           {onOpenDetails && (
             <Dropdown.Item id="details" icon={InfoCircle} label={m.av_details_label()} />
           )}

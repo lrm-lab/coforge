@@ -43,6 +43,7 @@ export function ArtifactPageHeader({
   titleContainerRef,
   onChooseVersion,
   comments,
+  settlement,
   share,
   menu,
   pane,
@@ -59,6 +60,7 @@ export function ArtifactPageHeader({
   titleContainerRef?: RefObject<HTMLDivElement | null>;
   onChooseVersion: (version: number) => void;
   comments?: ReactNode;
+  settlement?: ReactNode;
   share?: ReactNode;
   menu?: ReactNode;
   pane?: ArtifactPaneControls;
@@ -135,16 +137,19 @@ export function ArtifactPageHeader({
             )}
           </div>
           {mobileMeta && (
-            <div className="flex min-w-0 items-center gap-1 sm:hidden">{mobileMeta}</div>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:hidden">
+              {mobileMeta}
+            </div>
           )}
         </div>
       )}
       <span className="hidden flex-1 sm:block" />
       <div className="flex shrink-0 items-center gap-1">
         {comments}
+        {settlement}
         {share}
         {menu}
-        {(comments || share || menu) && (overlay || pane) && (
+        {(comments || settlement || share || menu) && (overlay || pane) && (
           <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-border-secondary" />
         )}
         {overlay && (

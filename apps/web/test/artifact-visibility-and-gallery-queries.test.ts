@@ -92,6 +92,11 @@ describe("artifact visibility, activity, and gallery query efficiency", () => {
             preview: "hi",
             authorAgentId: AGENT_ID,
             updatedAt,
+            settledAt: null,
+            settledVersion: null,
+            settledByKind: null,
+            settledById: null,
+            reopenedAtVersion: null,
           },
         ],
       },
@@ -187,6 +192,8 @@ describe("artifact visibility, activity, and gallery query efficiency", () => {
           id: ARTIFACT_ID,
           access: "link" as const,
           currentVersion: 2,
+          settled: null,
+          reopened: null,
         },
       ],
     } as unknown as Pick<ArtifactReads, "cards">;
@@ -208,6 +215,8 @@ describe("artifact visibility, activity, and gallery query efficiency", () => {
         hasUpdates: true,
         newComments: 1,
         mentionsYou: false,
+        settled: null,
+        reopened: null,
       },
     ]);
   });

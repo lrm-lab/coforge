@@ -167,3 +167,25 @@ export const saveAttachmentAsArtifact = createServerFn({ method: "POST" })
       attachmentId: data.attachmentId,
     }),
   );
+
+export const settleArtifact = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ artifactId: id }).strict())
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).settlements.settle({
+      workspaceId: context.workspaceId,
+      artifactId: data.artifactId,
+      actor: { userId: context.user.id },
+    }),
+  );
+
+export const unsettleArtifact = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ artifactId: id }).strict())
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).settlements.unsettle({
+      workspaceId: context.workspaceId,
+      artifactId: data.artifactId,
+      actor: { userId: context.user.id },
+    }),
+  );

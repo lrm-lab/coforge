@@ -48,22 +48,24 @@ const GalleryListRow = memo(function GalleryListRow({
       <td className="max-w-0 overflow-hidden py-2 pr-3">
         <span className="flex min-w-0 items-center gap-2">
           <ArtifactIcon entryPath={card.entryPath} size="sm" />
-          <Tooltip title={displayTitle} placement="bottom start">
-            <Focusable>
-              <Link
-                to="/w/$workspaceSlug/artifacts"
-                params={{ workspaceSlug }}
-                search={{ artifact: card.id }}
-                resetScroll={false}
-                className="min-w-0 truncate font-semibold text-primary outline-focus-ring after:absolute after:inset-0 focus-visible:outline-2"
-              >
-                <span className="inline-block max-w-full truncate align-bottom">
-                  {displayTitle}
-                </span>
-              </Link>
-            </Focusable>
-          </Tooltip>
-          <CardBadges card={card} />
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            <Tooltip title={displayTitle} placement="bottom start">
+              <Focusable>
+                <Link
+                  to="/w/$workspaceSlug/artifacts"
+                  params={{ workspaceSlug }}
+                  search={{ artifact: card.id }}
+                  resetScroll={false}
+                  className="min-w-0 max-w-full truncate font-semibold text-primary outline-focus-ring after:absolute after:inset-0 focus-visible:outline-2"
+                >
+                  <span className="inline-block max-w-full truncate align-bottom">
+                    {displayTitle}
+                  </span>
+                </Link>
+              </Focusable>
+            </Tooltip>
+            <CardBadges card={card} />
+          </span>
         </span>
       </td>
       <td className="max-w-0 overflow-hidden px-3 py-2 text-tertiary">

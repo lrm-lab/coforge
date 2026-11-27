@@ -12,6 +12,7 @@ import {
   decodeArtifactAccessChangedEvent,
   decodeArtifactCommentsChangedEvent,
   decodeArtifactDataChangedEvent,
+  decodeArtifactSettlementChangedEvent,
   decodeArtifactVersionPublishedEvent,
 } from "./artifact-realtime";
 
@@ -63,6 +64,10 @@ export function useArtifactPageRealtime({
         if (published.number > latest) onIncomingVersion(published.number);
         keepSeen();
         void refreshArtifact(queryClient, artifactId, homeId ?? null, { document: false });
+        return;
+      }
+      if (decodeArtifactSettlementChangedEvent(data)?.artifactId === artifactId) {
+        void refreshArtifact(queryClient, artifactId, homeId ?? null);
         return;
       }
       if (decodeArtifactAccessChangedEvent(data)?.artifactId === artifactId) {

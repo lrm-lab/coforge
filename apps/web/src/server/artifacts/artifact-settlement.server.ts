@@ -1,9 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { errorType } from "#src/server/errors/error-type.server";
-import { requireArtifactRead, type ArtifactActor } from "./artifact-access.server";
+import { artifactTier, requireArtifactRead, type ArtifactActor } from "./artifact-access.server";
 import { actorNames, actorOf } from "./artifact-actor-names.server";
 import { followByWriting } from "./artifact-follows.server";
+import { announceSettlementChange, type ArtifactSignals } from "./artifact-signals.server";
 
 export type ArtifactSettlementActor = { kind: "user" | "agent"; name: string };
 
@@ -152,7 +153,10 @@ type SettlementOutcome = {
 };
 
 export class ArtifactSettlements {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(
+    private readonly db: PrismaClient,
+    private readonly signals?: ArtifactSignals,
+  ) {}
 
   async settle(input: {
     workspaceId: string;
@@ -267,6 +271,14 @@ export class ArtifactSettlements {
             return { newlyFollowing: false };
           })
         : Promise.resolve({ newlyFollowing: false }),
+      result.changed
+        ? announceSettlementChange(this.signals, {
+            workspaceId: input.workspaceId,
+            homeKey: live.homeKey,
+            wide: artifactTier(live) === "workspace",
+            artifactId: result.row.id,
+          })
+        : Promise.resolve(),
     ]);
 
     return {

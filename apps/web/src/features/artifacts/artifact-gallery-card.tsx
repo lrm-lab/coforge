@@ -18,19 +18,23 @@ import { artifactKindOfPath, type ArtifactPathKind } from "./artifact-path-kind"
 import { MarkdownPreview, stripLeadingTitleHeading } from "./artifact-preview";
 import { useArtifactActor } from "./artifact-queries";
 import { useScopeOf, type GalleryCard } from "./artifact-scope";
+import { SettledBadge } from "./artifact-settlement-control";
 
 export function CardBadges({
   card,
 }: {
-  card: Pick<GalleryCard, "hasUpdates" | "newComments" | "mentionsYou">;
+  card: Pick<GalleryCard, "hasUpdates" | "newComments" | "mentionsYou"> & {
+    settled?: GalleryCard["settled"];
+  };
 }) {
   const badges: string[] = [];
   if (card.hasUpdates) badges.push(m.av_card_updates());
   if (card.newComments > 0) badges.push(m.av_card_new_comments({ count: card.newComments }));
   if (card.mentionsYou) badges.push(m.av_card_mention());
-  if (badges.length === 0) return null;
+  if (!card.settled && badges.length === 0) return null;
   return (
-    <span className="flex shrink-0 flex-wrap gap-1">
+    <span className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
+      {card.settled && <SettledBadge label={m.av_settled_badge()} />}
       {badges.map((badge) => (
         <span
           key={badge}

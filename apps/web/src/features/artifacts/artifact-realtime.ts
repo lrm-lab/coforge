@@ -29,6 +29,7 @@ const versionPublished = artifactEvent(REALTIME_EVENTS.artifactVersionPublished,
   number: z.number().int().positive(),
 });
 const accessChanged = artifactEvent(REALTIME_EVENTS.artifactAccessChanged, {});
+const settlementChanged = artifactEvent(REALTIME_EVENTS.artifactSettlementChanged, {});
 const dataChanged = artifactEvent(REALTIME_EVENTS.artifactDataChanged, {
   collection: z.string().min(1),
 });
@@ -39,6 +40,7 @@ const commentsChanged = artifactEvent(REALTIME_EVENTS.artifactCommentsChanged, {
 
 export type ArtifactVersionPublishedEvent = z.infer<typeof versionPublished>;
 export type ArtifactAccessChangedEvent = z.infer<typeof accessChanged>;
+export type ArtifactSettlementChangedEvent = z.infer<typeof settlementChanged>;
 export type ArtifactDataChangedEvent = z.infer<typeof dataChanged>;
 export type ArtifactCommentsChangedEvent = z.infer<typeof commentsChanged>;
 
@@ -49,6 +51,10 @@ export const decodeArtifactVersionPublishedEvent = eventDecoder(
 export const decodeArtifactAccessChangedEvent = eventDecoder(
   REALTIME_EVENTS.artifactAccessChanged,
   accessChanged,
+);
+export const decodeArtifactSettlementChangedEvent = eventDecoder(
+  REALTIME_EVENTS.artifactSettlementChanged,
+  settlementChanged,
 );
 export const decodeArtifactDataChangedEvent = eventDecoder(
   REALTIME_EVENTS.artifactDataChanged,

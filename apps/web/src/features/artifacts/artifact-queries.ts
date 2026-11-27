@@ -96,6 +96,7 @@ export function refreshArtifact(
   return queryClient.invalidateQueries({
     predicate: ({ queryKey: [root, kind, id] }) => {
       if (root !== ARTIFACTS_KEY[0]) return false;
+      if (kind === "gallery") return true;
       if (kind === "list") return id === homeId;
       if (id !== artifactId) return false;
       return kind === "document"

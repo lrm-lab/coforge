@@ -22,8 +22,13 @@ import { ArtifactPresenceChip } from "./artifact-presence-chip";
 import type { ArtifactDocument } from "./artifact-queries";
 import { artifactPageRoute, galleryEntryState } from "./artifact-search";
 import { ArtifactSharePopover } from "./artifact-share-popover";
+import {
+  ArtifactSettlementHeaderControl,
+  ArtifactSettlementMobileChip,
+} from "./artifact-settlement-control";
 import { encodeArtifactShortId } from "./artifact-short-id";
 import { VisibilityPill } from "./artifact-visibility-pill";
+import type { ArtifactSettlementState } from "./use-artifact-settlement";
 import type { ArtifactVisibility } from "./use-artifact-visibility";
 
 export function measureArtifactCanvas(container: HTMLElement | null): {
@@ -169,6 +174,7 @@ export function ArtifactViewerHeader({
   homeName,
   nameOf,
   visibility,
+  settlement,
   presenceReady,
   framesPage,
   annotating,
@@ -201,6 +207,7 @@ export function ArtifactViewerHeader({
   homeName: string | undefined;
   nameOf: (conversationId: string) => string | undefined;
   visibility: ArtifactVisibility;
+  settlement: ArtifactSettlementState;
   presenceReady: boolean;
   framesPage: boolean;
   annotating: boolean;
@@ -240,6 +247,8 @@ export function ArtifactViewerHeader({
         titleAs: (standalone ? "h1" : "h2") as "h1" | "h2",
         shownVersion,
         latestVersion,
+        settled: settlement.settled,
+        reopened: settlement.reopened,
         scope: visibility.current,
         home,
         homeName,
@@ -276,6 +285,7 @@ export function ArtifactViewerHeader({
             />
           )
         }
+        settlement={loaded && <ArtifactSettlementHeaderControl settlement={settlement} />}
         share={
           loaded && (
             <ArtifactSharePopover
@@ -289,6 +299,7 @@ export function ArtifactViewerHeader({
         mobileMeta={
           loaded && (
             <>
+              <ArtifactSettlementMobileChip settlement={settlement} />
               <VisibilityPill visibility={visibility} />
               <ArtifactPresenceChip
                 workspaceId={workspaceId}
@@ -311,6 +322,11 @@ export function ArtifactViewerHeader({
               canFind={canFind}
               following={following}
               visibility={visibility}
+              settled={settlement.settled !== null}
+              settlementPending={settlement.pending}
+              onToggleSettlement={() =>
+                void (settlement.settled ? settlement.unsettle() : settlement.settle())
+              }
               onChooseVersion={onChooseVersion}
               onOpenDetails={hasRecentSwitcher ? () => setDetailsOpen(true) : undefined}
               onOpenFullPage={overlay ? openFullPage : undefined}

@@ -97,7 +97,7 @@ export function productionArtifacts(db: PrismaClient) {
     versionHistory: new ArtifactVersionHistory(db, artifacts.reads),
     viewerPositions: new ArtifactViewerPositions(db, artifacts.reads),
     pinnedSummary: new ArtifactPinnedSummary(db),
-    settlements: new ArtifactSettlements(db),
+    settlements: new ArtifactSettlements(db, productionArtifactSignals()),
     download: (input: Parameters<typeof artifactDownload>[1]) =>
       artifactDownload(
         { reads: artifacts.reads, blobs, zipLimit: getAppRateLimits().artifactZip },

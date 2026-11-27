@@ -33,6 +33,7 @@
       "./messages/{locale}/artifacts.json",
       "./messages/{locale}/artifact-actions.json",
       "./messages/{locale}/artifact-pages.json",
+      "./messages/{locale}/artifact-settlement.json",
       "./messages/{locale}/shortcuts.json",
       "./messages/{locale}/channel-notifications.json",
       "./messages/{locale}/message-forward.json",

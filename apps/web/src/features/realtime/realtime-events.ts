@@ -14,6 +14,7 @@ export const REALTIME_EVENTS = {
   activityChanged: "activity.changed.v1",
   artifactVersionPublished: "artifact.version.published.v1",
   artifactAccessChanged: "artifact.access.changed.v1",
+  artifactSettlementChanged: "artifact.settlement.changed.v1",
   artifactDataChanged: "artifact.data.changed.v1",
   artifactCommentsChanged: "artifact.comments.changed.v1",
   conversationActivity: "conversation.activity.v1",

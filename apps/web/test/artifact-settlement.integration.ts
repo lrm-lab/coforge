@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import { ArtifactGallery } from "#src/server/artifacts/artifact-gallery.server";
+import { ArtifactSettlements } from "#src/server/artifacts/artifact-settlement.server";
+import type { ArtifactSignalEvent } from "#src/server/artifacts/artifact-signals.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
 
 let f: CommentsFixture;
@@ -162,4 +165,98 @@ test("artifact settle and unsettle transition state, enforce push hold once, and
     artifact: privateDocId,
   });
   expect(unauthorizedSettle.status).toBe(404);
+});
+
+test("gallery cards, marks, and realtime settlement signals reflect settled and reopened transitions", async () => {
+  const artifactId = await f.make("Gallery Settled Spec", undefined, {
+    target: `#${f.docsChannel}`,
+  });
+  const published: Array<{ channel: string; event: ArtifactSignalEvent }> = [];
+  const settlements = new ArtifactSettlements(f.db, {
+    publish: async (channel, event) => {
+      published.push({ channel, event });
+    },
+  });
+  const gallery = new ArtifactGallery(f.db, f.artifacts.reads);
+
+  const settleFirst = await settlements.settle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  expect(settleFirst.changed).toBe(true);
+  await settlements.settle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  expect(published).toHaveLength(1);
+  expect(published[0]?.event).toEqual({
+    type: "artifact.settlement.changed.v1",
+    workspaceId: f.workspaceId,
+    artifactId,
+  });
+
+  const settledPage = await gallery.page({
+    workspaceId: f.workspaceId,
+    userId: f.bob,
+    sort: "updated",
+    limit: 20,
+  });
+  const settledCard = settledPage.artifacts.find((card) => card.id === artifactId);
+  expect(settledCard?.settled).toMatchObject({ version: 1, by: { kind: "user" } });
+  expect(settledCard?.reopened).toBeNull();
+
+  const settledMarks = await gallery.marks({
+    workspaceId: f.workspaceId,
+    userId: f.bob,
+    artifactIds: [artifactId],
+  });
+  expect(settledMarks[0]?.settled).toMatchObject({ version: 1, by: { kind: "user" } });
+  expect(settledMarks[0]?.reopened).toBeNull();
+
+  await f.post(f.agents.writer, {
+    operation: "push",
+    idempotencyKey: f.key(),
+    artifact: artifactId,
+    baseVersion: 1,
+    note: "Hold first",
+    files: await f.manifestOf(f.agents.writer, { "plan.md": "# v2\n" }),
+  });
+  await f.post(f.agents.writer, {
+    operation: "push",
+    idempotencyKey: f.key(),
+    artifact: artifactId,
+    baseVersion: 1,
+    note: "Confirm reopen",
+    files: await f.manifestOf(f.agents.writer, { "plan.md": "# v2\n" }),
+  });
+
+  const reopenedPage = await gallery.page({
+    workspaceId: f.workspaceId,
+    userId: f.bob,
+    sort: "updated",
+    limit: 20,
+  });
+  const reopenedCard = reopenedPage.artifacts.find((card) => card.id === artifactId);
+  expect(reopenedCard?.settled).toBeNull();
+  expect(reopenedCard?.reopened).toMatchObject({ version: 2, was: { version: 1 } });
+
+  await settlements.settle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  const unsettled = await settlements.unsettle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  expect(unsettled.changed).toBe(true);
+  await settlements.unsettle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  expect(published).toHaveLength(3);
 });
