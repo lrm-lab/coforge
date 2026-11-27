@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearch } from "@tanstack/react-router";
 import { MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
@@ -18,18 +10,15 @@ import {
   LazyPersonProfilePanel,
 } from "#src/features/agents/profile-panel/lazy-profile-panels";
 import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
-import { LazyTaskDetailDialog, LazyTaskDetailPanel } from "#src/features/tasks/lazy-task-detail";
 import {
   TaskNavigationRegistrationContext,
   type TaskDetailNavigation,
 } from "#src/features/tasks/task-navigation-context";
 import { useOpenRelatedTask } from "#src/features/tasks/use-open-related-task";
-import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
 import { ownsDiscussion } from "#src/features/tasks/task-follow";
 import { useTaskPopupProfile } from "#src/features/tasks/task-popup-profile";
 
-import { ComposerScopeProvider, useComposerScope, type ComposerScope } from "./composer-scope";
 import { ConversationPane } from "./conversation-pane";
 import { SeenByDirectory } from "./message-seen-by";
 import { useConversationDetailVisible } from "./conversation-navigation";
@@ -53,8 +42,11 @@ import { ThreadStoreProvider, useConversationThreadStore } from "./thread-store"
 import { resolveConversationThreadRoot } from "./conversation-thread-search";
 import type { DirectConversationView, ThreadedConversationProps } from "./conversation-types";
 import { useConversationChannels } from "./use-conversation-channels";
-
-const NO_MESSAGES: DirectConversationView["messages"] = [];
+import {
+  ConversationTaskLayer,
+  ConversationTaskSplitPane,
+  LegacyTaskThreadPane,
+} from "./threaded-conversation-task";
 
 export function ThreadedConversation(props: ThreadedConversationProps) {
   return (
@@ -250,69 +242,22 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         }
       : undefined;
 
-  const taskDialog = openTask ? (
-    <LazyTaskDetailDialog
-      key={openTask.id}
-      task={openTask}
-      open
-      onOpenChange={(next) => {
-        if (!next) closeTaskReference();
-      }}
-      onDeleted={taskPopup?.onTaskDeleted}
-      onOpenRelated={openRelatedTask}
-      conversationName={conversationName}
-      members={conversation.mentionables}
-      currentMemberId={conversation.senderMemberId || null}
-      thread={taskThread}
-      leadExtra={taskLeadExtra}
-      sidePanel={popupProfile.panel}
-      onCloseSidePanel={popupProfile.close}
-    />
-  ) : null;
-
-  const inlineTaskPanel =
-    openTask && taskPopup?.inline ? (
-      <ConversationSplit
-        layoutId="coforge-task-profile"
-        reportListCrowd={false}
-        main={
-          <LazyTaskDetailPanel
-            key={openTask.id}
-            task={openTask}
-            mode={taskPopup.inline.mode}
-            expanded={taskPopup.inline.expanded}
-            onToggleExpand={taskPopup.inline.onToggleExpand}
-            navigation={taskPopup.inline.navigation}
-            closeOnEscape={taskPopup.inline.closeOnEscape}
-            escapeEnabled={!popupProfile.open}
-            onClose={closeTaskReference}
-            onDeleted={taskPopup.onTaskDeleted}
-            onOpenRelated={openRelatedTask}
-            conversationName={conversationName}
-            members={conversation.mentionables}
-            currentMemberId={conversation.senderMemberId || null}
-            thread={taskThread}
-            leadExtra={taskLeadExtra}
-          />
-        }
-        side={popupProfile.panel}
-        visibleSlot={popupProfile.open ? "profile" : undefined}
-        threadAlone={false}
-      />
-    ) : null;
-
   const taskLayer = (
-    <>
-      <ConversationTaskDemand
-        conversationId={conversation.conversationId}
-        channelName={channelNames.get(conversation.conversationId)}
-        messages={!taskPopup ? conversation.messages : openTaskRoot ? [openTaskRoot] : NO_MESSAGES}
-        hasNewer={conversation.hasNewer ?? false}
-        readWindow={!taskPopup}
-        openTaskNumber={openTaskNumber}
-      />
-      {taskPopup?.inline ? inlineTaskPanel : !taskInSplit ? taskDialog : null}
-    </>
+    <ConversationTaskLayer
+      conversation={conversation}
+      channelName={channelNames.get(conversation.conversationId)}
+      openTask={openTask}
+      openTaskNumber={openTaskNumber}
+      openTaskRoot={openTaskRoot}
+      taskPopup={taskPopup}
+      taskInSplit={taskInSplit}
+      closeTaskReference={closeTaskReference}
+      openRelatedTask={openRelatedTask}
+      conversationName={conversationName}
+      taskThread={taskThread}
+      taskLeadExtra={taskLeadExtra}
+      popupProfile={popupProfile}
+    />
   );
 
   const selectedThreadKnown = selected !== undefined && threadRootOf(selected) !== undefined;
@@ -392,33 +337,22 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     <>
       {visibleSlot === "details" && detailsPane}
       {visibleSlot === "task" && openTask && (
-        <ConversationSplit
-          layoutId="coforge-task-profile"
-          reportListCrowd={false}
-          main={
-            <LazyTaskDetailPanel
-              key={openTask.id}
-              task={openTask}
-              mode={isTaskExpanded ? "expanded" : "split"}
-              expanded={isTaskExpanded}
-              onToggleExpand={() => setTaskExpanded((current) => !current)}
-              navigation={registeredTaskNav}
-              escapeEnabled={!popupProfile.open}
-              onClose={() => {
-                setTaskExpanded(false);
-                closeTaskReference();
-              }}
-              onOpenRelated={openRelatedTask}
-              conversationName={conversationName}
-              members={conversation.mentionables}
-              currentMemberId={conversation.senderMemberId || null}
-              thread={taskThread}
-              leadExtra={taskLeadExtra}
-            />
-          }
-          side={popupProfile.panel}
-          visibleSlot={popupProfile.open ? "profile" : undefined}
-          threadAlone={false}
+        <ConversationTaskSplitPane
+          task={openTask}
+          isTaskExpanded={isTaskExpanded}
+          onToggleExpand={() => setTaskExpanded((current) => !current)}
+          navigation={registeredTaskNav}
+          onClose={() => {
+            setTaskExpanded(false);
+            closeTaskReference();
+          }}
+          onOpenRelated={openRelatedTask}
+          conversationName={conversationName}
+          members={conversation.mentionables}
+          currentMemberId={conversation.senderMemberId || null}
+          thread={taskThread}
+          leadExtra={taskLeadExtra}
+          popupProfile={popupProfile}
         />
       )}
       {visibleSlot === "profile" && profileAgentId && (
@@ -499,50 +433,5 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       />
       {taskLayer}
     </TaskNavigationRegistrationContext.Provider>
-  );
-}
-
-function LegacyTaskThreadPane({
-  taskNumber,
-  paneProps,
-  openers,
-  lead,
-  readOnlyNotice,
-  emptyState,
-}: {
-  taskNumber: number;
-  paneProps: Omit<
-    ComponentProps<typeof ThreadPane>,
-    | "inTaskPopup"
-    | "lead"
-    | "readOnlyNotice"
-    | "emptyState"
-    | "onOpenAgentProfile"
-    | "onOpenPersonProfile"
-  >;
-  openers: ReturnType<typeof useTaskPopupProfile>["openers"];
-  lead: ReactNode;
-  readOnlyNotice?: ReactNode;
-  emptyState: ComponentProps<typeof ThreadPane>["emptyState"];
-}) {
-  const parentScope = useComposerScope();
-  const scope = useMemo<ComposerScope>(
-    () => ({
-      placeholder: m.tasks_reply_placeholder({ number: String(taskNumber) }),
-      composerPortal: parentScope?.composerPortal,
-    }),
-    [taskNumber, parentScope?.composerPortal],
-  );
-  return (
-    <ComposerScopeProvider value={scope}>
-      <ThreadPane
-        {...paneProps}
-        {...openers}
-        inTaskPopup
-        lead={lead}
-        readOnlyNotice={readOnlyNotice}
-        emptyState={emptyState}
-      />
-    </ComposerScopeProvider>
   );
 }
