@@ -41,8 +41,9 @@ ls -la /workspace /workspace/uploads /workspace/browser-shots 2>/dev/null || tru
 
 1. **命令行能完成** → 直接 shell。
 2. **需要登录/注册/点网页** → 遵循 `browser-login`。
-3. **需要确认页面** → 截图到 `/workspace/browser-shots`。
-4. **不确定** → 先自检再选路径。
+3. **联想内网入口 / 连通** → 遵循 `lenovo-intranet`。
+4. **需要确认页面** → 截图到 `/workspace/browser-shots`。
+5. **不确定** → 先自检再选路径。
 
 ## 探索顺序（新任务）
 

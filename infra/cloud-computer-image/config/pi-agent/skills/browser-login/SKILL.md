@@ -27,13 +27,8 @@ mkdir -p /workspace/browser-shots
 
 ## 联想内网站点
 
-- 连通：镜像已装联想 CA；代理由启动脚本渲染（查看 `/etc/chromium/policies/managed/lenovo-intranet.json` 与 `echo $HTTPS_PROXY`）。
-- 常用地址：
-  - 联想内网门户：`https://home.lenovo.com/home`
-  - 国内模型工厂：`https://modelfactory.lenovo.com/`
-  - 巴西模型工厂：`https://braimaster.lenovo.com/`
-- 登录：用 `coforge-chromium` 打开目标页（见上表）。需要密码/验证码时，用 CoForge `page:fill` action card（或本机无法填时用 `desktop:takeover`），**不要**让用户把密码发到聊天里。不要把密码写进镜像或世界可读文件。
-- 若页打不开：先 `curl -sI -o /dev/null -w '%{http_code}\n' --connect-timeout 5 https://home.lenovo.com/home`，并确认 `HTTPS_PROXY` / 策略里的 ProxyServer 非空。
+- 入口 URL、CA/代理与连通检查：加载 skill `lenovo-intranet`。
+- 登录：用 `coforge-chromium` 打开目标页。需要密码/验证码时，用 CoForge `page:fill` action card（或本机无法填时用 `desktop:takeover`），**不要**让用户把密码发到聊天里。不要把密码写进镜像或世界可读文件。
 
 - **`DISPLAY` 必须已由任务注入**。若 unset：停止 GUI 浏览器操作并说明原因；**禁止**回退到 `:0`。
 - CDP 基址：`endpoint="$(coforge-cdp-endpoint)"`（失败则先启动 `coforge-chromium`）。
