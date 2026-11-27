@@ -94,7 +94,9 @@ export function useActivityInboxRefresh({
         queryClient.setQueryData<{ pages: ActivityInboxPage[]; pageParams: unknown[] }>(
           queryKey,
           (current) =>
-            current ? { ...current, pages: [page, ...current.pages.slice(1)] } : current,
+            current
+              ? { ...current, pages: [page, ...current.pages.slice(1)] }
+              : { pages: [page], pageParams: [undefined] },
         ),
       )
       .catch(() => undefined);
