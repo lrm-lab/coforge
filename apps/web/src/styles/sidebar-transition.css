@@ -123,6 +123,11 @@ html:not(.sidebar-expanded)
   );
 }
 
+[data-sidebar-group][data-sidebar-inactive],
+[data-sidebar-group][data-sidebar-inactive] > [data-panel] > div {
+  touch-action: auto !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-sidebar-group][data-ready]:not(:has([data-separator="active"])) > [data-panel] {
     transition: none;

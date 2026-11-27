@@ -398,38 +398,35 @@ function WorkspaceChrome({
           )}
         >
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            {!standalone && !phone ? (
-              <SidebarShell
-                defaultRail={defaultRail}
-                initialExpanded={sidebarLayout?.expanded}
-                initialWidthRem={sidebarLayout?.widthRem}
-                expanded={
-                  <ShellLinks>
-                    <MemoSidebarExpanded
-                      activeUrl={activeUrl}
-                      items={navItems}
-                      header={expandedHeader}
-                      search={SEARCH_FIELD}
-                      footer={expandedFooter}
-                    />
-                  </ShellLinks>
-                }
-                rail={
-                  <ShellLinks>
-                    <MemoSidebarRail
-                      activeUrl={activeUrl}
-                      items={navItems}
-                      header={railHeader}
-                      footer={railFooter}
-                    />
-                  </ShellLinks>
-                }
-              >
-                {mainArea}
-              </SidebarShell>
-            ) : (
-              mainArea
-            )}
+            <SidebarShell
+              showSidebar={!standalone && !phone}
+              defaultRail={defaultRail}
+              initialExpanded={sidebarLayout?.expanded}
+              initialWidthRem={sidebarLayout?.widthRem}
+              expanded={
+                <ShellLinks>
+                  <MemoSidebarExpanded
+                    activeUrl={activeUrl}
+                    items={navItems}
+                    header={expandedHeader}
+                    search={SEARCH_FIELD}
+                    footer={expandedFooter}
+                  />
+                </ShellLinks>
+              }
+              rail={
+                <ShellLinks>
+                  <MemoSidebarRail
+                    activeUrl={activeUrl}
+                    items={navItems}
+                    header={railHeader}
+                    footer={railFooter}
+                  />
+                </ShellLinks>
+              }
+            >
+              {mainArea}
+            </SidebarShell>
           </div>
           {tabBar && chatHref && activityHref && (
             <ShellLinks>
