@@ -53,10 +53,10 @@ export function useGalleryCardMenu(card: MenuCard) {
   const workspaceSlug = useWorkspaceSlug();
   const toast = useAppToast();
   const [open, setOpen] = useState(false);
-  const [anchorMode, setAnchorMode] = useState<"button" | "cursor">("button");
+  const [anchorMode, setAnchorMode] = useState<"button" | "pointer-anchor">("button");
   const cardRef = useRef<HTMLElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const cursorAnchorRef = useRef<HTMLSpanElement | null>(null);
+  const pointerAnchorRef = useRef<HTMLSpanElement | null>(null);
   const displayTitle = card.title || m.doc_untitled();
   const homeId = artifactHomeConversation(card.homeKey);
   const settlement = useArtifactSettlement({
@@ -76,12 +76,12 @@ export function useGalleryCardMenu(card: MenuCard) {
       : `${window.location.origin}${fullPageHref}`;
 
   const openMenuAt = useCallback((x: number, y: number) => {
-    const anchor = cursorAnchorRef.current;
+    const anchor = pointerAnchorRef.current;
     if (anchor) {
       anchor.style.left = `${x}px`;
       anchor.style.top = `${y}px`;
     }
-    setAnchorMode("cursor");
+    setAnchorMode("pointer-anchor");
     setOpen(true);
   }, []);
 
@@ -147,7 +147,7 @@ export function useGalleryCardMenu(card: MenuCard) {
   const renderMenu = (triggerClassName?: string) => (
     <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
       <span
-        ref={cursorAnchorRef}
+        ref={pointerAnchorRef}
         aria-hidden="true"
         className="pointer-events-none fixed z-50 size-0"
       />
@@ -165,8 +165,8 @@ export function useGalleryCardMenu(card: MenuCard) {
         <DotsHorizontal aria-hidden="true" className="size-4" />
       </AriaButton>
       <Dropdown.Popover
-        triggerRef={anchorMode === "cursor" ? cursorAnchorRef : buttonRef}
-        placement={anchorMode === "cursor" ? "bottom start" : "bottom end"}
+        triggerRef={anchorMode === "pointer-anchor" ? pointerAnchorRef : buttonRef}
+        placement={anchorMode === "pointer-anchor" ? "bottom start" : "bottom end"}
       >
         <Dropdown.Menu aria-label={displayTitle} onAction={(key) => void onAction(String(key))}>
           <Dropdown.Item id="open" icon={ArrowUpRight} label={m.ag_menu_open()} />
