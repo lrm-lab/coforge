@@ -33,6 +33,7 @@ import { lockComments } from "./artifact-comment-write.server";
 import { settleWrite } from "./artifact-activity-wake.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
 import { ArtifactVisibility } from "./artifact-visibility.server";
+import { pinnedChannelPushBlock } from "#src/server/conversations/channel-read-access.server";
 import { writeVersion } from "./artifact-version-write.server";
 
 export type ArtifactHome = { kind: "conversation"; conversationId: string } | { kind: "public" };
@@ -155,7 +156,21 @@ export class Artifacts {
     const { homeKey } = live;
     if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
     if ((input.label?.length ?? 0) > ARTIFACT_LABEL_LIMIT) invalid("artifact-label");
-    await requireArtifactRead(this.db, input.workspaceId, input.publisher, live);
+    const [readError, pinBlock] = await Promise.all([
+      requireArtifactRead(this.db, input.workspaceId, input.publisher, live).then(
+        () => null,
+        (error: unknown) => error,
+      ),
+      pinnedChannelPushBlock(this.db, input.workspaceId, input.artifactId, input.publisher),
+    ]);
+    if (readError) throw readError;
+    if (pinBlock) {
+      throw new AppError("ACCESS_DENIED", {
+        errorId: "channel-announcement-push-forbidden",
+        details: { channel: `#${pinBlock.channelName}` },
+        hint: `Only a channel admin of #${pinBlock.channelName} or a Workspace owner or admin can push updates to this artifact while it is pinned there.`,
+      });
+    }
     const added = [...(input.files ?? [])];
     const deleted = [...new Set(input.deletedPaths ?? [])];
     const touched = [...added.map((file) => file.path), ...deleted];

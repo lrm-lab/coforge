@@ -196,11 +196,16 @@ export class AgentChannelManagement {
     workspaceId: string,
     agentId: string,
     target: string,
-    patch: { name?: string; description?: string; visibility?: ChannelVisibility },
+    patch: {
+      name?: string;
+      description?: string;
+      visibility?: ChannelVisibility;
+      announcement?: string | null;
+    },
   ): Promise<AgentChannelInfo> {
     const actor = await agentChannelReader(this.db, workspaceId, agentId);
     return updateAgentChannel(
-      { db: this.db, channels: this.channels },
+      { db: this.db, channels: this.channels, realtime: this.realtime },
       workspaceId,
       actor,
       target,

@@ -62,7 +62,9 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   `artifact-home-unseen`), an author Agent still seated and active there (`artifact-author-not-member`,
   `artifact-author-cannot-see`), and the `expectedLost` count the confirm showed to match the count
   at commit (`artifact-loss-changed`); it also revokes the live public link in the same transaction.
-  Read and push share one rule; only creating needs membership of an unarchived conversation.
+  Read and push share one rule, except pushing to a channel-pinned Artifact requires channel-admin
+  or Workspace owner/admin authority (`pinnedChannelPushBlock`); only creating needs membership of
+  an unarchived conversation.
 - Only an Agent writes, and only by `push` (`Artifacts.push`; `ArtifactDocuments.create` makes an
   artifact with its first version in the same transaction). There is no single-text save, no
   history or revert, no Agent share

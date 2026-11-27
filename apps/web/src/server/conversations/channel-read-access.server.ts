@@ -10,6 +10,7 @@ import {
 } from "./active-member.server";
 import { taskDiscussionAccess, taskDiscussionBoardSelect } from "./task-discussion-access.server";
 import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
+import { hasChannelAdminAuthority } from "./channel-authority.server";
 
 export function visibleChannelWhere(workspaceId: string, reader: ChannelActor) {
   return {
@@ -404,6 +405,41 @@ export function readablePersonConversationSql(alias: string, workspaceId: string
     SELECT 1 FROM "conversation_members" v
     WHERE v."conversationId" = ${conversation}."id" AND v."userId" = ${userId}::uuid
       AND v."leftAt" IS NULL))`;
+}
+
+export async function pinnedChannelPushBlock(
+  db: PrismaClient,
+  workspaceId: string,
+  artifactId: string,
+  actor: ChannelActor,
+): Promise<{ channelName: string } | null> {
+  const pinned = await db.conversationPinnedArtifact.findFirst({
+    where: { workspaceId, artifactId },
+    select: {
+      conversation: {
+        select: {
+          id: true,
+          channelName: true,
+          archivedAt: true,
+          hiddenFromWorkspaceAt: true,
+        },
+      },
+    },
+  });
+  const channel = pinned?.conversation;
+  if (
+    !channel ||
+    channel.channelName === null ||
+    channel.hiddenFromWorkspaceAt !== null ||
+    channel.archivedAt !== null
+  ) {
+    return null;
+  }
+  const allowed = await hasChannelAdminAuthority(db, workspaceId, actor, {
+    id: channel.id,
+    channelName: channel.channelName,
+  });
+  return allowed ? null : { channelName: channel.channelName };
 }
 
 export function readableChannelSql(alias: string, workspaceId: string, reader: ChannelActor) {

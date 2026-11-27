@@ -12,7 +12,10 @@ import {
   productionArtifacts,
   type PinnedArtifactSummary,
 } from "#src/server/artifacts/artifact-composition.server";
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import {
+  centrifugoServerApiConfigured,
+  createCentrifugoServerApi,
+} from "#src/server/centrifugo/server-api.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -192,6 +195,191 @@ export async function readConversationPinnedArtifact(
   return { pinned, canEdit: auth.canEdit };
 }
 
+export type PinnedNoticeActor = {
+  memberId: string | null;
+  kind: "user" | "agent";
+  handle: string;
+  displayName: string;
+};
+
+async function writeConversationPinnedArtifact(
+  db: PrismaClient,
+  input: {
+    workspaceId: string;
+    conversationId: string;
+    isDm: boolean;
+    actor: PinnedNoticeActor;
+    pinnedByUserId: string | null;
+    pinnedByAgentId: string | null;
+    artifactId: string | null;
+    knownPinnedArtifactId?: string | null;
+    preloadedTarget?: { title: string } | null;
+    preloadedPrevious?: { title: string } | null;
+  },
+): Promise<{
+  artifactId: string | null;
+  title: string | null;
+  published: { messageId: string; sequence: number } | null;
+}> {
+  const artifacts = productionArtifacts(db);
+  const [target, preloadedPrevious] = await Promise.all([
+    input.artifactId === null
+      ? null
+      : input.preloadedTarget !== undefined
+        ? input.preloadedTarget
+        : artifacts.pinnedSummary.verifyHomedInConversation({
+            workspaceId: input.workspaceId,
+            conversationId: input.conversationId,
+            artifactId: input.artifactId,
+          }),
+    input.knownPinnedArtifactId
+      ? input.preloadedPrevious !== undefined
+        ? input.preloadedPrevious
+        : artifacts.pinnedSummary.verifyHomedInConversation({
+            workspaceId: input.workspaceId,
+            conversationId: input.conversationId,
+            artifactId: input.knownPinnedArtifactId,
+          })
+      : null,
+  ]);
+  if (input.artifactId && !target) {
+    throw new AppError("NOT_FOUND", { errorId: "pinned-artifact-not-in-conversation" });
+  }
+
+  const published = await db.$transaction(async (tx) => {
+    await lockConversation(tx, input.conversationId);
+    const current = await tx.conversationPinnedArtifact.findUnique({
+      where: { conversationId: input.conversationId },
+      select: { artifactId: true },
+    });
+
+    const previousArtifact = !current
+      ? null
+      : current.artifactId === input.knownPinnedArtifactId && preloadedPrevious
+        ? preloadedPrevious
+        : await productionArtifacts(
+            tx as unknown as PrismaClient,
+          ).pinnedSummary.verifyHomedInConversation({
+            workspaceId: input.workspaceId,
+            conversationId: input.conversationId,
+            artifactId: current.artifactId,
+          });
+
+    if (input.artifactId === null) {
+      if (!current) return null;
+      await tx.conversationPinnedArtifact.delete({
+        where: { conversationId: input.conversationId },
+      });
+      return recordPinNotice(tx, {
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        actor: input.actor,
+        change: "removed",
+        artifactId: current.artifactId,
+        title: previousArtifact?.title ?? "",
+        isDm: input.isDm,
+      });
+    }
+
+    if (current?.artifactId === input.artifactId) {
+      return null;
+    }
+
+    const change: "set" | "replaced" = current && previousArtifact ? "replaced" : "set";
+    await tx.conversationPinnedArtifact.upsert({
+      where: { conversationId: input.conversationId },
+      create: {
+        conversationId: input.conversationId,
+        workspaceId: input.workspaceId,
+        artifactId: input.artifactId,
+        pinnedByUserId: input.pinnedByUserId,
+        pinnedByAgentId: input.pinnedByAgentId,
+      },
+      update: {
+        artifactId: input.artifactId,
+        pinnedByUserId: input.pinnedByUserId,
+        pinnedByAgentId: input.pinnedByAgentId,
+        pinnedAt: new Date(),
+      },
+    });
+    return recordPinNotice(tx, {
+      workspaceId: input.workspaceId,
+      conversationId: input.conversationId,
+      actor: input.actor,
+      change,
+      artifactId: input.artifactId,
+      title: target!.title,
+      isDm: input.isDm,
+    });
+  });
+
+  return { artifactId: input.artifactId, title: target?.title ?? null, published };
+}
+
+async function broadcastPinnedArtifactChange(
+  db: PrismaClient,
+  realtime: ConversationRealtime | undefined,
+  input: {
+    workspaceId: string;
+    conversationId: string;
+    artifactId: string | null;
+    published: { messageId: string; sequence: number } | null;
+  },
+): Promise<void> {
+  if (!input.published || !realtime) return;
+  try {
+    const scope = await messageSignalScope(db, input.conversationId, input.workspaceId);
+    await Promise.all([
+      realtime.messageAvailable({
+        conversationId: input.conversationId,
+        messageId: input.published.messageId,
+        sequence: input.published.sequence,
+        ...scope,
+      }),
+      announcePinnedArtifactChanged({
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        artifactId: input.artifactId,
+      }),
+    ]);
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "conversation_realtime:pinned_artifact_notice_failed",
+        workspace_id: input.workspaceId,
+        conversation_id: input.conversationId,
+        error_type: errorType(error),
+      }),
+    );
+  }
+}
+
+export async function commitConversationPinnedArtifact(
+  db: PrismaClient,
+  realtime: ConversationRealtime | undefined,
+  input: {
+    workspaceId: string;
+    conversationId: string;
+    isDm: boolean;
+    actor: PinnedNoticeActor;
+    pinnedByUserId: string | null;
+    pinnedByAgentId: string | null;
+    artifactId: string | null;
+    knownPinnedArtifactId?: string | null;
+    preloadedTarget?: { title: string } | null;
+    preloadedPrevious?: { title: string } | null;
+  },
+): Promise<{ artifactId: string | null; title: string | null }> {
+  const result = await writeConversationPinnedArtifact(db, input);
+  await broadcastPinnedArtifactChange(db, realtime, {
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+    artifactId: input.artifactId,
+    published: result.published,
+  });
+  return { artifactId: result.artifactId, title: result.title };
+}
+
 export async function setConversationPinnedArtifact(
   db: PrismaClient,
   realtime: ConversationRealtime | undefined,
@@ -213,7 +401,11 @@ export async function setConversationPinnedArtifact(
   }
 
   const artifacts = productionArtifacts(db);
-  const [target, user, preloadedPrevious] = await Promise.all([
+  const [user, preloadedTarget, preloadedPrevious] = await Promise.all([
+    db.user.findUnique({
+      where: { id: input.userId },
+      select: { username: true, displayName: true },
+    }),
     input.artifactId
       ? artifacts.pinnedSummary.verifyHomedInConversation({
           workspaceId: input.workspaceId,
@@ -221,10 +413,6 @@ export async function setConversationPinnedArtifact(
           artifactId: input.artifactId,
         })
       : null,
-    db.user.findUnique({
-      where: { id: input.userId },
-      select: { username: true, displayName: true },
-    }),
     auth.pinnedArtifactId
       ? artifacts.pinnedSummary.verifyHomedInConversation({
           workspaceId: input.workspaceId,
@@ -233,100 +421,33 @@ export async function setConversationPinnedArtifact(
         })
       : null,
   ]);
-  if (input.artifactId && !target) {
-    throw new AppError("NOT_FOUND", { errorId: "pinned-artifact-not-in-conversation" });
-  }
-
-  const actor = {
+  const actor: PinnedNoticeActor = {
     memberId: auth.memberId,
-    kind: "user" as const,
+    kind: "user",
     handle: user?.username ?? input.userId,
     displayName: user ? humanLabel(user) : input.userId,
   };
 
-  const published = await db.$transaction(async (tx) => {
-    await lockConversation(tx, auth.id);
-    const current = await tx.conversationPinnedArtifact.findUnique({
-      where: { conversationId: auth.id },
-      select: { artifactId: true },
-    });
-
-    const previousArtifact = !current
-      ? null
-      : current.artifactId === auth.pinnedArtifactId
-        ? preloadedPrevious
-        : await productionArtifacts(
-            tx as unknown as PrismaClient,
-          ).pinnedSummary.verifyHomedInConversation({
-            workspaceId: input.workspaceId,
-            conversationId: auth.id,
-            artifactId: current.artifactId,
-          });
-
-    if (input.artifactId === null) {
-      if (!current) return null;
-      await tx.conversationPinnedArtifact.delete({ where: { conversationId: auth.id } });
-      return recordPinNotice(tx, {
-        workspaceId: input.workspaceId,
-        conversationId: auth.id,
-        actor,
-        change: "removed",
-        artifactId: current.artifactId,
-        title: previousArtifact?.title ?? "",
-        isDm: auth.isDm,
-      });
-    }
-
-    if (current?.artifactId === input.artifactId) {
-      return null;
-    }
-
-    const change: "set" | "replaced" = current && previousArtifact ? "replaced" : "set";
-    await tx.conversationPinnedArtifact.upsert({
-      where: { conversationId: auth.id },
-      create: {
-        conversationId: auth.id,
-        workspaceId: input.workspaceId,
-        artifactId: input.artifactId,
-        pinnedByUserId: input.userId,
-      },
-      update: {
-        artifactId: input.artifactId,
-        pinnedByUserId: input.userId,
-        pinnedByAgentId: null,
-        pinnedAt: new Date(),
-      },
-    });
-    return recordPinNotice(tx, {
-      workspaceId: input.workspaceId,
-      conversationId: auth.id,
-      actor,
-      change,
-      artifactId: input.artifactId,
-      title: target!.title,
-      isDm: auth.isDm,
-    });
+  const result = await writeConversationPinnedArtifact(db, {
+    workspaceId: input.workspaceId,
+    conversationId: auth.id,
+    isDm: auth.isDm,
+    actor,
+    pinnedByUserId: input.userId,
+    pinnedByAgentId: null,
+    artifactId: input.artifactId,
+    knownPinnedArtifactId: auth.pinnedArtifactId,
+    preloadedTarget,
+    preloadedPrevious,
   });
 
   const [, pinned] = await Promise.all([
-    published && realtime
-      ? (async () => {
-          const scope = await messageSignalScope(db, auth.id, input.workspaceId);
-          await Promise.all([
-            realtime.messageAvailable({
-              conversationId: auth.id,
-              messageId: published.messageId,
-              sequence: published.sequence,
-              ...scope,
-            }),
-            announcePinnedArtifactChanged({
-              workspaceId: input.workspaceId,
-              conversationId: auth.id,
-              artifactId: input.artifactId,
-            }),
-          ]);
-        })()
-      : Promise.resolve(),
+    broadcastPinnedArtifactChange(db, realtime, {
+      workspaceId: input.workspaceId,
+      conversationId: auth.id,
+      artifactId: input.artifactId,
+      published: result.published,
+    }),
     input.artifactId
       ? artifacts.pinnedSummary.read({
           workspaceId: input.workspaceId,
@@ -334,7 +455,7 @@ export async function setConversationPinnedArtifact(
           artifactId: input.artifactId,
           userId: input.userId,
         })
-      : Promise.resolve(null),
+      : null,
   ]);
 
   return { pinned, canEdit: auth.canEdit };
@@ -390,6 +511,7 @@ async function announcePinnedArtifactChanged(input: {
   conversationId: string;
   artifactId: string | null;
 }) {
+  if (!centrifugoServerApiConfigured()) return;
   const event: ConversationPinnedArtifactChangedEvent = {
     type: REALTIME_EVENTS.conversationPinnedArtifactChanged,
     conversationId: input.conversationId,

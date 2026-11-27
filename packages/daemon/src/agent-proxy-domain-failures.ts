@@ -1,5 +1,6 @@
 import { AgentAttachmentCommentsRequestError } from "#src/connection/agent-attachment-comments-request-error";
 import { AgentAppConfigRequestError } from "#src/connection/agent-app-config-request-error";
+import { AgentChannelRequestError } from "#src/connection/agent-channel-request-error";
 import { AgentManualRequestError } from "#src/connection/agent-manual-request-error";
 import { AgentMentionActionRequestError } from "#src/connection/agent-mention-action-request-error";
 import { AgentMentionDeliveryRequestError } from "#src/connection/agent-mention-delivery-request-error";
@@ -23,5 +24,6 @@ export const userInfoDomainFailure = envelopeFailure(AgentUserInfoRequestError);
 export const profileDomainFailure = envelopeFailure(AgentProfileRequestError);
 export const appConfigDomainFailure = envelopeFailure(AgentAppConfigRequestError);
 export const attachmentCommentsDomainFailure = envelopeFailure(AgentAttachmentCommentsRequestError);
+export const channelDomainFailure = envelopeFailure(AgentChannelRequestError);
 export const mentionActionDomainFailure = envelopeFailure(AgentMentionActionRequestError);
 export const mentionDeliveryDomainFailure = envelopeFailure(AgentMentionDeliveryRequestError);

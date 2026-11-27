@@ -1,4 +1,6 @@
+import type { ChannelAnnouncementSummary } from "@lrm/coforge-sdk/internal";
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
+import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import { externalPresenceOf } from "#src/server/agents/agent-user-info.server";
 import { externalSetups } from "#src/server/agents/external-agent-presence.server";
@@ -30,6 +32,7 @@ export type AgentChannelInfo = {
   channelRole?: string;
   channelAdminBasis?: ChannelAdminBasis;
   channelCapabilities: ChannelCapabilities;
+  announcement: ChannelAnnouncementSummary | null;
 };
 
 export type AgentChannelRoster = {
@@ -60,14 +63,25 @@ export async function agentChannelInfo(
   channel: Pick<Conversation, "id" | "channelName" | "description" | "archivedAt" | "visibility">,
   actor: ChannelActor,
 ): Promise<AgentChannelInfo> {
-  const [member, memberCounts, authority] = await Promise.all([
+  const [member, memberCounts, authority, pinnedRow] = await Promise.all([
     db.conversationMember.findFirst({
       where: { conversationId: channel.id, ...actor, ...ACTIVE_MEMBER_WHERE },
       select: { notificationLevel: true },
     }),
     countActiveMembers(db, channel.id),
     resolveChannelAuthority(db, workspaceId, actor, channel),
+    db.conversationPinnedArtifact.findUnique({
+      where: { conversationId: channel.id },
+      select: { artifactId: true },
+    }),
   ]);
+  const announcement = pinnedRow
+    ? ((
+        await productionArtifacts(db).pinnedSummary.readSummariesForConversations(workspaceId, [
+          { conversationId: channel.id, artifactId: pinnedRow.artifactId },
+        ])
+      ).get(channel.id) ?? null)
+    : null;
   return {
     id: channel.id,
     name: `#${channel.channelName}`,
@@ -80,6 +94,7 @@ export async function agentChannelInfo(
     channelRole: authority.channelRole,
     channelAdminBasis: authority.adminBasis,
     channelCapabilities: authority.capabilities,
+    announcement,
   };
 }
 

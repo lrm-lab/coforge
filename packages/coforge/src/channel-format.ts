@@ -1,4 +1,8 @@
-import { frameUntrustedText } from "@lrm/coforge-sdk/internal";
+import {
+  foldUntrustedLine,
+  frameUntrustedText,
+  type ChannelAnnouncementSummary,
+} from "@lrm/coforge-sdk/internal";
 /** Text renderers for `coforge channel info|members|join|leave|create|update|lifecycle|
  * add-member|remove-member`. CoForge has no `attention` block on leave/remove-member, so none
  * is rendered. Every subcommand's `--json` mode prints the
@@ -28,6 +32,7 @@ export type ChannelInfoLike = {
   channelRole?: string;
   channelAdminBasis?: ChannelAdminBasis;
   channelCapabilities: Record<ChannelCapability, boolean>;
+  announcement?: ChannelAnnouncementSummary | null;
 };
 
 export type ChannelRosterAgentLike = {
@@ -86,6 +91,17 @@ function yesNo(value: boolean): string {
   return value ? "yes" : "no";
 }
 
+function announcementTimestamp(updatedAt: string): string {
+  const at = new Date(updatedAt);
+  if (Number.isNaN(at.getTime())) return "";
+  return `, updated ${at.toISOString().slice(0, 16).replace("T", " ")}Z`;
+}
+
+export function formatAnnouncementLine(announcement: ChannelAnnouncementSummary): string {
+  const title = foldUntrustedLine(announcement.title || "(untitled)");
+  return `Announcement: "${title}" (${announcement.artifactId}, v${announcement.version}${announcementTimestamp(announcement.updatedAt)}) \u2014 read: coforge artifact read ${announcement.artifactId}`;
+}
+
 export function formatChannelInfo(response: { channel: ChannelInfoLike }): string {
   const channel = response.channel;
   const total = channel.memberCounts.agents + channel.memberCounts.humans;
@@ -94,11 +110,9 @@ export function formatChannelInfo(response: { channel: ChannelInfoLike }): strin
     "",
     `Channel: ${channel.name}`,
     `ID: ${channel.id}`,
-    // An older server sends no visibility; every channel it has is public.
     `Visibility: ${channel.visibility ?? "public"}`,
     `Joined: ${yesNo(channel.joined)}`,
   ];
-  // Same "hide the uninformative default" convention as `channelMemberRoleDetail`.
   if (channel.channelRole && channel.channelRole !== "member")
     lines.push(`Channel role: ${channel.channelRole}`);
   if (channel.channelAdminBasis) lines.push(`Channel admin basis: ${channel.channelAdminBasis}`);
@@ -112,8 +126,8 @@ export function formatChannelInfo(response: { channel: ChannelInfoLike }): strin
     `Archived: ${yesNo(channel.archived)}`,
     `Description: ${channel.description ? frameUntrustedText(channel.description) : "(none)"}`,
   );
+  if (channel.announcement) lines.push(formatAnnouncementLine(channel.announcement));
   lines.push(
-    // Always plural — never singularized for a count of 1.
     `Members: ${total} (${channel.memberCounts.agents} agents, ${channel.memberCounts.humans} humans)`,
     "",
     `More: coforge channel members "${channel.name}"`,
@@ -182,20 +196,30 @@ export function formatChannelLeave(response: { target: string; wasMember: boolea
   ].join("\n");
 }
 
-type ChannelResult = { channel: { name: string; visibility?: "public" | "private" } };
+type ChannelResult = {
+  channel: {
+    name: string;
+    visibility?: "public" | "private";
+    announcement?: ChannelAnnouncementSummary | null;
+  };
+};
 
-/** The visibility the server reports, so an Agent never reads one it did not get: a server that
- * predates private channels reports none, and made the channel public. */
 const visibilityOf = ({ channel }: ChannelResult) => channel.visibility ?? "public";
 
-/** The `channel create` result. */
 export function formatChannelCreate(response: ChannelResult): string {
   return `Created ${response.channel.name} (${visibilityOf(response)}). You are joined and can send messages there.`;
 }
 
-/** The `channel update` result: a one-line confirmation, not the info block. */
-export function formatChannelUpdate(response: ChannelResult): string {
-  return `Updated ${response.channel.name} (${visibilityOf(response)}).`;
+export function formatChannelUpdate(
+  response: ChannelResult,
+  options?: { announcementChanged?: boolean },
+): string {
+  const head = response.channel.name.startsWith("#")
+    ? `Updated ${response.channel.name} (${visibilityOf(response)}).`
+    : `Updated ${response.channel.name}.`;
+  if (!options?.announcementChanged || response.channel.announcement === undefined) return head;
+  if (response.channel.announcement === null) return `${head} It has no announcement now.`;
+  return `${head}\n${formatAnnouncementLine(response.channel.announcement)}`;
 }
 
 /** The `channel lifecycle archive|unarchive` result. */

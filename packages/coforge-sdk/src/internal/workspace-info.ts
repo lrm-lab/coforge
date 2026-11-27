@@ -73,6 +73,13 @@ export type WorkspaceInfoResponse = {
   };
 };
 
+export type ChannelAnnouncementSummary = {
+  artifactId: string;
+  title: string;
+  version: number;
+  updatedAt: string;
+};
+
 export type WorkspaceInfoChannel = {
   /** `#name`. */
   name: string;
@@ -89,6 +96,7 @@ export type WorkspaceInfoChannel = {
   channelAdminBasis?: "server_role" | "channel_role";
   /** ISO time of the newest message; `null` for a channel nobody has posted in. */
   lastPostAt: string | null;
+  announcement?: ChannelAnnouncementSummary | null;
 };
 
 export type WorkspaceInfoComputer = {

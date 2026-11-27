@@ -18,7 +18,7 @@ export type ChannelOperation = (typeof CHANNEL_OPERATIONS)[number];
 export type ChannelCommand = {
   operation: ChannelOperation;
   idempotencyKey: string;
-  /** `#name`, `#name:<thread>` (members only) or `@user` (members only); omitted for `create`. */
+  /** `#name`, `#name:<thread>` (members only) or `@user` / `dm:@user` (members/update announcement); omitted for `create`. */
   target?: string;
   /** `create`/`update`: the new channel name, with or without a leading `#`. */
   name?: string;
@@ -27,6 +27,8 @@ export type ChannelCommand = {
   /** `create`/`update`: who may read the channel (`--private`/`--public`). Absent: `create` makes
    * a public channel, `update` leaves it as it is. */
   visibility?: "public" | "private";
+  /** `update`: artifact id or link to pin (`--announcement`), or `null` to clear (`--no-announcement`). */
+  announcement?: string | null;
   /** `add-member`/`remove-member`: exactly one of `user`/`agent` is set, as `@handle`. */
   user?: string;
   agent?: string;

@@ -11,7 +11,7 @@ export function artifactTransport(
   proxyEndpoint: (path: string) => URL,
   context: string,
   proxyUrl: string,
-): Required<ArtifactTransport> {
+): Required<Omit<ArtifactTransport, "channel">> {
   // Bytes go by their hash, so the same bytes sent again change nothing: a failure on the way
   // may simply be tried again.
   const transfer = async (what: "upload" | "download", request: () => Promise<Response>) => {

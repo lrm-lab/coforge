@@ -38,7 +38,9 @@ export async function runChannelCommand(
     case "create":
       return formatChannelCreate(response as Parameters<typeof formatChannelCreate>[0]);
     case "update":
-      return formatChannelUpdate(response as Parameters<typeof formatChannelUpdate>[0]);
+      return formatChannelUpdate(response as Parameters<typeof formatChannelUpdate>[0], {
+        announcementChanged: channel.announcement !== undefined,
+      });
     case "archive":
     case "unarchive":
       return formatChannelArchive(response as Parameters<typeof formatChannelArchive>[0]);

@@ -365,3 +365,57 @@ test("formatChannelInfo names a private channel's visibility", () => {
   });
   expect(text.split("\n")).toContain("Visibility: private");
 });
+
+test("formatChannelInfo and formatChannelUpdate render announcement metadata when present", () => {
+  const announcement = {
+    artifactId: "11111111-0000-0000-0000-000000000000",
+    title: "Release Checklist",
+    version: 3,
+    updatedAt: "2026-11-27T08:15:30.000Z",
+  };
+  const infoText = formatChannelInfo({
+    channel: {
+      id: "ch-1",
+      name: "#release",
+      description: "Shipping room",
+      visibility: "public",
+      archived: false,
+      joined: true,
+      muted: false,
+      memberCounts: { agents: 1, humans: 2 },
+      channelCapabilities: NO_CAPABILITIES,
+      announcement,
+    },
+  });
+  const lines = infoText.split("\n");
+  const descIndex = lines.indexOf("Description: Shipping room");
+  expect(lines[descIndex + 1]).toBe(
+    'Announcement: "Release Checklist" (11111111-0000-0000-0000-000000000000, v3, updated 2026-11-27 08:15Z) \u2014 read: coforge artifact read 11111111-0000-0000-0000-000000000000',
+  );
+
+  expect(
+    formatChannelUpdate(
+      {
+        channel: {
+          name: "#release",
+          visibility: "public",
+          announcement,
+        },
+      },
+      { announcementChanged: true },
+    ),
+  ).toContain('Announcement: "Release Checklist"');
+
+  expect(
+    formatChannelUpdate(
+      {
+        channel: {
+          name: "#release",
+          visibility: "public",
+          announcement: null,
+        },
+      },
+      { announcementChanged: true },
+    ),
+  ).toContain("It has no announcement now.");
+});

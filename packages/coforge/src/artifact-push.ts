@@ -73,6 +73,68 @@ type CreateRequest = Extract<AgentArtifactRequest, { operation: "push"; artifact
 const toManifest = (files: LocalFile[]): AgentArtifactFile[] =>
   files.map(({ path, sha256 }) => ({ path, sha256 }));
 
+const CHANNEL_ANNOUNCEMENT_TARGET = /^#[a-z0-9][a-z0-9_-]{0,31}$/;
+const DM_ANNOUNCEMENT_TARGET = /^(?:dm:)?@[a-z0-9][a-z0-9_-]{0,63}(?:~(?:human|agent))?$/;
+
+async function preflightAnnouncementPush(
+  draft: Extract<ArtifactDirectoryDraft, { operation: "push" }>,
+  state: ArtifactState | undefined,
+  transport: ArtifactDirectoryTransport,
+): Promise<string | undefined> {
+  if (!draft.announcement) return undefined;
+  if (state) {
+    throw invalidArg(
+      `--announcement only applies when creating a new artifact with --target; ${draft.dir} already holds ${state.artifact}.`,
+      `Set it as pinned content with: coforge channel update --target "<#channel or @peer>" --announcement ${state.artifact}`,
+    );
+  }
+  const target = draft.target;
+  if (!target) {
+    throw new CliError({
+      code: "TARGET_REQUIRED",
+      message: "--announcement requires --target ('#channel-name' or '@peer'). Nothing was pushed.",
+      retryable: false,
+    });
+  }
+  const isChannel = CHANNEL_ANNOUNCEMENT_TARGET.test(target);
+  const isDm = DM_ANNOUNCEMENT_TARGET.test(target);
+  if (!isChannel && !isDm) {
+    throw new CliError({
+      code: "INVALID_TARGET",
+      message:
+        "Only a channel ('#channel-name') or a DM ('@peer') has an announcement; a thread or a task has none.",
+      retryable: false,
+    });
+  }
+  if (!transport.channel) {
+    throw new CliError({
+      code: "CHANNEL_ANNOUNCEMENT_NOT_SET",
+      message: "Channel management transport is unavailable; nothing was pushed.",
+      retryable: false,
+    });
+  }
+  if (isChannel) {
+    const info = (await transport.channel({ operation: "info", target })) as {
+      channel?: { archived?: boolean; channelCapabilities?: { update?: boolean } };
+    };
+    if (info?.channel?.channelCapabilities?.update !== true) {
+      throw new CliError({
+        code: "CHANNEL_ANNOUNCEMENT_FORBIDDEN",
+        message: `Only a channel admin of ${target} or a Workspace owner or admin can set its announcement. Nothing was pushed.`,
+        retryable: false,
+      });
+    }
+    if (info?.channel?.archived) {
+      throw new CliError({
+        code: "CHANNEL_ARCHIVED",
+        message: `${target} is archived. Nothing was pushed.`,
+        retryable: false,
+      });
+    }
+  }
+  return target;
+}
+
 export async function runPush(
   invocation: ArtifactDirectoryInvocation,
   draft: Extract<ArtifactDirectoryDraft, { operation: "push" }>,
@@ -93,6 +155,7 @@ export async function runPush(
       "This directory holds an unfinished pull",
       `Pull again: coforge artifact pull ${state.artifact} --dir ${shellWord(draft.dir)}`,
     );
+  const announcementTarget = await preflightAnnouncementPush(draft, state, transport);
   const entry = draft.entry === undefined ? undefined : artifactPath(draft.entry);
   const deletes = (draft.delete ?? []).map(artifactPath);
   for (const path of deletes)
@@ -120,11 +183,29 @@ export async function runPush(
     );
     const hashes = Object.fromEntries([...local.values()].map((file) => [file.path, file.sha256]));
     await writeState(dir, { artifact: created.id, version: created.currentVersion, files: hashes });
+    if (announcementTarget) {
+      try {
+        await transport.channel!({
+          operation: "update",
+          target: announcementTarget,
+          announcement: created.id,
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new CliError({
+          code: "CHANNEL_ANNOUNCEMENT_NOT_SET",
+          message: `Pushed ${created.id}, but it is not the announcement of ${announcementTarget}: ${detail}`,
+          suggestedNextAction: `coforge channel update --target "${announcementTarget}" --announcement ${created.id}`,
+          retryable: false,
+        });
+      }
+    }
     return asJson(
       invocation,
-      created,
+      announcementTarget ? { ...created, announcement: true } : created,
       [
         `Created artifact "${created.title}" (id ${created.id}, name ${created.name}), version ${created.currentVersion}, from ${local.size} file${local.size === 1 ? "" : "s"}.`,
+        ...(announcementTarget ? [`It is now the announcement of ${announcementTarget}.`] : []),
         ...(created.url ? [`Open: ${created.url}`] : []),
         ...formatPushCheckHint(created.check, created.id, created.currentVersion),
         ...formatTelling(created.id, created),

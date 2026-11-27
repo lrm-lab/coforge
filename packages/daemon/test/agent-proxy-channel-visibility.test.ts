@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseChannelCommand } from "../src/agent-proxy-request-parsers";
+import { channelDomainFailure } from "../src/agent-proxy-domain-failures";
+import { AgentChannelRequestError } from "../src/connection/agent-channel-request-error";
 import { defaultAgentChannelHttpClient } from "../src/connection/agent-http-clients";
 
 /** `channel create --private` and `channel update --public|--private` (task #302) reach the cloud
@@ -69,6 +71,86 @@ test("the cloud request carries the visibility the local proxy parsed", async ()
       daemonApiKey: "daemon-key",
     });
     expect(bodies).toEqual([expect.objectContaining({ visibility: "private" })]);
+  } finally {
+    await server.stop(true);
+  }
+});
+
+test("the local proxy accepts announcement string or null on channel update and forwards envelope errors", async () => {
+  expect(
+    parseChannelCommand({
+      idempotencyKey: "r-5",
+      operation: "update",
+      target: "#eng",
+      announcement: "11111111-0000-0000-0000-000000000000",
+    }),
+  ).toMatchObject({
+    operation: "update",
+    target: "#eng",
+    announcement: "11111111-0000-0000-0000-000000000000",
+  });
+  expect(
+    parseChannelCommand({
+      idempotencyKey: "r-6",
+      operation: "update",
+      target: "@alice",
+      announcement: null,
+    }),
+  ).toMatchObject({
+    operation: "update",
+    target: "@alice",
+    announcement: null,
+  });
+  const refused = parseChannelCommand({
+    idempotencyKey: "r-7",
+    operation: "update",
+    target: "#eng",
+    announcement: 123,
+  });
+  expect(refused).toBeInstanceOf(Response);
+  expect((refused as Response).status).toBe(400);
+
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      return Response.json(
+        {
+          ok: false,
+          errorCode: "pinned_artifact_not_in_conversation",
+          error: "Artifact not found in #eng.",
+        },
+        { status: 404 },
+      );
+    },
+  });
+  try {
+    let caught: unknown;
+    try {
+      await defaultAgentChannelHttpClient.execute({
+        url: `http://127.0.0.1:${server.port}/api/agent/v1/channels/%23eng`,
+        method: "PATCH",
+        request: {
+          idempotencyKey: "r-8",
+          workspaceId: "workspace-1",
+          agentId: "agent-1",
+          operation: "update",
+          target: "#eng",
+          announcement: "11111111-0000-0000-0000-000000000000",
+        },
+        agentApiKey: "agent-key",
+        daemonApiKey: "daemon-key",
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AgentChannelRequestError);
+    const response = channelDomainFailure(caught);
+    expect(response?.status).toBe(404);
+    expect(await response?.json()).toEqual({
+      ok: false,
+      errorCode: "pinned_artifact_not_in_conversation",
+      error: "Artifact not found in #eng.",
+    });
   } finally {
     await server.stop(true);
   }

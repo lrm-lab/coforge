@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { isAppError } from "#src/lib/app-error";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
+import { handleAgentChannelPatch } from "#src/routes/api/agent/v1/channels_.$channel";
+import { listAgentWorkspaceChannels } from "#src/server/agents/agent-workspace-roster.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
+import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
+import { AgentChannelManagementError } from "#src/server/conversations/agent-channel-management-error.server";
 import {
   readConversationPinnedArtifact,
   setConversationPinnedArtifact,
@@ -19,6 +23,10 @@ beforeAll(async () => {
     select: { id: true },
   });
   docsChannelId = docsChannel.id;
+  await f.db.conversationMember.updateMany({
+    where: { conversationId: docsChannelId, agentId: f.agents.writer },
+    data: { channelRole: "admin" },
+  });
 
   const dm = await f.db.conversation.create({
     data: {
@@ -103,6 +111,17 @@ test("channel admin can pin, replace, and unpin; seen tracks viewer position acr
     files: await f.manifestOf(f.agents.writer, { "plan.md": "# Release\n\nUpdated body\n" }),
   });
   expect(pushRes.status).toBe(200);
+
+  const nonAdminPush = await f.post(f.agents.reader, {
+    operation: "push",
+    idempotencyKey: f.key(),
+    artifact: firstId,
+    baseVersion: 2,
+    note: "Unauthorized update",
+    files: await f.manifestOf(f.agents.reader, { "plan.md": "# Release\n\nNon-admin edit\n" }),
+  });
+  expect(nonAdminPush.status).toBe(403);
+  expect(nonAdminPush.body.error).toContain("channel-announcement-push-forbidden");
   const afterPush = await readConversationPinnedArtifact(f.db, {
     workspaceId: f.workspaceId,
     conversationId: docsChannelId,
@@ -132,6 +151,21 @@ test("channel admin can pin, replace, and unpin; seen tracks viewer position acr
   });
   expect(removed).toEqual({ pinned: null, canEdit: true });
   expect(pinnedEvents).toHaveLength(3);
+
+  await f.db.artifactReadPosition.upsert({
+    where: { artifactId_agentId: { artifactId: firstId, agentId: f.agents.reader } },
+    create: { artifactId: firstId, agentId: f.agents.reader, version: 2 },
+    update: { version: 2 },
+  });
+  const afterUnpinPush = await f.post(f.agents.reader, {
+    operation: "push",
+    idempotencyKey: f.key(),
+    artifact: firstId,
+    baseVersion: 2,
+    note: "Allowed after unpin",
+    files: await f.manifestOf(f.agents.reader, { "plan.md": "# Release\n\nAfter unpin\n" }),
+  });
+  expect(afterUnpinPush.status).toBe(200);
 
   const notices = await f.db.systemMessage.findMany({
     where: { conversationId: docsChannelId, kind: "conversation.pinned_artifact_changed" },
@@ -294,5 +328,186 @@ test("DM participant can pin and unpin while non-participant cannot access", asy
     expect.unreachable("non-workspace member should get NOT_FOUND");
   } catch (error) {
     expect(isAppError(error) && error.code).toBe("NOT_FOUND");
+  }
+});
+
+test("Agent CLI channel update, info, workspace roster, DM pin, and DM push-lock exemption align with Raft", async () => {
+  const management = new AgentChannelManagement(f.db);
+  const channelDocId = await f.make("Agent Pinned Guide", undefined, {
+    target: `#${f.docsChannel}`,
+  });
+  const foreignDocId = await f.make("Foreign Private Guide", undefined, {
+    target: `#${f.privateChannel}`,
+  });
+
+  const updated = await management.update(f.workspaceId, f.agents.writer, `#${f.docsChannel}`, {
+    announcement: `https://coforge.example/w/acme/artifacts/${channelDocId}`,
+  });
+  expect(updated.announcement).toMatchObject({
+    artifactId: channelDocId,
+    title: "Agent Pinned Guide",
+    version: 1,
+  });
+
+  const info = await management.info(f.workspaceId, f.agents.reader, `#${f.docsChannel}`);
+  expect(info.announcement).toMatchObject({
+    artifactId: channelDocId,
+    title: "Agent Pinned Guide",
+    version: 1,
+  });
+
+  const roster = await listAgentWorkspaceChannels(
+    f.db,
+    f.workspaceId,
+    { agentId: f.agents.reader },
+    "member",
+  );
+  const docsRow = roster.find((row) => row.name === `#${f.docsChannel}`);
+  expect(docsRow?.announcement).toMatchObject({
+    artifactId: channelDocId,
+    title: "Agent Pinned Guide",
+    version: 1,
+  });
+
+  await expect(
+    management.update(f.workspaceId, f.agents.reader, `#${f.docsChannel}`, {
+      announcement: channelDocId,
+    }),
+  ).rejects.toMatchObject({ status: 403 });
+
+  const invalidRefRes = await handleAgentChannelPatch(
+    new Request(`http://local/api/agent/v1/channels/%23${f.docsChannel}`, {
+      method: "PATCH",
+      body: JSON.stringify({ idempotencyKey: f.key(), announcement: "Bare Title Only" }),
+    }),
+    `#${f.docsChannel}`,
+    { workspaceId: f.workspaceId, agentId: f.agents.writer },
+    management,
+  );
+  expect(invalidRefRes.status).toBe(400);
+  expect(await invalidRefRes.json()).toMatchObject({
+    ok: false,
+    errorCode: "channel_announcement_ref_invalid",
+  });
+
+  const foreignRes = await handleAgentChannelPatch(
+    new Request(`http://local/api/agent/v1/channels/%23${f.docsChannel}`, {
+      method: "PATCH",
+      body: JSON.stringify({ idempotencyKey: f.key(), announcement: foreignDocId }),
+    }),
+    `#${f.docsChannel}`,
+    { workspaceId: f.workspaceId, agentId: f.agents.writer },
+    management,
+  );
+  expect(foreignRes.status).toBe(404);
+  expect(await foreignRes.json()).toMatchObject({
+    ok: false,
+    errorCode: "pinned_artifact_not_in_conversation",
+  });
+
+  const cleared = await management.update(f.workspaceId, f.agents.writer, `#${f.docsChannel}`, {
+    announcement: null,
+  });
+  expect(cleared.announcement).toBeNull();
+
+  const aliceUser = await f.db.user.findUniqueOrThrow({
+    where: { id: f.alice },
+    select: { username: true },
+  });
+  const dmDocId = await f.make("DM Runbook", undefined, {
+    target: `@${aliceUser.username}`,
+    by: f.agents.writer,
+  });
+
+  const dmPinned = await management.update(
+    f.workspaceId,
+    f.agents.writer,
+    `dm:@${aliceUser.username}`,
+    { announcement: dmDocId },
+  );
+  expect(dmPinned.announcement).toMatchObject({
+    artifactId: dmDocId,
+    title: "DM Runbook",
+    version: 1,
+  });
+
+  await expect(
+    management.update(f.workspaceId, f.agents.writer, `@${aliceUser.username}`, {
+      name: "nope",
+    }),
+  ).rejects.toBeInstanceOf(AgentChannelManagementError);
+
+  const dmPush = await f.post(f.agents.writer, {
+    operation: "push",
+    idempotencyKey: f.key(),
+    artifact: dmDocId,
+    baseVersion: 1,
+    note: "DM pinned artifacts stay pushable by participants",
+    files: await f.manifestOf(f.agents.writer, { "plan.md": "# DM Runbook v2\n" }),
+  });
+  expect(dmPush.status).toBe(200);
+
+  const dmCleared = await management.update(
+    f.workspaceId,
+    f.agents.writer,
+    `@${aliceUser.username}`,
+    { announcement: null },
+  );
+  expect(dmCleared.announcement).toBeNull();
+
+  await expect(
+    management.update(f.workspaceId, f.agents.writer, `#${f.docsChannel}`, {
+      description: "Should not persist when announcement is foreign",
+      announcement: foreignDocId,
+    }),
+  ).rejects.toMatchObject({ status: 404, errorCode: "pinned_artifact_not_in_conversation" });
+  const untouched = await management.info(f.workspaceId, f.agents.writer, `#${f.docsChannel}`);
+  expect(untouched.description).not.toBe("Should not persist when announcement is foreign");
+
+  const shadowPrivateAgent = await f.db.agent.create({
+    data: {
+      workspaceId: f.workspaceId,
+      name: aliceUser.username,
+      displayName: "Bob Private Shadow",
+      ownerId: f.bob,
+      visibility: "private",
+      runtimeConfig: {},
+    },
+    select: { id: true },
+  });
+  try {
+    const nonLeakingDmPin = await management.update(
+      f.workspaceId,
+      f.agents.writer,
+      `@${aliceUser.username}`,
+      { announcement: dmDocId },
+    );
+    expect(nonLeakingDmPin.announcement?.artifactId).toBe(dmDocId);
+  } finally {
+    await f.db.agent.delete({ where: { id: shadowPrivateAgent.id } });
+  }
+
+  await management.update(f.workspaceId, f.agents.writer, `#${f.docsChannel}`, {
+    announcement: channelDocId,
+  });
+  await f.db.conversation.update({
+    where: { id: docsChannelId },
+    data: { archivedAt: new Date() },
+  });
+  try {
+    const archivedAdminPush = await f.post(f.agents.writer, {
+      operation: "push",
+      idempotencyKey: f.key(),
+      artifact: channelDocId,
+      baseVersion: 1,
+      note: "Push while channel is archived",
+      files: await f.manifestOf(f.agents.writer, { "plan.md": "# Archived push\n" }),
+    });
+    expect(archivedAdminPush.status).toBe(200);
+  } finally {
+    await f.db.conversation.update({
+      where: { id: docsChannelId },
+      data: { archivedAt: null },
+    });
   }
 });

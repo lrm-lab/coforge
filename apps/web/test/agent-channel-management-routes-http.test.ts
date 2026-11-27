@@ -139,6 +139,7 @@ test("GET /channels/:channel returns the info envelope", async () => {
             remove_member: false,
             manage_roles: false,
           },
+          announcement: null,
         };
       },
     }),
@@ -195,6 +196,7 @@ test("PATCH /channels/:channel forwards name/description and returns the info en
             remove_member: true,
             manage_roles: false,
           },
+          announcement: null,
         };
       },
     }),

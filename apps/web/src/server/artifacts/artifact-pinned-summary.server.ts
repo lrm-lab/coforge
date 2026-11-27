@@ -1,9 +1,11 @@
+import type { ChannelAnnouncementSummary } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   artifactKindOfPath,
   type ArtifactPathKind,
 } from "#src/features/artifacts/artifact-path-kind";
 import { actorDirectory } from "./artifact-actor-names.server";
+import { parseArtifactIdOrLink } from "./artifact-reference.server";
 
 export type PinnedArtifactActor = {
   kind: "user" | "agent";
@@ -32,6 +34,35 @@ type PinnedSummaryDb = Pick<
 
 export class ArtifactPinnedSummary {
   constructor(private readonly db: PinnedSummaryDb) {}
+
+  parseReference(reference: string): string | null {
+    return parseArtifactIdOrLink(reference);
+  }
+
+  async readSummariesForConversations(
+    workspaceId: string,
+    pins: readonly { conversationId: string; artifactId: string }[],
+  ): Promise<Map<string, ChannelAnnouncementSummary>> {
+    const result = new Map<string, ChannelAnnouncementSummary>();
+    if (pins.length === 0) return result;
+    const artifactIds = [...new Set(pins.map((pin) => pin.artifactId))];
+    const rows = await this.db.artifact.findMany({
+      where: { workspaceId, id: { in: artifactIds }, deletedAt: null },
+      select: { id: true, title: true, homeKey: true, currentVersion: true, updatedAt: true },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const pin of pins) {
+      const row = byId.get(pin.artifactId);
+      if (!row || row.homeKey !== `conversation:${pin.conversationId}`) continue;
+      result.set(pin.conversationId, {
+        artifactId: row.id,
+        title: row.title,
+        version: row.currentVersion,
+        updatedAt: row.updatedAt.toISOString(),
+      });
+    }
+    return result;
+  }
 
   async verifyHomedInConversation(input: {
     workspaceId: string;

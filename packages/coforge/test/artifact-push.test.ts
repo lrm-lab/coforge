@@ -315,3 +315,103 @@ test("push prints Open URL when the server returns url on create and update", as
   const updatedSaid = (await runArtifact(invoke(["push", dir]), transport)) as string;
   expect(updatedSaid).toContain(`Open: ${url}`);
 });
+
+test("push --announcement preflights channel admin authority before pushing and pins after create", async () => {
+  const forbiddenServer = fakeServer({ "a.md": "a" });
+  const forbiddenDir = join(root, "ann-forbidden");
+  await mkdir(forbiddenDir);
+  await writeFile(join(forbiddenDir, "a.md"), "hello");
+  const channelCalls: unknown[] = [];
+  const forbiddenErr = await failure(
+    runArtifact(
+      invoke(["push", forbiddenDir, "--target", "#eng", "--title", "Plan", "--announcement"]),
+      {
+        ...forbiddenServer.transport,
+        channel: async (command) => {
+          channelCalls.push(command);
+          return { channel: { archived: false, channelCapabilities: { update: false } } };
+        },
+      },
+    ),
+  );
+  expect(forbiddenErr.code).toBe("CHANNEL_ANNOUNCEMENT_FORBIDDEN");
+  expect(forbiddenServer.requests).toHaveLength(0);
+  expect(channelCalls).toEqual([{ operation: "info", target: "#eng" }]);
+
+  const threadErr = await failure(
+    runArtifact(
+      invoke([
+        "push",
+        forbiddenDir,
+        "--target",
+        "#eng:12345678",
+        "--title",
+        "Plan",
+        "--announcement",
+      ]),
+      { ...forbiddenServer.transport, channel: async () => ({}) },
+    ),
+  );
+  expect(threadErr.code).toBe("INVALID_TARGET");
+  expect(forbiddenServer.requests).toHaveLength(0);
+
+  const okServer = fakeServer({ "a.md": "a" });
+  const okDir = join(root, "ann-ok");
+  await mkdir(okDir);
+  await writeFile(join(okDir, "a.md"), "hello");
+  const okCalls: unknown[] = [];
+  const okSaid = (await runArtifact(
+    invoke(["push", okDir, "--target", "#eng", "--title", "Plan", "--announcement"]),
+    {
+      ...okServer.transport,
+      channel: async (command) => {
+        okCalls.push(command);
+        return { channel: { archived: false, channelCapabilities: { update: true } } };
+      },
+    },
+  )) as string;
+  expect(okSaid).toContain("It is now the announcement of #eng.");
+  expect(okCalls).toEqual([
+    { operation: "info", target: "#eng" },
+    { operation: "update", target: "#eng", announcement: ID },
+  ]);
+
+  const dmServer = fakeServer({ "a.md": "a" });
+  const dmDir = join(root, "ann-dm");
+  await mkdir(dmDir);
+  await writeFile(join(dmDir, "a.md"), "hello");
+  const dmCalls: unknown[] = [];
+  await runArtifact(
+    invoke(["push", dmDir, "--target", "@alice", "--title", "DM Plan", "--announcement"]),
+    {
+      ...dmServer.transport,
+      channel: async (command) => {
+        dmCalls.push(command);
+        return { channel: { archived: false, channelCapabilities: { update: true } } };
+      },
+    },
+  );
+  expect(dmCalls).toEqual([{ operation: "update", target: "@alice", announcement: ID }]);
+
+  const failPinServer = fakeServer({ "a.md": "a" });
+  const failPinDir = join(root, "ann-fail-pin");
+  await mkdir(failPinDir);
+  await writeFile(join(failPinDir, "a.md"), "hello");
+  const pinErr = await failure(
+    runArtifact(
+      invoke(["push", failPinDir, "--target", "#eng", "--title", "Plan", "--announcement"]),
+      {
+        ...failPinServer.transport,
+        channel: async (command) => {
+          if (command.operation === "info")
+            return { channel: { archived: false, channelCapabilities: { update: true } } };
+          throw new Error("boom");
+        },
+      },
+    ),
+  );
+  expect(pinErr.code).toBe("CHANNEL_ANNOUNCEMENT_NOT_SET");
+  expect(pinErr.suggestedNextAction).toBe(
+    `coforge channel update --target "#eng" --announcement ${ID}`,
+  );
+});

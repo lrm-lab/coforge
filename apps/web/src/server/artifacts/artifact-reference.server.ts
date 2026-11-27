@@ -43,6 +43,15 @@ function linkReference(link: string): ArtifactReference | null {
   };
 }
 
+export function parseArtifactIdOrLink(reference: string): string | null {
+  const text = reference.trim();
+  const directId = decodeArtifactShortId(text);
+  if (directId !== null) return directId;
+  const link = /^https?:\/\//i.test(text);
+  const linked = link || text.startsWith("/") ? linkReference(text) : null;
+  return linked?.artifactId ?? null;
+}
+
 export async function resolveArtifactReference(
   reference: string,
   candidates: Candidates,

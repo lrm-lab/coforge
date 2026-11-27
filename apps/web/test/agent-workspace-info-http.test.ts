@@ -305,6 +305,7 @@ test("workspace info lists the channels and Computers with the calling Agent's r
       archived: false,
       channelRole: "member",
       lastPostAt: "2026-09-07T10:00:00.000Z",
+      announcement: null,
     },
     {
       name: "#old",
@@ -314,6 +315,7 @@ test("workspace info lists the channels and Computers with the calling Agent's r
       muted: false,
       archived: true,
       lastPostAt: null,
+      announcement: null,
     },
   ]);
   expect(body.computers).toHaveLength(1);
