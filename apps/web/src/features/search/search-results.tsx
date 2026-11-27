@@ -177,12 +177,10 @@ function useMessageSearch(
 ) {
   return useInfiniteQuery({
     ...messageSearchQuery(workspaceId, query, filters, timeZone),
-    // A changed filter keeps the current rows on screen until the new ones arrive.
     placeholderData: keepPreviousData,
   });
 }
 
-/** What opening an entity remembers: a member by the DM it opens, as Frequently used lists them. */
 function rememberedKey(entity: SearchEntity): SearchEntityKey | undefined {
   if (entity.kind !== "person") return searchEntityKey(entity);
   return entity.dmId ? searchEntityKey({ kind: "dm", id: entity.dmId }) : undefined;
@@ -243,14 +241,11 @@ function useSearchArtifacts(
   return useSearchGroup(Boolean(query), artifactSearchQuery(workspaceId, query, conversationId));
 }
 
-/** The people (but the viewer), Agents, channels and Computers the query names; none without a
- * query. */
 function useSearchEntities(
   workspaceId: string,
   query: string,
 ): { entities: SearchEntity[]; pending: boolean } {
   const { data: directory, isPending } = useQuery(searchDirectoryQuery(workspaceId));
-  // Built once per directory load; each committed query only filters it.
   const candidates = useMemo<SearchEntity[]>(
     () =>
       directory
@@ -275,11 +270,9 @@ function useSearchEntities(
     () => (query ? matchSearchEntities(candidates, query) : []),
     [candidates, query],
   );
-  // A failed Workspace list only drops this optional section; it is not "no matches".
   return { entities, pending: Boolean(query) && isPending };
 }
 
-/** The Messages section: loading, failure, its rows and Load more. */
 function MessageResults({
   workspaceId,
   search,
@@ -293,7 +286,6 @@ function MessageResults({
   search: ReturnType<typeof useMessageSearch>;
   hits: MessageSearchHit[];
   terms: string[];
-  /** The way out when no message matches: clear the query, or the filters without one. */
   clearLabel: string;
   onClear: () => void;
   onOpen: (entity: SearchEntityKey | undefined) => void;
@@ -388,10 +380,6 @@ function MessageResults({
   );
 }
 
-/**
- * Where a result opens in Chat: its conversation at the row that shows the message, and for a
- * thread reply its thread open at the reply, the way Chat opens a thread from Activity.
- */
 function messageOpenTarget(
   workspaceSlug: string,
   conversation: MessageSearchHit["conversation"],
@@ -407,10 +395,6 @@ function messageOpenTarget(
     : target;
 }
 
-/**
- * The remembered place a message result opens: its channel, its direct conversation's Agent (whose
- * card opens that DM), or its direct conversation with a member.
- */
 function conversationKey(
   conversation: MessageSearchHit["conversation"],
 ): SearchEntityKey | undefined {
@@ -425,7 +409,6 @@ function conversationKey(
   }
 }
 
-/** Who a direct conversation is with: its Agent, or the member on the other side. */
 function directActor(
   direct: MessageSearchHit["conversation"]["direct"],
   directory: WorkspaceDirectory | undefined,
@@ -469,18 +452,14 @@ function SearchResultRow({
   const workspaceSlug = useWorkspaceSlug();
   const directory = useQuery(searchDirectoryQuery(workspaceId)).data;
   const place = conversation.channelName ? (
-    // Its group avatar and name; a private channel with its lock (tasks #375, #55).
     <ChannelPlace
       id={conversation.id}
       name={conversation.channelName}
       visibility={conversation.visibility}
     />
   ) : (
-    // The other side's face before their name (task #521); the picture comes from the directory
-    // the search filters already load, as the hit carries only ids and names.
     <ActorName actor={directActor(conversation.direct, directory) ?? senderActor(message)} />
   );
-  // An action card's excerpt is written in the viewer's language; it matched on its English body.
   const text =
     actionCardPreviewText(message.card) ||
     (message.body
@@ -495,7 +474,6 @@ function SearchResultRow({
         data-search-message-id={message.id}
         data-search-option=""
         onClick={onOpen}
-        // A middle click opens a new tab without a click event; it is still an open.
         onAuxClick={(event) => event.button === 1 && onOpen()}
         className={cx(SEARCH_ROW_CLASS, "items-start")}
       >

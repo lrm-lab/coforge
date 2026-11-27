@@ -7,16 +7,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { hydratedElement } from "./helpers/browser-e2e";
 
-/**
- * The search dialog in a real browser. The sidebar's search field opens it over the page, empty;
- * typing a Chinese phrase lists the matching message with the phrase highlighted, including a
- * message in a channel the viewer never joined. Clicking a result closes the dialog and opens its
- * channel at that message. With no match the dialog says so and keeps the search box.
- *
- * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel is seeded
- * deterministically and reset on every run. Screenshots are written under
- * `.artifacts/e2e/message-search/`.
- */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
@@ -27,7 +17,6 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-search");
 
-/** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
 function seededUuid(key: string): string {
   const hash = createHash("sha256").update(key).digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
@@ -70,8 +59,6 @@ test("the search dialog finds a message and opens it in its channel", async () =
     });
     const workspacePath = `/en/w/${membership.workspace.slug}`;
     const workspaceId = membership.workspaceId;
-    // Reset: a channel the viewer never joined, holding one match among older filler, so the
-    // jump has to load the window around the match.
     await db.conversation.deleteMany({ where: { id: channelId } });
     await db.conversation.deleteMany({
       where: { workspaceId, channelName: "e2e-search" },
@@ -84,8 +71,6 @@ test("the search dialog finds a message and opens it in its channel", async () =
         description: "",
       },
     });
-    // The author is a separate member row for the dev user who then leaves, so the viewer is
-    // not an active member: search must still find channel messages.
     const author = await db.conversationMember.create({
       data: {
         conversationId: channelId,
@@ -118,8 +103,6 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}`);
     await browser("eval", "localStorage.clear()");
-    // The desktop sidebar defaults to its collapsed icon rail (`SearchRailButton`), while an
-    // expanded sidebar shows `[data-search-button]`; locate whichever search trigger is visible.
     const visibleSearchButton = `[...document.querySelectorAll('aside [data-search-button], aside button[aria-label="Search"][aria-haspopup="dialog"]')].find((el) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && el.getBoundingClientRect().width > 0)`;
     const clickSearchButton = async () => {
       await waitFor(`${visibleSearchButton} != null && ${hydratedElement(visibleSearchButton)}`);
@@ -140,7 +123,6 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await waitFor(`document.activeElement === ${box}`);
     await browser("screenshot", join(artifacts, "empty.png"));
 
-    // Typing lists the match with the phrase highlighted.
     await browser("fill", 'input[type="search"]', "蓝鲸");
     await waitFor(`document.querySelector('[role="dialog"] ol li mark') !== null`);
     const result = await evaluate<{
@@ -158,14 +140,12 @@ test("the search dialog finds a message and opens it in its channel", async () =
       };
     })()`);
     expect(result.marks).toEqual(["蓝鲸"]);
-    // The place is the channel's group avatar and name, no `#` (task #55).
     expect(result.place).toBe("e2e-search");
     expect(result.text).not.toContain("#e2e-search");
     expect(result.text).toContain(`今天的${phrase}已经确认`);
     expect(result.count).toBe("1 result");
     await browser("screenshot", join(artifacts, "results.png"));
 
-    // The result closes the dialog and opens its channel at the message.
     await browser("click", '[role="dialog"] ol li a');
     await waitFor(
       `location.pathname === "${workspacePath}/channel/${channelId}" && document.querySelector('[role="dialog"]') === null`,
@@ -173,7 +153,6 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await waitFor(`document.querySelector('li[data-message-id="${match.id}"]') !== null`);
     await browser("screenshot", join(artifacts, "jumped.png"));
 
-    // Search opens fresh from the sidebar; a query with no match keeps the box and says so.
     await clickSearchButton();
     await waitFor(`${box} !== null && ${box}.value === ""`);
     await browser("fill", 'input[type="search"]', "不存在的暗号");
@@ -182,12 +161,9 @@ test("the search dialog finds a message and opens it in its channel", async () =
     );
     await browser("screenshot", join(artifacts, "no-results.png"));
 
-    // The no-results state offers to clear the search, which empties the box.
     await browser("eval", `${byText('[role="dialog"] button', "Clear search")}.click()`);
     await waitFor(`${box}.value === ""`);
     await waitFor(`document.activeElement === ${box}`);
-    // An input method: nothing is searched while composing, and the text it produces is
-    // searched once composition ends, even though its last input event came before that end.
     await browser(
       "eval",
       `(() => {
@@ -201,7 +177,6 @@ test("the search dialog finds a message and opens it in its channel", async () =
         window.__composingSince = Date.now();
       })()`,
     );
-    // Well past the commit delay, the dialog still waits for the composition to end.
     await waitFor(`Date.now() - window.__composingSince > 600`);
     expect(
       await evaluate<boolean>(
