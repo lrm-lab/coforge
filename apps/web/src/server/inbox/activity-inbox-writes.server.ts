@@ -22,6 +22,7 @@ import {
 } from "#src/server/conversations/thread-unread-marks.server";
 import { announceActivityAttention, announceReadMoved } from "./activity-attention.server";
 import { markConversationsReadSql } from "./activity-inbox-bulk-sql.server";
+import { markActivityNoticesReadSql } from "./activity-inbox-mentions.server";
 
 export type ActivityInboxRealtime = Pick<
   ConversationRealtime,
@@ -155,15 +156,7 @@ export async function markActivityAllRead(
     const conversations = await tx.$queryRaw<
       { conversationId: string; channel: boolean; task: boolean }[]
     >(markConversationsReadSql(workspaceId, userId, before));
-    await tx.pendingMentionAction.updateMany({
-      where: {
-        workspaceId,
-        targetUserId: userId,
-        notifiedAt: { not: null, lte: before },
-        targetReadAt: null,
-      },
-      data: { targetReadAt: new Date() },
-    });
+    await tx.$executeRaw(markActivityNoticesReadSql(workspaceId, userId, before, new Date()));
     const threads = await tx.$queryRaw<{ conversationId: string }[]>(
       markThreadsReadSql(workspaceId, followedChannelThreadsSql(workspaceId, userId), before, {
         returnChannels: true,
