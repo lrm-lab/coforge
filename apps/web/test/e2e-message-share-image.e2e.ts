@@ -75,18 +75,23 @@ async function generate() {
   await waitFor(`${preview} !== null && ${preview}.complete`);
 }
 
-async function pageWidth() {
+async function pageSize() {
   await browser(
     "eval",
     `window.shareBlob = null; void fetch(${preview}.src).then((r) => r.blob()).then((blob) => { window.shareBlob = blob; })`,
   );
   await waitFor("window.shareBlob !== null");
-  const { width, type, size } = await evaluate<{ width: number; type: string; size: number }>(
-    `({ width: ${preview}.naturalWidth, type: window.shareBlob.type, size: window.shareBlob.size })`,
+  const { width, height, type, size } = await evaluate<{
+    width: number;
+    height: number;
+    type: string;
+    size: number;
+  }>(
+    `({ width: ${preview}.naturalWidth, height: ${preview}.naturalHeight, type: window.shareBlob.type, size: window.shareBlob.size })`,
   );
   expect(type).toBe("image/png");
   expect(size).toBeGreaterThan(1000);
-  return width;
+  return { width, height };
 }
 
 beforeAll(async () => {
@@ -186,11 +191,11 @@ async function pickRatio(ratio: string) {
   await browser("find", "role", "option", "click", "--name", ratio, "--exact");
 }
 
-test("picked messages become one share image, at three times the card's width", async () => {
+test("picked messages become one share image following the active desktop or phone viewport width", async () => {
   await browser("set", "viewport", "1440", "900");
   await select(shortIds);
   await generate();
-  expect(await pageWidth()).toBe(1440);
+  expect((await pageSize()).width).toBe(2160);
   expect(await evaluate<boolean>(`${dialogButton("Download")} !== undefined`)).toBe(true);
   await shot("short-1440");
   await pickRatio("16:9");
@@ -205,41 +210,91 @@ test("picked messages become one share image, at three times the card's width", 
   await shot("short-3-4-1440");
 }, 90_000);
 
-test("the image follows the viewer's theme, and a phone previews it whole", async () => {
+test("the image follows the viewer's theme, and phone previews at 480px card width", async () => {
   const generated = [
-    ["390", "844", false, "short-390"],
-    ["1440", "900", true, "short-1440-dark"],
-    ["390", "844", true, "short-390-dark"],
+    ["390", "844", false, 1440, "short-390"],
+    ["1440", "900", true, 2160, "short-1440-dark"],
+    ["390", "844", true, 1440, "short-390-dark"],
   ] as const;
-  for (const [width, height, dark, name] of generated) {
+  for (const [width, height, dark, expectedWidth, name] of generated) {
     await browser("set", "viewport", width, height);
     await select(shortIds);
     if (dark) await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await generate();
-    expect(await pageWidth()).toBe(1440);
+    expect((await pageSize()).width).toBe(expectedWidth);
     await shot(name);
   }
   await browser("set", "viewport", "1440", "900");
 }, 90_000);
 
-test("a long selection becomes pages, and the pager moves between them", async () => {
+test("desktop long selection paginates, merges to one long image, and supports overview and zoom", async () => {
+  await browser("set", "viewport", "1440", "900");
   await select(longIds);
   await generate();
   await waitFor(`${dialogButton("Download all")} !== undefined`);
-  expect(await pageWidth()).toBe(2160);
+  expect((await pageSize()).width).toBe(2160);
   const first = await evaluate<string>(`${preview}.src`);
   await evaluate(`${dialogButton("Next page")}.click() ?? true`);
   await waitFor(`${preview}.src !== ${JSON.stringify(first)}`);
-  await shot("long-1440");
+  await shot("long-1440-paged");
+
+  await evaluate(`${dialogButton("Single long image")}.click() ?? true`);
+  await waitFor(
+    `${dialogButton("Download")} !== undefined && ${dialogButton("Next page")} === undefined && ${preview} !== null && ${preview}.complete`,
+  );
+  const merged = await pageSize();
+  expect(merged.width).toBe(2160);
+  expect(merged.height).toBeGreaterThan(3000);
+  await shot("long-1440-merged");
+
+  await evaluate(`${dialogButton("Overview")}.click() ?? true`);
+  await waitFor(
+    `document.querySelector('[data-share-zoom-pill]')?.textContent.includes("Overview")`,
+  );
+  expect(
+    await evaluate<string | null>(`${dialogButton("Overview")}?.getAttribute("aria-pressed")`),
+  ).toBe("true");
+  await shot("long-1440-overview");
+
+  await evaluate(`${dialogButton("Zoom in")}.click() ?? true`);
+  await waitFor(`document.querySelector('[data-share-zoom-pill]') === null`);
+  await evaluate(`${dialogButton("Zoom in")}.click() ?? true`);
+  await waitFor(`document.querySelector('[data-share-zoom-pill]')?.textContent.trim() === "150%"`);
+  await evaluate(`${dialogButton("Reset zoom")}.click() ?? true`);
+  await waitFor(`document.querySelector('[data-share-zoom-pill]') === null`);
+}, 90_000);
+
+test("phone long selection offers mobile zoom bar and one-click merge without horizontal overflow", async () => {
+  await browser("set", "viewport", "390", "844");
+  await select(longIds);
+  await generate();
+  await waitFor(`document.querySelector('[data-share-merge-banner]') !== null`);
+  expect((await pageSize()).width).toBe(1440);
+  const zoomButtonHeights = await evaluate<number[]>(
+    `[...document.querySelectorAll('[data-share-zoom-bar] button')].map((b) => Math.round(b.getBoundingClientRect().height))`,
+  );
+  expect(zoomButtonHeights.length).toBe(4);
+  for (const h of zoomButtonHeights) expect(h).toBeGreaterThanOrEqual(44);
+  const overflow = await evaluate<boolean>(
+    `document.documentElement.scrollWidth > document.documentElement.clientWidth`,
+  );
+  expect(overflow).toBe(false);
+
+  await evaluate(`document.querySelector('[data-share-merge-banner] button')?.click() ?? true`);
+  await waitFor(
+    `document.querySelector('[data-share-merge-banner]') === null && ${preview} !== null && ${preview}.naturalHeight > 3000`,
+  );
+  expect((await pageSize()).width).toBe(1440);
+  await shot("long-390-merged");
+  await browser("set", "viewport", "1440", "900");
 }, 90_000);
 
 test("a message too tall for a canvas still becomes an image, at a lower scale", async () => {
+  await browser("set", "viewport", "1440", "900");
   await select([hugeId]);
   await generate();
-  const { width, height } = await evaluate<{ width: number; height: number }>(
-    `({ width: ${preview}.naturalWidth, height: ${preview}.naturalHeight })`,
-  );
-  expect(width).toBeLessThan(1440);
+  const { width, height } = await pageSize();
+  expect(width).toBeLessThan(2160);
   expect(width * height).toBeLessThanOrEqual(16_777_216);
   await shot("huge-1440");
 }, 90_000);

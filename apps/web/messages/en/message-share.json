@@ -13,5 +13,12 @@
   "message_share_previous": "Previous page",
   "message_share_next": "Next page",
   "message_share_ratio": "Image ratio",
-  "message_share_ratio_auto": "Auto"
+  "message_share_ratio_auto": "Auto",
+  "message_share_ratio_long": "Long",
+  "message_share_merge_long": "Single long image",
+  "message_share_merged_long": "Merged into a single long image.",
+  "message_share_multi_page_hint": "Split into {total} pages",
+  "message_share_zoom_overview": "Overview",
+  "message_share_zoom_overview_badge": "Overview {percent}",
+  "message_share_zoom_controls": "Preview zoom controls"
 }

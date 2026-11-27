@@ -13,5 +13,12 @@
   "message_share_previous": "上一页",
   "message_share_next": "下一页",
   "message_share_ratio": "图片比例",
-  "message_share_ratio_auto": "自动"
+  "message_share_ratio_auto": "自动",
+  "message_share_ratio_long": "长图",
+  "message_share_merge_long": "合为一张长图",
+  "message_share_merged_long": "已合并为一张长图。",
+  "message_share_multi_page_hint": "当前分为 {total} 页",
+  "message_share_zoom_overview": "全览",
+  "message_share_zoom_overview_badge": "全览 {percent}",
+  "message_share_zoom_controls": "预览缩放控制"
 }
