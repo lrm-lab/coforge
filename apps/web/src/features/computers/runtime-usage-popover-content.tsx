@@ -24,13 +24,6 @@ import {
 } from "./runtime-usage-status";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
 
-/**
- * The popover's pure body: everything `RuntimeUsage` fetches, rendered without touching a query
- * client itself, so a test can render it directly with a plain `data` fixture. Bands split by
- * full-width rules, as on Raft: the runtime (name, login state, version, who sees the account),
- * its account (plan, status, usage windows), when it was read with Refresh, the caller's
- * `footer`, and last its `actions`, which stay in view while the bands above them scroll.
- */
 export function RuntimeUsagePopoverContent({
   runtime,
   showUsage = true,
@@ -52,7 +45,6 @@ export function RuntimeUsagePopoverContent({
   notice,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
-  /** False for a runtime that reports no usage: only the runtime band and the footer show. */
   showUsage?: boolean;
   data?: UsageReadResult;
   scanning: boolean;
@@ -61,7 +53,6 @@ export function RuntimeUsagePopoverContent({
   computerOnline?: boolean;
   timeZone?: string | null;
   onRefresh: () => void;
-  /** Present when the popover opened on a press: draws its close button. */
   onClose?: () => void;
   auth?: RuntimeAuthStatus;
   account?: AccountState;
@@ -70,7 +61,6 @@ export function RuntimeUsagePopoverContent({
   accountAction?: ReactNode;
   resetPrompt?: ResetCreditPrompt;
   onResetCredit?: () => void;
-  /** A line under the version: why this runtime cannot be used, when it cannot. */
   notice?: ReactNode;
 }) {
   const hydrated = useHydrated();
@@ -86,8 +76,6 @@ export function RuntimeUsagePopoverContent({
           : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
-  // A signed-out runtime has no account to show: its band says so instead, beside Sign In. A login
-  // state that cannot be read, or is never sent, gets the same band, its button included (#208).
   const signedOut = account === "logged_out";
   const warnedAccount = accountBand(account);
   const sectionAction = warnedAccount ? undefined : accountAction;
@@ -180,7 +168,6 @@ export function RuntimeUsagePopoverContent({
           <div className="flex items-center justify-between gap-3 bg-warning-primary px-4 py-3">
             <div className="min-w-0">
               <h3 className="text-sm font-medium text-warning-primary">{warnedAccount.label}</h3>
-              {/* Only beside the button that does it: a viewer who may not sign in gets no hint. */}
               {signedOut && accountAction && (
                 <p className="text-xs text-tertiary">
                   {m.computer_runtime_sign_in_hint({ runtime: runtime.displayName })}

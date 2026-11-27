@@ -12,13 +12,10 @@ import { modelProviderDisplayName } from "./model-provider-display";
 export type RuntimeCatalog = {
   provider: string;
   models: CodeAgentModelMetadata[];
-  /** When the Daemon reported this cached catalog. */
   observedAt?: string | Date;
 };
 export type RuntimeOptions = {
-  /** The providers this person may pick here. */
   providers: string[];
-  /** Installed but unusable providers, listed and not selectable, each with its reason. */
   unusable: {
     provider: RuntimeProvider;
     unavailableCode: RuntimeUnavailableCode;
@@ -32,22 +29,11 @@ export type RuntimeSelection = {
   modelProvider: string;
   model: string;
   reasoning: string;
-  /** What the person filled in on the form, when they did (task #30). */
   contextWindow?: number;
   maxOutputTokens?: number;
-  /** Whether the Agent launches with the runtime's Fast service tier. Absent means it does not. */
   fastMode?: boolean;
 };
 
-/**
- * Whether the Reasoning field renders and which value the form submits for it. `efforts` are the
- * selected model's levels: from the loaded catalog, or for Command Code, whose catalog carries
- * none, from the read for that model. The field shows only when they include at least one level,
- * and a level they do not list submits "" (the provider default). While they are unknown (catalog
- * loading or failed, model missing, Command Code read running or failed) the field stays hidden
- * and the current value is submitted unchanged: the saved level for the Agent's own model, the
- * model default for any other.
- */
 export function reasoningFieldState(
   efforts: readonly string[] | undefined,
   reasoning: string,
@@ -60,12 +46,6 @@ export function runtimeRequiresModel(provider: RuntimeProvider): boolean {
   return provider === RUNTIME_PROVIDER.ANTIGRAVITY;
 }
 
-/**
- * Whether the Fast mode choice renders and what the form submits for it. The runtime alone
- * decides: the ones whose adapters apply a service tier (Claude Code, Codex) offer it
- * for every model, including the runtime's default, and any other runtime clears the request. A
- * model that turns out not to accept it is reported after launch, not refused here.
- */
 export function fastModeFieldState(
   provider: RuntimeProvider,
   fastMode: boolean,
@@ -74,11 +54,6 @@ export function fastModeFieldState(
   return { visible, submitted: visible ? fastMode : false };
 }
 
-/**
- * Whether the current field values would actually change something a Save submits — the same
- * comparison for every RuntimeProvider (Pi's Configured/built-in split only changes how
- * `submittedModelProvider`/`modelValue` are derived upstream, not this comparison itself).
- */
 export function isRuntimeDirty(params: {
   manualDirty: boolean;
   apiKey: string;
@@ -87,10 +62,7 @@ export function isRuntimeDirty(params: {
   modelValue: string;
   submittedReasoning: string;
   submittedFastMode: boolean;
-  /** The size fields as typed: empty means the model's own entry, which is also what `initial`
-   * holds when the saved config filled none in. */
   sizes: ModelSizes;
-  /** Whether the size fields are shown (`modelSizesApply`): hidden ones change nothing. */
   sizesApply: boolean;
   initial?: RuntimeSelection;
 }): boolean {
@@ -106,13 +78,6 @@ export function isRuntimeDirty(params: {
   );
 }
 
-/**
- * The Pi "Provider" choice (`""` for Configured, else a built-in slug) a saved Agent's runtime
- * config opens with. A stored credential (`credentialConfigured`) means the saved config used a
- * keyed built-in provider — DeepSeek, OpenRouter, or one CoForge no longer offers by default
- * (e.g. `zai`, see `piExtraProviderOption`). No stored credential means Configured: the
- * Computer's own Pi setup, whatever raw provider slug it launched Pi with.
- */
 export function piInitialProviderChoice(
   initial: RuntimeSelection | undefined,
   credentialConfigured: boolean,
@@ -121,11 +86,6 @@ export function piInitialProviderChoice(
   return initial.modelProvider ?? "";
 }
 
-/**
- * A saved Pi built-in provider outside `PI_BUILTIN_MODEL_PROVIDERS` (e.g. `zai`, offered before
- * CoForge narrowed the Pi picker to DeepSeek/OpenRouter): still listed as a Provider option so
- * opening and saving the runtime dialog doesn't silently switch the Agent away from it.
- */
 export function piExtraProviderOption(
   initial: RuntimeSelection | undefined,
   credentialConfigured: boolean,
@@ -134,9 +94,6 @@ export function piExtraProviderOption(
   return choice && !isPiBuiltinModelProvider(choice) ? choice : undefined;
 }
 
-/** Whether a saved Pi Configured pick (`modelProvider`/`model`) is absent from the Computer's own
- * Pi catalog — it opens the Model field as Custom, prefilled, rather than falling back to
- * "Configured default" and silently changing the Agent's launch config. */
 export function isPiCustomModel(
   models: CodeAgentModelMetadata[],
   modelProvider: string | undefined,
@@ -146,17 +103,10 @@ export function isPiCustomModel(
   return !models.some((item) => item.id === model && item.modelProvider === modelProvider);
 }
 
-/** The Custom model ID field's prefill for a saved provider/model pair. */
 export function joinCustomModel(modelProvider: string | undefined, model: string): string {
   return `${modelProvider ?? ""}/${model}`;
 }
 
-/**
- * Splits a "Custom model ID" entry at the FIRST `/` into `modelProvider`/`model` — a model id can
- * itself contain slashes (an OpenRouter id like `anthropic/claude-x`), so only the first one
- * marks the provider boundary. Returns undefined when the text has no `/`, or either side of it
- * is empty.
- */
 export function splitCustomModel(
   value: string,
 ): { modelProvider: string; model: string } | undefined {
@@ -166,19 +116,11 @@ export function splitCustomModel(
   return { modelProvider: trimmed.slice(0, index), model: trimmed.slice(index + 1) };
 }
 
-/** A Pi Configured model's Select label: the catalog only lists this Computer's Pi models across
- * every host-configured provider, so each option names both. */
 export function piConfiguredModelLabel(model: CodeAgentModelMetadata): string {
   return `${model.displayName} · ${modelProviderDisplayName(model.modelProvider)}`;
 }
 
 export function modelOptionValue(model: CodeAgentModelMetadata) {
-  // Used as both a React `key` and a Select.Item `id`. The official Select
-  // (react-aria-components) uses the raw id in an internal CSS selector for
-  // its collection, so it must stay free of CSS-selector special characters
-  // (JSON.stringify's brackets/quotes/commas broke that). Only ever compared
-  // for equality here, never parsed back apart, so any collision-free,
-  // selector-safe encoding works.
   return `${encodeURIComponent(model.modelProvider)}--${encodeURIComponent(model.id)}`;
 }
 
@@ -186,27 +128,16 @@ export function runtimeModels(options: RuntimeOptions | undefined, provider: Run
   return options?.catalogs.find((item) => item.provider === provider)?.models ?? [];
 }
 
-/** The models offered by the Pi "Configured" list: exactly the Computer's own Pi catalog
- * (`~/.pi/agent`), never CoForge's keyed-provider catalog — unlike `piBuiltinModels`, which reads
- * that catalog instead once a built-in provider is chosen. */
 export function piConfiguredModels(options: RuntimeOptions | undefined) {
   return runtimeModels(options, RUNTIME_PROVIDER.PI);
 }
 
-/** The models offered once a Pi built-in provider is selected: CoForge's keyed-provider catalog
- * (the same one the CoForge runtime picker uses), filtered to that one provider. */
 export function piBuiltinModels(options: RuntimeOptions | undefined, modelProvider: string) {
   return runtimeModels(options, RUNTIME_PROVIDER.COFORGE).filter(
     (model) => model.modelProvider === modelProvider,
   );
 }
 
-/**
- * What the runtime form submits for `modelProvider`/`model`: the picked catalog model's own
- * provider, or the saved pair only while the runtime provider itself is unchanged — a provider
- * switch submits only what was picked, so a broken stored config cannot reach a new save
- * (task #523).
- */
 export function submittedRuntimeModel(params: {
   provider: RuntimeProvider;
   modelProvider: string;
@@ -219,8 +150,6 @@ export function submittedRuntimeModel(params: {
   initialModelKey: string;
   initial?: RuntimeSelection;
 }): { modelProvider: string; model: string } {
-  // The saved pair only while the runtime provider itself is unchanged; a provider switch
-  // submits only what was picked (task #523).
   const sameRuntime = params.provider === params.initial?.provider;
   return {
     modelProvider: params.piBuiltin

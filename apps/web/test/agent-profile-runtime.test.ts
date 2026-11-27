@@ -19,9 +19,6 @@ test("a readable runtime config names the migration refusal's runtime and model"
 });
 
 test("an unreadable stored config leaves the migration section nothing to name", () => {
-  // task #517: the staging row's exact shape — a numeric runtime and a string provider —
-  // reads as `undefined` through readableRuntimeConfig, so the section stays hidden like
-  // the runtime rows instead of throwing the whole profile route.
   const stored = { runtime: 42, provider: "not-an-object" };
   expect(agentMigrationRuntime(readableRuntimeConfig(stored, "agent-1"))).toBeUndefined();
 });

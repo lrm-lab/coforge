@@ -6,12 +6,6 @@ import { m } from "#src/paraglide/messages";
 import { runtimeProviderLabel } from "./runtime-provider-display";
 import { runtimeSignInNotice, type RuntimeSignInComputer } from "./agent-runtime-sign-in-state";
 
-/**
- * Under the runtime picker, as Raft's create dialog has it: the chosen runtime is not signed in on
- * that Computer, so an Agent made now could not answer. Those who may sign it in (the Computer's
- * owner, a Workspace owner or admin) get Sign in right here; `onSignIn` opens that flow. Shown only
- * for a stored "logged out" report: an unknown or missing one says nothing either way.
- */
 export function AgentRuntimeSignInNotice({
   computer,
   provider,

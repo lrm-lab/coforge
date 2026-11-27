@@ -87,7 +87,6 @@ test("agentEnvironmentNameError flags a name the server would refuse, before Sav
   expect(agentEnvironmentNameError("COFORGE_TOKEN")).toBe(m.agent_env_reserved_name());
   expect(agentEnvironmentNameError(" MY_VAR ")).toBeUndefined();
   expect(agentEnvironmentNameError("_x1")).toBeUndefined();
-  // A blank row is dropped on save (`parseAgentEnvironmentFromForm`), so it is not an error.
   expect(agentEnvironmentNameError("  ")).toBeUndefined();
 });
 
@@ -106,8 +105,6 @@ test("a refused Agent save names the reason instead of only asking to try again"
     errorId: string,
     code: "INVALID_INPUT" | "ACCESS_DENIED" | "INTERNAL_ERROR" | "CONFLICT" = "INVALID_INPUT",
   ) => agentUpdateErrorMessage(new AppError(code, { errorId }));
-  // The server's save path has no other wording for these: each throw carries its own id, so the
-  // dialog can say which rule refused instead of the generic retry line.
   expect(refusal("agent-name-required")).toBe(m.agent_form_name_required());
   expect(refusal("agent-provider-unsupported")).toBe(m.agent_form_provider_unsupported());
   expect(refusal("agent-computer-required")).toBe(m.agent_form_computer_required());
@@ -121,15 +118,12 @@ test("a refused Agent save names the reason instead of only asking to try again"
   expect(refusal("agent-runtime-unavailable")).toBe(m.agent_form_runtime_unavailable());
   expect(refusal("agent-name-taken")).toBe(m.agent_form_name_taken());
   expect(refusal("agent-migrating", "CONFLICT")).toBe(m.agent_form_migrating());
-  // Anything unmapped still asks to retry: a plain Error, or a 5xx during a deploy, carries no
-  // rule to name - and "try again" is the honest copy for a request that never reached the rule.
   expect(agentUpdateErrorMessage(new Error("provider is not supported"))).toBe(
     m.agent_update_error(),
   );
   expect(refusal("an-error-id-nobody-mapped")).toBe(m.agent_update_error());
 });
 
-// task #523: a refused runtime save names the reason, not a bare "unavailable".
 test("a runtime save refused as not_connected names it", () => {
   const error = new AppError("INVALID_INPUT", {
     errorId: "agent-runtime-unavailable",
@@ -145,15 +139,11 @@ test("a runtime save refused with an unknown reason falls back to the generic", 
   expect(agentUpdateErrorMessage(error).length).toBeGreaterThan(0);
 });
 
-// task #523: the reason survives the Server Function's error serialization — `isAppError`
-// rehydrates `details` off the wire `message`, so the dialog sees the real reason.
 test("AppError details round-trip through the wire message", () => {
   const thrown = new AppError("INVALID_INPUT", {
     errorId: "agent-runtime-unavailable",
     details: { reason: "not_connected" },
   });
-  // A Server Function rethrows `Error` — the client gets the message, not the class. Rebuild
-  // what isAppError reads off the wire.
   const wire = Object.assign(new Error(thrown.message), {
     name: "AppError",
     code: "INVALID_INPUT",

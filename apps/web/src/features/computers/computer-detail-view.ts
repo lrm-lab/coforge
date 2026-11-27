@@ -19,30 +19,23 @@ export type ComputerDetailView = ComputerIdentity & {
   ownedByCurrentUser: boolean;
   canManageAgents: boolean;
   online: boolean;
-  /** Why the connect proxy last refused this binding for good, cleared by its next connect;
-   * `null` when it never refused. */
   connectRefusal?: { reason: DaemonConnectRejectionReason; at: string } | null;
-  /** A rescan of its runtimes is in flight; the runtimes listed are the last confirmed ones. */
   runtimeDetecting?: boolean;
   connectedAt: Date | string;
   computerVersion?: string | null;
   releaseChannel?: string;
-  /** The cloud image this computer is running. Absent for a local computer. */
   imageVersion?: string | null;
   imageUpdate?: { version: string } | null;
-  /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
   upgrade?: ComputerUpgradeStatus | null;
   upgradeProgressRequestId?: string;
   platform?: string | null;
   osVersion?: string | null;
-  /** What the Computer last reported about its disk and memory; `null` per kind when unknown. */
   machine?: MachineStatusView;
   creator?: {
     displayName: string | null;
     username: string;
     avatarUrl: string | null;
   };
-  /** Each visible login-capable runtime's status, account fields only for those allowed them. */
   runtimeAuth?: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>>;
   runtimeUsages?: Partial<Record<RuntimeProvider, UsageReadResult>>;
   runtimes: {
@@ -50,9 +43,7 @@ export type ComputerDetailView = ComputerIdentity & {
     provider: RuntimeProvider;
     version: string;
     displayName: string;
-    /** Set when the runtime is installed but cannot be used; it is never selectable then. */
     unavailableCode?: RuntimeUnavailableCode | null;
-    /** The CLI's own redacted stderr line, verbatim; only with an `unavailableCode`. */
     diagnostic?: string | null;
     isPublic: boolean;
   }[];

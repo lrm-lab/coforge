@@ -252,7 +252,6 @@ export const listComputers = createServerFn({ method: "GET" })
           connectedAt: createdAt,
           ownedByCurrentUser: computer.ownerId === user.id,
           canManageAgents: canManage,
-          // The account and plan only for whoever may sign the runtimes in or out (task #94).
           runtimeAuth: runtimeAuthView(computer.runtimeAuth, {
             showAccount: computer.ownerId === user.id || canManage,
             runtimes: computerRuntimes,
@@ -269,7 +268,6 @@ export const listComputers = createServerFn({ method: "GET" })
     );
   });
 
-/** A Computer owner can ask the connected Daemon for a fresh local workspace inventory. */
 export const scanAgentWorkspaces = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(scanAgentWorkspacesInputSchema)
@@ -282,8 +280,6 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
     );
   });
 
-/** The budgeted file counts and sizes for that same inventory. It never blocks the listing: the
- * page renders the rows first and merges these in when they arrive. */
 export const scanAgentWorkspaceStats = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(scanAgentWorkspacesInputSchema)

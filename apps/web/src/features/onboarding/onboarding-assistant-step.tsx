@@ -26,10 +26,6 @@ export type AssistantChoice = {
   fastMode: boolean;
 };
 
-/**
- * Step 2: the assistant as a card beside the runtime and model it runs on. This configures the
- * assistant first sign-in already made; it creates nothing. "Start over" goes back to the computer.
- */
 export function OnboardingAssistantStep({
   assistant,
   computer,
@@ -40,14 +36,12 @@ export function OnboardingAssistantStep({
   assistant: { agentId: string; displayName: string; avatarMascot: string | null };
   computer: WizardComputer;
   onBack: () => void;
-  /** Saves the choice (the server refuses one the computer cannot run); rejects with the cause. */
   onSave: (choice: AssistantChoice) => Promise<void>;
   skip: ReactNode;
 }) {
   const [submitting, guard] = useSubmitGuard();
   const [error, setError] = useState("");
   const loadCatalog = useServerFn(getComputerRuntimeCatalog);
-  // The runtimes come from the computer the step already read; only the model catalog is fetched.
   const loadOptions = useCallback(
     async (computerId: string) => ({
       ...runtimeOptionsFromRuntimes(computer.runtimes),

@@ -35,12 +35,9 @@ import { useAgentModelName } from "#src/features/agents/use-agent-model-name";
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
 
-/** The Runtime pill's trigger: a button with no chrome of its own, so the pill reads as one, and a
- * focus ring of its own for the keyboard. */
 const RUNTIME_PILL_TRIGGER_CLASS =
   "inline-flex items-center gap-1.5 rounded-sm outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
 
-/** Gray badge for the runtime fact. */
 function FactBadge({
   children,
   icon,
@@ -58,15 +55,8 @@ function FactBadge({
   );
 }
 
-/**
- * The Agent profile panel's Profile tab body: INFO and RUNTIME CONFIG are one fact per row, a
- * fixed-width gray label on the left and the value on the right (`FactRow`), like the reference
- * Agent profile; no leading row icons. Managers/owners get the pencils, INFO's Role editor, RUNTIME CONFIG's credential
- * dialog and the ACTIONS section; everyone else sees a read-only Profile.
- */
 export function AgentProfileTab(props: ComponentProps<typeof AgentProfileTabBody>) {
   const { profile, timeZone } = props;
-  // An app's bot has no Computer or runtime to show or change.
   return profile.appBot ? (
     <AppBotProfile profile={{ ...profile, appBot: profile.appBot }} timeZone={timeZone} />
   ) : (
@@ -97,47 +87,31 @@ function AgentProfileTabBody({
 }: {
   profile: NonNullable<AgentProfile>;
   timeZone: string | null;
-  /** The Agent's current context-window usage, or `null` when there is no reading —
-   * hidden entirely in that case. Display only: coloured by risk, but nothing triggers on it. */
   contextUsage?: {
     usedTokens: number;
     windowTokens: number;
     observedAtMs: number;
   } | null;
-  /** What the launch actually observed for its Fast service tier, when the Agent asks for it. */
   fastMode?: AgentFastModeReading | null;
   migration?: ReactNode;
   computerAccessRevoked?: boolean;
-  /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
   archive?: ReactNode;
-  /** `canManageAgentRole || ownedByCurrentUser` — gates every pencil, the ACTIONS section. */
   canManage: boolean;
   controls: AgentRuntimeControls;
   onSaveDisplayName: (value: string) => Promise<void>;
   onSaveDescription: (value: string) => Promise<void>;
-  /** Creator-only. Omitted for every other viewer, who still sees the picture. */
   onMascotChange?: (mascot: AgentMascot) => Promise<void>;
   onSaveRole?: (role: "admin" | "member") => Promise<void>;
-  /** Opens the container's `AgentVisibilityConfirmDialog` for the given target visibility.
-   * Present only for the creator or a human Workspace owner/admin. */
   onRequestVisibilityChange?: (target: AgentVisibility) => void;
   runtimeCredentialDialog: ReactNode;
-  /** Opens the container's `AgentRuntimeConfigDialog` (see `agent-profile-panel.tsx`). The
-   * RUNTIME CONFIG facts below never change; only the pencil does anything. */
   onStartRuntimeEdit?: () => void;
-  /** Owner-only, same as the old Agent detail page's Skills section. Omitted for a viewer who
-   * does not own the Agent. */
   onLoadSkills?: () => Promise<AgentSkillsLoadResult>;
-  /** Opens the container's `AgentDeleteDialog`. Present only when the viewer holds
-   * the `deleteAgents` capability and this Agent is a delete target at all. */
   onStartDelete?: () => void;
   onRefreshExternal?: () => Promise<void> | void;
 }) {
   const isExternal = profile.hosting === "external";
   const runtimeConfig = profile.runtimeConfig;
   const modelLabel = useAgentModelName(profile.id, runtimeConfig?.model ?? "");
-  // An unreadable stored config is repaired by re-selecting the runtime, so the edit opens
-  // for it too (task #517).
   const canEditRuntime =
     canManage &&
     !isExternal &&
@@ -168,8 +142,6 @@ function AgentProfileTabBody({
     />
   );
   return (
-    // `relative` keeps absolutely positioned `sr-only` labels inside this scroll box; without
-    // it they escape it and stretch the page.
     <div className="relative min-h-0 flex-1 overflow-y-auto">
       <section className="border-b border-secondary px-6 py-5">
         <div className="mb-5 flex flex-wrap items-center gap-4">
@@ -199,9 +171,6 @@ function AgentProfileTabBody({
             />
           )}
         </div>
-        {/* No error snapshot here: the Agent's current error is the banner under the panel header
-            (`agent-error-banner.tsx`), on every tab, and the Activity tab is where the record
-            lives. */}
         <InlineEditField
           label={m.agent_profile_display_name()}
           value={profile.displayName}
@@ -350,9 +319,6 @@ function AgentProfileTabBody({
             {runtimeConfig && (
               <>
                 <FactRow label={m.agent_runtime_field()}>
-                  {/* The pill names the runtime only; its card holds the usage, for who may manage the
-                runtime, and the Agent's context. A runtime with neither has no peek: RuntimeUsage
-                would hand back the bare trigger content, not a button. */}
                   <FactBadge>
                     {usageComputer ? (
                       <RuntimeUsage
@@ -378,7 +344,6 @@ function AgentProfileTabBody({
                           <>
                             {runtimeIcon}
                             {runtimeLabel}
-                            {/* Trailing, like the Computer page's runtime chips. */}
                             <UsageHealthDot health={health} />
                           </>
                         )}

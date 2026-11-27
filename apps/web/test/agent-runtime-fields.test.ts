@@ -18,13 +18,6 @@ import {
   type RuntimeSelection,
 } from "#src/features/agents/agent-runtime-fields";
 
-/**
- * `reasoningFieldState` decides whether the Reasoning field should render and what value the
- * form should submit for it. The pure decisions below cover catalog-dependent visibility and
- * Pi model selection; the rendered fields are checked manually under
- * docs/agents/ui-manual-checks.md.
- */
-
 function model(overrides: Partial<CodeAgentModelMetadata> = {}): CodeAgentModelMetadata {
   return {
     id: "model-1",
@@ -60,8 +53,6 @@ test("model known with reasoning levels: field shown, current reasoning submitte
 });
 
 test("Fast mode is offered by Codex and Claude Code for every model, as the reference does", () => {
-  // The runtime alone decides, so every model offers it, the runtime's default and a model still
-  // loading included; a saved request is submitted as it stands.
   expect(fastModeFieldState(RUNTIME_PROVIDER.CLAUDE_CODE, true)).toEqual({
     visible: true,
     submitted: true,
@@ -70,7 +61,6 @@ test("Fast mode is offered by Codex and Claude Code for every model, as the refe
     visible: true,
     submitted: false,
   });
-  // A runtime whose adapter applies no tier never offers it, whatever the model claims.
   expect(fastModeFieldState(RUNTIME_PROVIDER.PI, true)).toEqual({
     visible: false,
     submitted: false,
@@ -170,11 +160,6 @@ test("Configured (no credential) never offers an extra Provider option", () => {
   expect(piExtraProviderOption(piInitial, false)).toBeUndefined();
 });
 
-/**
- * `isRuntimeDirty` composed with the same Pi helpers `AgentRuntimeFields` derives its field
- * values from, mirroring exactly what each field would compute for a saved Pi config the dialog
- * has just opened with — the three ways it must open as not-dirty (nothing submitted yet).
- */
 test("opens not-dirty: a saved Configured model found in the Pi catalog", () => {
   const initial: RuntimeSelection = {
     provider: RUNTIME_PROVIDER.PI,
@@ -261,8 +246,6 @@ test("a level the model does not list falls back to the provider default", () =>
   expect(reasoningFieldState(["off", "high", "max"], "low").submitted).toBe("");
 });
 
-// task #523: a provider switch drops the saved model/modelProvider — a `pi` save after a
-// `coforge` + catalog-model config submits empty strings, not the old runtime's pair.
 test("a coforge-to-pi switch submits empty model/modelProvider", () => {
   const submitted = submittedRuntimeModel({
     provider: RUNTIME_PROVIDER.PI,
@@ -281,7 +264,7 @@ test("a coforge-to-pi switch submits empty model/modelProvider", () => {
   });
   expect(submitted).toEqual({ modelProvider: "", model: "" });
 });
-// The same save on the unchanged runtime keeps the stored model/modelProvider.
+
 test("a save on the same runtime keeps the stored model/modelProvider", () => {
   const submitted = submittedRuntimeModel({
     provider: RUNTIME_PROVIDER.COFORGE,

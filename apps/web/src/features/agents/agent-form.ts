@@ -24,12 +24,6 @@ export function agentCreateModelError(
     : undefined;
 }
 
-/**
- * Builds `UpdateAgentInput` from a runtime-edit form. `displayName`/`description` are only
- * read from the form when it actually carries those fields (the full-page edit dialog does);
- * a caller whose form omits them — the Profile panel's runtime-only form — supplies the
- * current value through `fallback` so the Agent's name/description are never blanked.
- */
 export function updateAgentInputFromForm(
   form: FormData,
   fallback: { agentId: string; computerId?: string; displayName?: string; description?: string },
@@ -48,7 +42,6 @@ export function updateAgentInputFromForm(
     model: String(form.get("model") ?? ""),
     reasoning: String(form.get("reasoning") ?? ""),
     fastMode: form.get("fastMode") === "true",
-    // The size fields submit a number each, or nothing when left empty (task #30).
     ...sizesFromForm(form),
     ...(apiKey ? { apiKey } : {}),
     ...(displayName ? { displayName } : {}),
@@ -56,7 +49,6 @@ export function updateAgentInputFromForm(
   };
 }
 
-/** The two model size fields, as the runtime form submits them: a number, or nothing at all. */
 export function sizesFromForm(form: FormData) {
   const contextWindow = submittedModelSize(String(form.get("contextWindow") ?? ""));
   const maxOutputTokens = submittedModelSize(String(form.get("maxOutputTokens") ?? ""));
@@ -66,7 +58,6 @@ export function sizesFromForm(form: FormData) {
   };
 }
 
-/** The copy for each rule an Agent environment can break; a `Record` so a new rule cannot ship without it. */
 const AGENT_ENVIRONMENT_ERROR_MESSAGES: Record<AgentEnvironmentViolation, () => string> = {
   "too-many": () => m.agent_env_too_many({ max: AGENT_ENVIRONMENT_MAX_VARIABLES }),
   "invalid-name": () => m.agent_env_invalid_name({ max: AGENT_ENVIRONMENT_MAX_NAME_LENGTH }),
@@ -75,11 +66,6 @@ const AGENT_ENVIRONMENT_ERROR_MESSAGES: Record<AgentEnvironmentViolation, () => 
   "too-large": m.agent_env_too_large,
 };
 
-/**
- * The copy for each `errorId` an Agent create or update can fail with, shared by the create
- * dialog, the full-page edit dialog and the Profile panel's in-place runtime editor so the
- * surfaces never drift.
- */
 const AGENT_RUNTIME_UNAVAILABLE_REASONS = new Map<string, () => string>([
   ["not_connected", m.agent_form_runtime_unavailable_not_connected],
   ["runtime_unconfirmed", m.agent_form_runtime_unavailable_unconfirmed],
@@ -132,22 +118,12 @@ export function agentCreateErrorMessage(cause: unknown): string {
   );
 }
 
-/**
- * The inline error for one env row's name, from the same SDK rule the server applies. A blank name
- * is not an error: that row is dropped on save.
- */
 export function agentEnvironmentNameError(key: string): string | undefined {
   const name = key.trim();
   const violation = name ? agentEnvironmentNameViolation(name) : undefined;
   return violation && AGENT_ENVIRONMENT_ERROR_MESSAGES[violation]();
 }
 
-/**
- * The Runtime config dialog's Advanced env rows are plain `[name="envKey"]`/`[name="envValue"]`
- * inputs (`agent-runtime-config-dialog.tsx`), read back here as parallel `FormData.getAll()`
- * arrays. Empty keys are dropped; the last duplicate key wins. The dialog flags bad names per row
- * (`agentEnvironmentNameError`); the server's `validateAgentEnvironment` enforces the whole rule.
- */
 export function parseAgentEnvironmentFromForm(form: FormData): Record<string, string> {
   const keys = form.getAll("envKey").map(String);
   const values = form.getAll("envValue").map(String);
@@ -160,8 +136,6 @@ export function parseAgentEnvironmentFromForm(form: FormData): Record<string, st
   return result;
 }
 
-/** Order-insensitive comparison the Advanced disclosure uses to decide its own dirty state, and
- * the panel reuses to know whether a save should call `saveAgentEnvironment` at all. */
 export function agentEnvironmentRowsChanged(
   rows: { key: string; value: string }[],
   initial: Record<string, string>,
