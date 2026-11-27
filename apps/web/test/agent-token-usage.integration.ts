@@ -270,7 +270,7 @@ test("CentrifugoRpcHandler ingests token usage across changed launches, stopped/
   }
 });
 
-test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, preserve archived agent usage, and enforce member scoping", async () => {
+test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, exclude archived agents from workspace usage, and enforce member scoping", async () => {
   const db = testDatabase();
   const fixture = crypto.randomUUID();
   const admin = await db.user.create({
@@ -434,10 +434,9 @@ test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, preserve
       { range: 7, timeZone: "UTC" },
     );
     expect(adminReport.agents.map((a) => a.id).sort()).toEqual(
-      [adminAgent.id, memberAgent.id, archivedUsedAgent.id].sort(),
+      [adminAgent.id, memberAgent.id].sort(),
     );
     expect(adminReport.agents.find((a) => a.id === archivedUnusedAgent.id)).toBeUndefined();
-    expect(adminReport.agents.find((a) => a.id === archivedUsedAgent.id)?.archived).toBe(true);
     expect(adminReport.agents.find((a) => a.id === adminAgent.id)?.ownerAvatarUrl).toContain(
       admin.id,
     );
@@ -451,9 +450,19 @@ test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, preserve
       viewerId: admin.id,
       query: "",
     });
-    expect(adminAll.teamEffectiveTokens).toBe(6_200);
-    expect(adminAll.visibleEffectiveTokens).toBe(6_200);
-    expect(adminAll.rows.find((r) => r.agentId === archivedUsedAgent.id)?.archived).toBe(true);
+    expect(adminAll.teamEffectiveTokens).toBe(5_200);
+    expect(adminAll.visibleEffectiveTokens).toBe(5_200);
+    expect(adminAll.timelineSummary.effectiveTokens).toBe(5_200);
+    expect(adminAll.timelineSummary.turns).toBe(3);
+    expect(adminAll.rows.map((r) => [r.agentId, r.teamSharePercent])).toEqual([
+      [memberAgent.id, 57.7],
+      [adminAgent.id, 42.3],
+    ]);
+    expect(
+      await db.agentTokenUsageTurn.count({
+        where: { workspaceId: workspace.id, agentId: archivedUsedAgent.id },
+      }),
+    ).toBe(1);
 
     const adminMine = summarizeWorkspaceAgentUsage(adminReport, {
       selectedKey: null,
@@ -461,13 +470,10 @@ test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, preserve
       viewerId: admin.id,
       query: "",
     });
-    expect(adminMine.visibleEffectiveTokens).toBe(3_200);
-    expect(adminMine.timelineSummary.effectiveTokens).toBe(3_200);
-    expect(adminMine.timelineBuckets.reduce((sum, b) => sum + b.effectiveTokens, 0)).toBe(3_200);
-    expect(adminMine.timelineSummary.models.map((m) => m.model).sort()).toEqual([
-      "claude-opus-4-6",
-      "claude-sonnet-4-5",
-    ]);
+    expect(adminMine.visibleEffectiveTokens).toBe(2_200);
+    expect(adminMine.timelineSummary.effectiveTokens).toBe(2_200);
+    expect(adminMine.timelineBuckets.reduce((sum, b) => sum + b.effectiveTokens, 0)).toBe(2_200);
+    expect(adminMine.timelineSummary.models.map((m) => m.model)).toEqual(["claude-opus-4-6"]);
 
     const memberReport = await loadWorkspaceAgentTokenUsage(
       { user: member, db, workspaceId: workspace.id } as never,

@@ -25,7 +25,6 @@ export type WorkspaceAgentUsageAgentMeta = Readonly<{
   ownerId: string;
   ownerDisplayName: string;
   ownerAvatarUrl?: string | null;
-  archived?: boolean;
 }>;
 
 export type WorkspaceAgentBucketEntry = {
@@ -49,7 +48,6 @@ export type WorkspaceAgentUsageRow = {
   ownerId: string;
   ownerDisplayName: string;
   ownerAvatarUrl: string | null;
-  archived: boolean;
   effectiveTokens: number;
   newInputTokens: number;
   outputTokens: number;
@@ -413,7 +411,6 @@ export function summarizeWorkspaceAgentUsage(
       ownerId: agent.ownerId,
       ownerDisplayName: agent.ownerDisplayName,
       ownerAvatarUrl: agent.ownerAvatarUrl ?? null,
-      archived: Boolean(agent.archived),
       effectiveTokens,
       newInputTokens: totals?.newInputTokens ?? 0,
       outputTokens: totals?.outputTokens ?? 0,
@@ -429,11 +426,7 @@ export function summarizeWorkspaceAgentUsage(
 
   const rows: WorkspaceAgentUsageRow[] = sortWorkspaceAgentUsageRows(
     allRows
-      .filter((row) => {
-        if (!matchedAgentIds.has(row.agentId)) return false;
-        if (row.archived && row.effectiveTokens === 0 && row.turns === 0) return false;
-        return true;
-      })
+      .filter((row) => matchedAgentIds.has(row.agentId))
       .map((row) => {
         visibleEffectiveTokens += row.effectiveTokens;
         visibleTurns += row.turns;

@@ -13,7 +13,6 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 import { AgentDisplayAvatar } from "./agent-display-avatar";
-import { DELETED_AGENT_NAME_CLASS, DeletedAgentLabel } from "./deleted-agent";
 import {
   formatCompactTokens,
   formatExactTokens,
@@ -228,7 +227,7 @@ export function UsageRow({
       search: (previous) => ({
         ...previous,
         profile: formatAgentProfileParam(row.agentId),
-        agentTab: row.archived ? "profile" : "usage",
+        agentTab: "usage",
       }),
     });
   }
@@ -246,19 +245,13 @@ export function UsageRow({
           agentId={row.agentId}
           name={row.displayName}
           src={row.avatarUrl}
-          display={row.archived ? undefined : display}
-          deleted={row.archived}
+          display={display}
           size="md"
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <div className="flex min-w-0 items-baseline gap-1.5">
-              <h3
-                className={cn(
-                  "min-w-0 truncate text-sm font-semibold",
-                  row.archived ? DELETED_AGENT_NAME_CLASS : "text-primary",
-                )}
-              >
+              <h3 className="min-w-0 truncate text-sm font-semibold text-primary">
                 <Link
                   to="/w/$workspaceSlug/members"
                   params={{ workspaceSlug }}
@@ -266,7 +259,7 @@ export function UsageRow({
                   search={(previous) => ({
                     ...previous,
                     profile: formatAgentProfileParam(row.agentId),
-                    agentTab: row.archived ? "profile" : "usage",
+                    agentTab: "usage",
                   })}
                   onClick={(event) => {
                     const rowEl =
@@ -280,7 +273,6 @@ export function UsageRow({
                   {row.displayName}
                 </Link>
               </h3>
-              {row.archived && <DeletedAgentLabel />}
             </div>
             <span className="shrink-0 text-sm font-semibold text-primary tabular-nums @2xl/members:hidden">
               {formatCompactTokens(row.effectiveTokens, locale)}

@@ -89,14 +89,9 @@ export async function loadWorkspaceAgentTokenUsage(
   const { user, db, workspaceId } = context;
   const agents = await db.agent.findMany({
     where: {
+      ...ACTIVE_AGENT_WHERE,
       hosting: { not: "external" },
       AND: [
-        {
-          OR: [
-            ACTIVE_AGENT_WHERE,
-            { deletedAt: { not: null }, tokenUsageTurns: { some: { workspaceId } } },
-          ],
-        },
         managedAgentWhere({ userId: user.id, workspaceId }),
         { OR: [{ systemKind: null }, { systemKind: { not: "app-bot" } }] },
       ],
@@ -107,7 +102,6 @@ export async function loadWorkspaceAgentTokenUsage(
       displayName: true,
       avatarMascot: true,
       runtimeConfig: true,
-      deletedAt: true,
       owner: {
         select: {
           id: true,
@@ -148,7 +142,6 @@ export async function loadWorkspaceAgentTokenUsage(
         agent.owner.id,
         agent.owner.avatarObjectKey,
       ),
-      archived: agent.deletedAt !== null,
     })),
     slices,
     range: input.range,
