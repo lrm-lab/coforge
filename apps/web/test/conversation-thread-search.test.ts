@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  conversationSearchWithoutAgentProfile,
+  conversationSearchForThread,
   conversationSearchWithoutTask,
   conversationSearchWithoutThread,
   conversationSearchWithTask,
@@ -73,27 +73,32 @@ describe("resolveConversationThreadRoot", () => {
 });
 
 describe("conversation thread search updates", () => {
-  test("opening writes threadRootId after removing the Agent panel and details state", () => {
-    const withoutProfile = conversationSearchWithoutAgentProfile({
+  test("opening writes threadRootId while preserving an open profile and removing details or doc", () => {
+    const base = conversationSearchForThread({
       view: "chat",
       profile: "agent:1",
       agentTab: "profile",
       details: "panel",
+      doc: "doc-1",
+      docFull: true,
     });
-    expect(conversationSearchWithThread(withoutProfile, "root-1")).toEqual({
+    expect(conversationSearchWithThread(base, "root-1")).toEqual({
       view: "chat",
+      profile: "agent:1",
+      agentTab: "profile",
       threadRootId: "root-1",
     });
   });
 
-  test("closing drops threadRootId while preserving unrelated search", () => {
+  test("closing drops threadRootId while preserving an open profile and unrelated search", () => {
     expect(
       conversationSearchWithoutThread({
         view: "chat",
         profile: "agent:1",
+        agentTab: "activity",
         threadRootId: "root-1",
       }),
-    ).toEqual({ view: "chat", profile: "agent:1" });
+    ).toEqual({ view: "chat", profile: "agent:1", agentTab: "activity" });
   });
 });
 

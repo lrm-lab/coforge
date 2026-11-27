@@ -9,7 +9,6 @@ import {
   LazyAgentProfilePanel,
   LazyPersonProfilePanel,
 } from "#src/features/agents/profile-panel/lazy-profile-panels";
-import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
 import {
   TaskNavigationRegistrationContext,
   type TaskDetailNavigation,
@@ -42,6 +41,14 @@ import { ThreadStoreProvider, useConversationThreadStore } from "./thread-store"
 import { resolveConversationThreadRoot } from "./conversation-thread-search";
 import type { DirectConversationView, ThreadedConversationProps } from "./conversation-types";
 import { useConversationChannels } from "./use-conversation-channels";
+import {
+  INNER_MAIN_MIN_REM,
+  INNER_SIDE_MIN_REM,
+  OUTER_MAIN_MIN_REM,
+  OUTER_PROFILE_DEFAULT_PCT,
+  OUTER_PROFILE_MIN_REM,
+  useConversationLayout,
+} from "./use-conversation-layout";
 import {
   ConversationTaskLayer,
   ConversationTaskSplitPane,
@@ -132,8 +139,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   );
   const profileAgentId = agentProfile?.agentId;
   const profilePersonId = agentProfile?.personId;
-  const profileOpen = Boolean(profileAgentId || profilePersonId);
-  const standaloneRootId = standaloneThread && !profileOpen ? standaloneThread.rootId : undefined;
+  const standaloneRootId = standaloneThread ? standaloneThread.rootId : undefined;
   const selected = resolveConversationThreadRoot({
     searchThreadRootId: searchThreadRootId ?? standaloneRootId,
     messages: conversation.messages,
@@ -144,17 +150,41 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     select: (search) => typeof search.doc === "string",
   });
   const taskInSplit = !taskPopup && desktop && Boolean(openTask);
-  const visibleSlot = resolveVisibleConversationSlot({
-    threadOpen: Boolean(selected),
-    profileOpen,
+  const threadAlone = standaloneThread !== null;
+  const {
+    slots,
+    innerSplitLayout,
+    outerSplitLayout,
+    outerVisibleSlot,
+    profileCoversInner,
+    threadShowBack,
+    mainPaneVisible,
+    profileOverlay,
+    handleOpenAgentProfile,
+    handleOpenPersonProfile,
+    handleOpenThread,
+  } = useConversationLayout({
+    selectedThreadId: selected,
+    profileAgentId,
+    profilePersonId,
     detailsOpen: Boolean(detailsOpen && detailsPane),
-    taskOpen: taskInSplit,
+    taskInSplit,
+    isTaskExpanded,
     docOpen: docOpen && standaloneThread === null,
+    threadAlone,
+    desktop,
+    detailVisible,
+    focused: focus?.focused,
+    onOpenAgentProfile: conversationProps.onOpenAgentProfile,
+    onOpenPersonProfile: conversationProps.onOpenPersonProfile,
+    openThread,
   });
-  const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
+  const threadPaneVisible = (rootId: string) => slots.inner === "thread" && selected === rootId;
   const threadInView =
     openTaskRoot?.id ??
-    (detailVisible && focus?.focused !== "chat" && visibleSlot === "thread" ? selected : undefined);
+    (detailVisible && !profileCoversInner && focus?.focused !== "chat" && slots.inner === "thread"
+      ? selected
+      : undefined);
   const threadRootOf = (rootId: string) =>
     conversation.messages.find((message) => message.id === rootId) ??
     threadRoots.current.get(rootId);
@@ -177,6 +207,8 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   });
   const sidePaneProps = {
     ...conversationProps,
+    onOpenAgentProfile: handleOpenAgentProfile,
+    onOpenPersonProfile: handleOpenPersonProfile,
     onOpenTask: openTaskReference,
     channelNames,
     channels: channelList,
@@ -300,7 +332,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       if (root) roots.set(rootId, root);
     }
   }, [visited, conversation.messages]);
-  const threadAlone = standaloneThread !== null;
   const threadClose = standaloneThread?.onClose ?? closeThread;
   const viewInConversation = standaloneThread?.onViewInConversation ?? showThreadRoot;
   const markThreadUnread =
@@ -311,32 +342,38 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         }
       : undefined;
   if (taskPopup) return taskLayer;
+  const profileBack =
+    profileOverlay && onCloseAgentProfile
+      ? { label: m.controls_back(), onPress: onCloseAgentProfile }
+      : undefined;
   const conversationMainPane = (
     <ThreadStoreProvider store={threads}>
       <ConversationPane
         {...conversationProps}
+        onOpenAgentProfile={handleOpenAgentProfile}
+        onOpenPersonProfile={handleOpenPersonProfile}
         streamRead={windowRead}
         onOpenTask={openTaskReference}
         channelNames={channelNames}
         channels={channelList}
         jumpMessage={jumpMessage ?? jumpMessageId}
         onJumpMessageConsumed={jumpMessage ? onJumpMessageConsumed : clearJumpMessage}
-        paneVisible={detailVisible}
+        paneVisible={mainPaneVisible}
         onLoadMessageAround={onLoadMessageAround}
         onReadLatest={onReadLatest}
         header={header}
         pinnedStrip={pinnedStrip}
         conversation={conversation}
         composerTarget={threadContext}
-        onOpenThread={openThread}
+        onOpenThread={handleOpenThread}
         onMarkThreadUnread={markThreadUnread}
       />
     </ThreadStoreProvider>
   );
-  const conversationSidePane = visibleSlot && (
+  const conversationInnerSidePane = slots.inner && (
     <>
-      {visibleSlot === "details" && detailsPane}
-      {visibleSlot === "task" && openTask && (
+      {slots.inner === "details" && detailsPane}
+      {slots.inner === "task" && openTask && (
         <ConversationTaskSplitPane
           task={openTask}
           isTaskExpanded={isTaskExpanded}
@@ -355,22 +392,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           popupProfile={popupProfile}
         />
       )}
-      {visibleSlot === "profile" && profileAgentId && (
-        <LazyAgentProfilePanel
-          agentId={profileAgentId}
-          visible={focus?.focused !== "chat"}
-          requestedTab={agentProfile?.tab}
-          onTabChange={(tab) => onAgentProfileTabChange?.(tab)}
-          onClose={() => onCloseAgentProfile?.()}
-        />
-      )}
-      {visibleSlot === "profile" && !profileAgentId && profilePersonId && (
-        <LazyPersonProfilePanel
-          key={profilePersonId}
-          userId={profilePersonId}
-          onClose={() => onCloseAgentProfile?.()}
-        />
-      )}
       {visited.map((rootId) => {
         const root = threadRootOf(rootId);
         if (!root) return null;
@@ -386,8 +407,9 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           >
             <ThreadPane
               {...threadPaneProps(root)}
-              paneVisible={detailVisible && threadPaneVisible(rootId)}
+              paneVisible={detailVisible && !profileCoversInner && threadPaneVisible(rootId)}
               onClose={threadClose}
+              threadShowBack={threadShowBack}
               threadContext={threadContext}
               onViewInConversation={() => viewInConversation(rootId)}
               onMarkThreadUnread={markThreadUnread}
@@ -415,21 +437,66 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
             load={selectedRootLoad}
             context={threadContext}
             onClose={threadClose}
+            showBack={threadShowBack}
             onRetry={() => void loadThreadRoot(selected)}
           />
         </section>
       )}
     </>
   );
+  const conversationProfilePane = outerVisibleSlot === "profile" && (
+    <>
+      {profileAgentId && (
+        <LazyAgentProfilePanel
+          agentId={profileAgentId}
+          visible={focus?.focused === undefined}
+          requestedTab={agentProfile?.tab}
+          onTabChange={(tab) => onAgentProfileTabChange?.(tab)}
+          onClose={() => onCloseAgentProfile?.()}
+          back={profileBack}
+          hideClose={profileOverlay}
+        />
+      )}
+      {!profileAgentId && profilePersonId && (
+        <LazyPersonProfilePanel
+          key={profilePersonId}
+          userId={profilePersonId}
+          onClose={() => onCloseAgentProfile?.()}
+          back={profileBack}
+          hideClose={profileOverlay}
+        />
+      )}
+    </>
+  );
+  const innerSplit = (
+    <ConversationSplit
+      layoutId="coforge-conversation"
+      main={tasksPane ?? conversationMainPane}
+      side={conversationInnerSidePane}
+      visibleSlot={slots.inner}
+      threadAlone={threadAlone}
+      focused={focus?.focused}
+      sideExpanded={slots.inner === "task" && isTaskExpanded}
+      mainMinRem={INNER_MAIN_MIN_REM}
+      sideMinRem={INNER_SIDE_MIN_REM}
+      reportListCrowd={false}
+      split={innerSplitLayout}
+    />
+  );
   return (
     <TaskNavigationRegistrationContext.Provider value={setRegisteredTaskNav}>
       <ConversationSplit
-        main={tasksPane ?? conversationMainPane}
-        side={conversationSidePane}
-        visibleSlot={visibleSlot}
-        threadAlone={threadAlone}
-        focused={focus?.focused}
-        sideExpanded={visibleSlot === "task" && isTaskExpanded}
+        layoutId="coforge-conversation-profile"
+        main={innerSplit}
+        side={conversationProfilePane}
+        visibleSlot={outerVisibleSlot}
+        threadAlone={false}
+        focused={focus?.focused ? "chat" : undefined}
+        mainMinRem={OUTER_MAIN_MIN_REM}
+        sideMinRem={OUTER_PROFILE_MIN_REM}
+        defaultSidePct={OUTER_PROFILE_DEFAULT_PCT}
+        reportListCrowd={false}
+        split={outerSplitLayout}
       />
       {taskLayer}
     </TaskNavigationRegistrationContext.Provider>

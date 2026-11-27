@@ -22,6 +22,7 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation"> & {
   inTaskPopup?: boolean;
   lead?: ReactNode;
   onClose?: () => void;
+  threadShowBack?: boolean;
   threadContext?: string;
   composerTarget?: string;
   onViewInConversation?: () => void;

@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { arrangeTabs, isTabOrder } from "#src/features/panel-tabs/panel-tab-order";
 import {
   agentIdFromProfileParam,
-  agentProfileSearchWithoutThread,
+  agentProfileSearchBase,
   agentProfileTabParamSchema,
   formatAgentProfileParam,
   formatPersonProfileParam,
@@ -65,10 +65,10 @@ describe("agentIdFromProfileParam", () => {
   });
 });
 
-describe("agentProfileSearchWithoutThread", () => {
-  test("removes the active thread, details and open document while preserving unrelated search state", () => {
+describe("agentProfileSearchBase", () => {
+  test("removes details and open document while preserving an open thread and unrelated search state", () => {
     expect(
-      agentProfileSearchWithoutThread({
+      agentProfileSearchBase({
         view: "chat",
         threadRootId: "thread-1",
         details: "panel",
@@ -76,7 +76,7 @@ describe("agentProfileSearchWithoutThread", () => {
         docFull: true,
         profile: "agent:agent-1",
       }),
-    ).toEqual({ view: "chat", profile: "agent:agent-1" });
+    ).toEqual({ view: "chat", threadRootId: "thread-1", profile: "agent:agent-1" });
   });
 });
 

@@ -88,6 +88,7 @@ export function AgentProfilePanel({
   requestedTab,
   onTabChange,
   onClose,
+  hideClose = false,
   back,
   pageHeading,
   visible = true,
@@ -96,6 +97,7 @@ export function AgentProfilePanel({
   requestedTab: ProfileTabId | undefined;
   onTabChange: (tab: ProfileTabId) => void;
   onClose: () => void;
+  hideClose?: boolean;
   back?: { label: string; onPress: () => void };
   pageHeading?: boolean;
   visible?: boolean;
@@ -255,6 +257,7 @@ export function AgentProfilePanel({
         retrying={retrying}
         onRetry={retry}
         back={back}
+        hideClose={hideClose}
         onClose={onClose}
       />
     );
@@ -285,6 +288,7 @@ export function AgentProfilePanel({
         fallbackDisplay={profile?.display}
         controls={controls}
         onClose={onClose}
+        hideClose={hideClose}
         back={back}
       />
       {profile?.computerAccessRevoked && !deleted ? (

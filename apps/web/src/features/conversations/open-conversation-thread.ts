@@ -1,24 +1,14 @@
 import { useCallback } from "react";
 import { useRouter, useSearch } from "@tanstack/react-router";
-import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 
 import {
-  conversationSearchWithoutAgentProfile,
+  conversationSearchForThread,
   conversationSearchWithoutTask,
   conversationSearchWithoutThread,
   conversationSearchWithTask,
   conversationSearchWithThread,
 } from "./conversation-thread-search";
 import { keepsLandingForReview } from "./attachment-review-address";
-
-type ConversationThreadSearch = {
-  threadRootId?: string;
-  message?: string;
-  profile?: string;
-  agentTab?: AgentProfileTab;
-  doc?: string;
-  docFull?: boolean;
-};
 
 export function useOpenConversationThread() {
   const router = useRouter();
@@ -38,11 +28,8 @@ export function useOpenConversationThread() {
         replace: options?.replace,
         resetScroll: false,
         hash: () => "",
-        search: (previous: ConversationThreadSearch) =>
-          conversationSearchWithThread(
-            conversationSearchWithoutAgentProfile(previous),
-            threadRootId,
-          ),
+        search: (previous) =>
+          conversationSearchWithThread(conversationSearchForThread(previous), threadRootId),
       });
     },
     [docOpen, router, searchThreadRootId],
@@ -55,11 +42,8 @@ export function useOpenConversationThread() {
         replace: true,
         resetScroll: false,
         hash: true,
-        search: (previous: ConversationThreadSearch) =>
-          conversationSearchWithThread(
-            conversationSearchWithoutAgentProfile(previous),
-            threadRootId,
-          ),
+        search: (previous) =>
+          conversationSearchWithThread(conversationSearchForThread(previous), threadRootId),
       });
     },
     [router, searchThreadRootId],
@@ -71,8 +55,7 @@ export function useOpenConversationThread() {
         replace: true,
         resetScroll: false,
         hash: () => "",
-        search: (previous: ConversationThreadSearch) =>
-          conversationSearchWithoutAgentProfile(conversationSearchWithoutThread(previous)),
+        search: (previous) => conversationSearchWithoutThread(previous),
       }),
     [router],
   );
@@ -82,8 +65,8 @@ export function useOpenConversationThread() {
         to: ".",
         resetScroll: false,
         hash: () => "",
-        search: (previous: ConversationThreadSearch) => ({
-          ...conversationSearchWithoutAgentProfile(conversationSearchWithoutThread(previous)),
+        search: (previous) => ({
+          ...conversationSearchWithoutThread(previous),
           message: threadRootId,
         }),
       }),

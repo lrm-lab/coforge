@@ -53,6 +53,7 @@ export function ConversationPane({
   inTaskPopup = false,
   lead,
   onClose,
+  threadShowBack,
   threadContext,
   composerTarget,
   onViewInConversation,
@@ -272,6 +273,7 @@ export function ConversationPane({
                 context={threadContext}
                 onScrollToTop={() => historyRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
                 onClose={onClose}
+                showBack={threadShowBack}
                 onViewInConversation={onViewInConversation}
                 onMarkUnread={
                   markThreadUnread && !rootIsHostTask ? () => markThreadUnread(root.id) : undefined

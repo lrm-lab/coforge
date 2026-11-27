@@ -13,6 +13,7 @@ export function AgentProfileUnavailable({
   retrying = false,
   onRetry,
   back,
+  hideClose = false,
   onClose,
 }: {
   notVisible: boolean;
@@ -20,6 +21,7 @@ export function AgentProfileUnavailable({
   retrying?: boolean;
   onRetry?: () => void;
   back?: { label: string; onPress: () => void };
+  hideClose?: boolean;
   onClose: () => void;
 }) {
   return (
@@ -38,13 +40,15 @@ export function AgentProfileUnavailable({
         ) : (
           <span />
         )}
-        <ButtonUtility
-          icon={X}
-          size="sm"
-          color="tertiary"
-          tooltip={m.controls_close()}
-          onClick={onClose}
-        />
+        {!hideClose && (
+          <ButtonUtility
+            icon={X}
+            size="sm"
+            color="tertiary"
+            tooltip={m.controls_close()}
+            onClick={onClose}
+          />
+        )}
       </header>
       {loadFailed ? (
         <EmptyState

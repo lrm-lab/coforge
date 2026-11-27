@@ -7,32 +7,17 @@ import { m } from "#src/paraglide/messages";
 import { MessageSkeleton } from "./message-skeleton";
 import { ThreadPaneHeader } from "./thread-pane-header";
 
-/**
- * Where a thread stands while what its pane shows is not loaded: the thread slot shows it in place
- * of the thread (docs/design/toast-vs-inline.md — what the viewer must see stays in the affected
- * area). `loading` while it is read; `missing` when the channel has no such first message (deleted,
- * or a link to a message that never started a thread); `failed` when the read itself failed. It is
- * the state of a thread opened by link whose first message is not loaded, and of a thread whose
- * replies are being read (`ThreadPane`).
- */
 export type ThreadRootLoad =
   | { status: "loading" }
   | { status: "missing" }
   | { status: "failed"; errorId?: string };
 
-/** Where a read that has not answered yet stands: in flight, or failed as missing or otherwise. */
 export function threadRootLoadOf(read: { isError: boolean; error: unknown }): ThreadRootLoad {
   if (!read.isError) return { status: "loading" };
   if (isAppErrorCode(read.error, "NOT_FOUND")) return { status: "missing" };
   return { status: "failed", errorId: isAppError(read.error) ? read.error.errorId : undefined };
 }
 
-/**
- * The thread while it is read, drawn as the loaded pane draws it: the first message over its rule,
- * the line that counts the replies, and replies under it, each where `ConversationPane` puts it, so
- * the thread replaces it without a jump. `withRoot` is false where something else stands for the
- * first message (the Task popup shows the Task).
- */
 function ThreadSkeleton({ withRoot }: { withRoot: boolean }) {
   return (
     <div role="status" aria-label={m.conversation_loading()} className="min-h-0 overflow-hidden">
@@ -60,7 +45,6 @@ function ThreadSkeleton({ withRoot }: { withRoot: boolean }) {
   );
 }
 
-/** The thread's state on its own, for a pane that draws its own header (or none, in a popup). */
 export function ThreadLoadStatus({
   load,
   withRoot = true,
@@ -68,9 +52,7 @@ export function ThreadLoadStatus({
   onRetry,
 }: {
   load: ThreadRootLoad;
-  /** Whether the loading thread draws its first message; see `ThreadSkeleton`. */
   withRoot?: boolean;
-  /** Leaves the thread; a thread that is gone offers it as the way out. */
   onClose?: () => void;
   onRetry: () => void;
 }) {
@@ -107,15 +89,17 @@ export function ThreadRootState({
   context,
   onClose,
   onRetry,
+  showBack,
 }: {
   load: ThreadRootLoad;
   context?: string;
   onClose?: () => void;
   onRetry: () => void;
+  showBack?: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ThreadPaneHeader context={context} onClose={onClose} />
+      <ThreadPaneHeader context={context} onClose={onClose} showBack={showBack} />
       <ThreadLoadStatus load={load} onClose={onClose} onRetry={onRetry} />
     </div>
   );
