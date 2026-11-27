@@ -117,8 +117,8 @@ Module-owned test/check/build commands remain unchanged. Local full validation
 still uses `mise run test`, `mise run check`, and `mise run build`; CI-policy
 regressions can be exercised alone with `bun run test:ci` and `bun run check:ci`.
 Track-specific pre-release validation is never replaced by a mutable "latest
-successful CI" result; staging Web skips `Validate` only for the exact commit
-SHA that already passed `CI` on `main`. Docker image builds and version/feed-specific
+successful CI" result; Web and Computer staging skip `Validate` only for the exact
+commit SHA that passed `CI` on `main`. Docker image builds and version/feed-specific
 cross-compilation remain artifact builds. Web deployment relies on its Docker
 build instead of also building a disposable host bundle.
 
