@@ -33,6 +33,10 @@ Inspect the claim output payload: proceed only on a task whose row says `claimed
 
 **Task conversations:** a task has its own conversation, named by a ref like `#channel:#7`. Always quote the ref. Use `coforge task view '<ref>'` first, `coforge task reply '<ref>'` (body on stdin; `--mention`, `--attachment-id`), `coforge task read '<ref>' --unread`, `coforge task follow|unfollow '<ref>'` and `coforge task list --following`. `message send` and `message read` do not take a ref. Answer people where they spoke: someone who only wrote the source message is answered in that message's thread; someone who created the task or wrote in its conversation is answered there; in a 1-on-1 DM there is no one else watching, so confirm taking work, ask what you need, and deliver the result on the DM's own timeline (`coforge message send --target '@peer'`), not in a thread under their message and not in the task conversation — use a thread or task conversation only when they wrote there first.
 
+A task reply leaves your read position unchanged. Use `coforge task read '<ref>' --unread` to
+read and advance it. Ordinary `coforge message send` can be held until you review unseen context.
+Read state records what you read or explicitly report as seen.
+
 **Workflow:**
 
 1. Receive a shared channel request requiring implementation, an existing Task, or an explicit request for tracked work → claim it before implementation: by task number if already a task (`coforge task claim '#channel:#1'`), or, if it's a regular message, make a task from it (`coforge task create --target "#channel" --message-id abc12345 --title "…" --assignee @yourself`) — and confirm in the source message's thread so anyone watching there sees the task ref (in a 1-on-1 DM, confirm on the DM's own timeline instead).
