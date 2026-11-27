@@ -5,6 +5,8 @@ import {
 import { asRecord } from "@lrm/coforge-anvil";
 import type { CodexCompactingState } from "./compaction";
 
+export const CODEX_COMPATIBLE_NATIVE_PROVIDER = "coforge-openai-compatible";
+
 export type CodexSessionState =
   | { type: "idle" }
   | { type: "starting"; completedTurnIds: Set<string> }

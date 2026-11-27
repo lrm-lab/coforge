@@ -175,7 +175,8 @@ export class CredentialInvalidLedger {
 
   /** A listener that throws does not keep the others from the change: it has happened already. */
   #announce(change: LedgerChange): void {
-    for (const listener of [...this.#listeners]) {
+    const listenersAtStart = Array.from(this.#listeners);
+    for (const listener of listenersAtStart) {
       try {
         listener(change);
       } catch (error) {

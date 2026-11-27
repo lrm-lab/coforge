@@ -1,5 +1,5 @@
 import {
-  CODEX_COMPATIBLE_MODEL_PROVIDER,
+  selectsCodexCompatible,
   codexCompatibleEnvironment,
 } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
@@ -19,7 +19,11 @@ import { consumeCodexResetCredit } from "./reset-credit";
 import type { CodexRuntimeHost } from "./host";
 import { RUNTIME_PROVIDER, utf8Encoder, type ResetCreditOutcome } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { assertSkillsLoaded, codexServiceTierState } from "./provider-support";
+import {
+  CODEX_COMPATIBLE_NATIVE_PROVIDER,
+  assertSkillsLoaded,
+  codexServiceTierState,
+} from "./provider-support";
 
 const COMPATIBLE_API_KEY_ENV = "COFORGE_CODEX_COMPATIBLE_API_KEY";
 
@@ -88,7 +92,7 @@ export class CodexProvider implements CodeAgentProvider {
     let command = await this.#command();
     options.startupSignal?.throwIfAborted();
     const environment = this.#host.buildSessionEnvironment(options);
-    const compatible = options.runtime?.modelProvider === CODEX_COMPATIBLE_MODEL_PROVIDER;
+    const compatible = selectsCodexCompatible(this.provider, options.runtime?.modelProvider);
     if (compatible) command = configureCompatibleProvider(command, options, environment);
     const compatibleKey = compatible ? environment[COMPATIBLE_API_KEY_ENV] : undefined;
     const redact = compatibleKey
@@ -136,8 +140,6 @@ export class CodexProvider implements CodeAgentProvider {
         reasoningSummary,
         codexVersion(asRecord(initialized.result)?.userAgent),
       );
-      if (compatible && result?.modelProvider !== CODEX_COMPATIBLE_MODEL_PROVIDER)
-        throw new Error("Codex did not select the compatible provider");
       const model = await codexAccountModel(process, result, options.runtime?.model, {
         agent_id: options.agentId,
         runtime_id: options.runtimeId,
@@ -192,11 +194,11 @@ function configureCompatibleProvider(
       delete environment[name];
   }
   environment[COMPATIBLE_API_KEY_ENV] = pair.OPENAI_API_KEY;
-  const provider = `model_providers.${CODEX_COMPATIBLE_MODEL_PROVIDER}`;
+  const provider = `model_providers.${CODEX_COMPATIBLE_NATIVE_PROVIDER}`;
   return [
     ...command,
     "-c",
-    `model_provider=${JSON.stringify(CODEX_COMPATIBLE_MODEL_PROVIDER)}`,
+    `model_provider=${JSON.stringify(CODEX_COMPATIBLE_NATIVE_PROVIDER)}`,
     "-c",
     `${provider}.name="OpenAI-compatible"`,
     "-c",

@@ -18,6 +18,9 @@ Part of [the documentation index](../../README.md). The Codex adapter talks to t
   variable, so the native default OpenAI provider cannot pick it up. This must apply before `account/read`: a
   thread-only provider override leaves that read reporting the default account's login requirement.
   The adapter verifies the resulting thread selected the requested provider before sending a turn.
+  Switching between this provider and the Computer's default mode starts a new native Session,
+  because Codex retains the provider on an existing thread. Runtime configuration editors should
+  tell the user about the new Session before applying the switch.
 - A compatible provider's typed HTTP 429 uses the ordinary rate-limit backoff. Native app-server
   does not identify whether the request or token rate caused that response. Its
   `usageLimitExceeded` instead asks the user to check the API provider's billing and limits.

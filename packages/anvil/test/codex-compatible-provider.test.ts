@@ -29,17 +29,17 @@ test("Codex configures the compatible provider before app-server initializes", a
         spawn(args, cwd, environment, options) {
           expect(args.slice(command.length)).toEqual([
             "-c",
-            'model_provider="openai-compatible"',
+            'model_provider="coforge-openai-compatible"',
             "-c",
-            'model_providers.openai-compatible.name="OpenAI-compatible"',
+            'model_providers.coforge-openai-compatible.name="OpenAI-compatible"',
             "-c",
-            'model_providers.openai-compatible.base_url="http://127.0.0.1:9999/v1"',
+            'model_providers.coforge-openai-compatible.base_url="http://127.0.0.1:9999/v1"',
             "-c",
-            'model_providers.openai-compatible.env_key="COFORGE_CODEX_COMPATIBLE_API_KEY"',
+            'model_providers.coforge-openai-compatible.env_key="COFORGE_CODEX_COMPATIBLE_API_KEY"',
             "-c",
-            "model_providers.openai-compatible.requires_openai_auth=false",
+            "model_providers.coforge-openai-compatible.requires_openai_auth=false",
             "-c",
-            'model_providers.openai-compatible.wire_api="responses"',
+            'model_providers.coforge-openai-compatible.wire_api="responses"',
           ]);
           expect(environment.COFORGE_CODEX_COMPATIBLE_API_KEY).toBe(agentKey);
           expect(environment.OPENAI_API_KEY).toBeUndefined();
@@ -103,4 +103,49 @@ test("Codex refuses incomplete compatible credentials before spawning", async ()
       runtime: { ...runtime, envVars: { OPENAI_API_KEY: "fixture-agent-value" } },
     }),
   ).rejects.toThrow("Codex compatible provider requires an API key and a valid base URL");
+});
+
+test.each([
+  { direction: "to compatible", nextCompatible: true, same: false },
+  { direction: "to default", nextCompatible: false, same: false },
+  { direction: "within compatible", nextCompatible: true, same: true },
+])("Codex selects the correct native Session $direction", async ({ nextCompatible, same }) => {
+  const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-codex-switch-"));
+  const adapter = new CodexProvider({
+    host: fixtureCodexHost,
+    command: [
+      process.execPath,
+      new URL("./fixtures/codex-compatible-app-server.ts", import.meta.url).pathname,
+      ...(same ? ["same-provider"] : []),
+    ],
+  });
+  const bindings: Array<[string, string | undefined]> = [];
+  try {
+    const session = await adapter.createAgentSession({
+      agentWorkspaceDirectory,
+      instructions: "",
+      sessionId: "old-thread",
+      runtime: {
+        ...runtime,
+        modelProvider: nextCompatible ? "openai-compatible" : "",
+        ...(nextCompatible
+          ? {
+              codexCompatibleEnvironment: {
+                OPENAI_API_KEY: "fixture-agent-value",
+                OPENAI_BASE_URL: "https://provider.example/v1",
+              },
+            }
+          : {}),
+      },
+      onSessionId: async (id, replacedId) => {
+        bindings.push([id, replacedId]);
+      },
+    });
+    await session.dispose();
+    expect(bindings).toEqual([
+      same ? ["old-thread", undefined] : ["thread-compatible", "old-thread"],
+    ]);
+  } finally {
+    await rm(agentWorkspaceDirectory, { recursive: true, force: true });
+  }
 });

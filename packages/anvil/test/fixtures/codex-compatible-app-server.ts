@@ -2,6 +2,10 @@ import { readLines } from "../../../../scripts/test/read-lines";
 
 const threadId = "thread-compatible";
 const turnId = "turn-compatible";
+const nativeProvider = process.argv
+  .find((arg) => /^model_provider="(?:coforge-)?openai-compatible"$/.test(arg))
+  ?.split('"')[1];
+const compatible = nativeProvider !== undefined;
 const write = (value: unknown) => process.stdout.write(JSON.stringify(value) + "\n");
 
 for await (const line of readLines(Bun.stdin.stream())) {
@@ -23,8 +27,30 @@ for await (const line of readLines(Bun.stdin.stream())) {
     case "thread/start":
       write({
         id,
-        result: { thread: { id: threadId }, modelProvider: "openai-compatible" },
+        result: {
+          thread: { id: threadId },
+          modelProvider: nativeProvider ?? "openai",
+        },
       });
+      break;
+    case "thread/resume":
+      if (process.argv.includes("same-provider")) {
+        write({
+          id,
+          result: { thread: { id: "old-thread" }, modelProvider: "coforge-openai-compatible" },
+        });
+      } else if (compatible) {
+        write({ id, result: { thread: { id: "old-thread" }, modelProvider: "openai" } });
+      } else {
+        write({
+          id,
+          error: {
+            code: -32600,
+            message:
+              "This chat uses model provider “coforge-openai-compatible”, which is no longer configured. Restore this provider’s configuration to continue.",
+          },
+        });
+      }
       break;
     case "turn/start": {
       const error = {
