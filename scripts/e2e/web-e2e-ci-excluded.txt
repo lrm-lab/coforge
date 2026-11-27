@@ -10,6 +10,7 @@ e2e-activity-flow.e2e.ts 待分拣
 e2e-activity-keyboard.e2e.ts 待分拣
 e2e-agent-activity-days.e2e.ts 待分拣
 e2e-agent-app-tokens.e2e.ts 待分拣
+e2e-agent-codex-compatible.e2e.ts awaits three clean private runs and Linux runner admission
 e2e-agent-create-default-runtime.e2e.ts 待分拣
 e2e-agent-create-refreshes-members.e2e.ts 待分拣
 e2e-agent-direct-message.e2e.ts 待分拣
