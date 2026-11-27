@@ -35,6 +35,9 @@
   "image_lightbox_previous": "Previous image",
   "image_lightbox_next": "Next image",
   "image_lightbox_position": "Image {index} of {count}",
+  "image_lightbox_zoom_in": "Zoom in",
+  "image_lightbox_zoom_out": "Zoom out",
+  "image_lightbox_zoom_reset": "Reset zoom",
   "attachment_comments_add_timestamp": "Add timestamp {time}",
   "attachment_comments_placeholder": "Add a comment",
   "attachment_comments_resize": "Resize comments"

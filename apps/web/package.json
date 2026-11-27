@@ -117,6 +117,7 @@
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "4.12.4",
     "react-stately": "3.51.0",
+    "react-zoom-pan-pinch": "4.4.0",
     "recharts": "^3.11.1",
     "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
