@@ -119,6 +119,16 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   `create`/`claim`/`assign` answer `state: "held"` over pending context,
   `unclaim`/`update`/`amend` execute and carry it in `recentUnread`.
 
+## Confirmed reads
+
+- `reads/page` uses the history contiguity rule and leaves the existing cursor
+  untouched. It issues short-lived signed receipts for contiguous candidates;
+  a confirmation verifies the ordered prefix, rechecks source access and moves the
+  canonical cursor atomically. The legacy read endpoints keep their existing behavior.
+- Confirmation credentials are scoped to one Workspace, Agent and page.
+  A pure view or a page with a gap has no receipt. Keep bodies and credentials
+  out of read confirmation telemetry.
+
 ## Stopped Agents
 
 See [stopped-agents.md](./stopped-agents.md).

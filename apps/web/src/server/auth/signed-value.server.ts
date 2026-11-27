@@ -15,12 +15,30 @@ type SignedPurpose =
   | "github-sign-in"
   | "artifact-sandbox-ticket"
   | "artifact-sandbox-files"
-  | "computer-upgrade-ready-receipt:v1";
+  | "computer-upgrade-ready-receipt:v1"
+  | "agent-read-page:v1"
+  | "agent-read-checkpoint:v1";
 
 /** `payload` as JSON, base64url, then `.` and its HMAC-SHA256 under `secret` for `purpose`. */
 export function signValue(purpose: SignedPurpose, payload: object, secret: string): string {
   const body = Buffer.from(utf8Encoder.encode(JSON.stringify(payload))).toString("base64url");
   return `${body}.${hmacSha256(secret, `${purpose}.${body}`)}`;
+}
+
+export function signValueProof(purpose: SignedPurpose, payload: object, secret: string): string {
+  const signed = signValue(purpose, payload, secret);
+  return signed.slice(signed.lastIndexOf(".") + 1);
+}
+
+export function matchesValueProof(
+  purpose: SignedPurpose,
+  payload: object,
+  proof: string,
+  secret: string,
+): boolean {
+  const expected = utf8Encoder.encode(signValueProof(purpose, payload, secret));
+  const actual = utf8Encoder.encode(proof);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 /** The payload `signValue` signed for `purpose`, or null when `value` is missing, malformed or

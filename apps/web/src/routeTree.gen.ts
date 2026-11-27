@@ -159,6 +159,8 @@ import { Route as ApiAgentV1ManualSearchRouteImport } from './routes/api/agent/v
 import { Route as ApiAgentV1MentionActionsExecuteRouteImport } from './routes/api/agent/v1/mention-actions_.execute'
 import { Route as ApiAgentV1MentionActionsPendingRouteImport } from './routes/api/agent/v1/mention-actions_.pending'
 import { Route as ApiAgentV1MessagesSearchRouteImport } from './routes/api/agent/v1/messages_.search'
+import { Route as ApiAgentV1ReadsConfirmRouteImport } from './routes/api/agent/v1/reads/confirm'
+import { Route as ApiAgentV1ReadsPageRouteImport } from './routes/api/agent/v1/reads/page'
 import { Route as ApiAgentV1TasksFollowRouteImport } from './routes/api/agent/v1/tasks_.follow'
 import { Route as ApiAgentV1TasksFollowingRouteImport } from './routes/api/agent/v1/tasks_.following'
 import { Route as ApiAgentV1TasksIdleNudgeRouteImport } from './routes/api/agent/v1/tasks_.idle-nudge'
@@ -1031,6 +1033,16 @@ const ApiAgentV1MessagesSearchRoute =
     path: '/api/agent/v1/messages/search',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1ReadsConfirmRoute = ApiAgentV1ReadsConfirmRouteImport.update({
+  id: '/api/agent/v1/reads/confirm',
+  path: '/api/agent/v1/reads/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1ReadsPageRoute = ApiAgentV1ReadsPageRouteImport.update({
+  id: '/api/agent/v1/reads/page',
+  path: '/api/agent/v1/reads/page',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentV1TasksFollowRoute = ApiAgentV1TasksFollowRouteImport.update({
   id: '/api/agent/v1/tasks_/follow',
   path: '/api/agent/v1/tasks/follow',
@@ -1537,6 +1549,8 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
+  '/api/agent/v1/reads/confirm': typeof ApiAgentV1ReadsConfirmRoute
+  '/api/agent/v1/reads/page': typeof ApiAgentV1ReadsPageRoute
   '/api/agent/v1/tasks/follow': typeof ApiAgentV1TasksFollowRoute
   '/api/agent/v1/tasks/following': typeof ApiAgentV1TasksFollowingRoute
   '/api/agent/v1/tasks/idle-nudge': typeof ApiAgentV1TasksIdleNudgeRoute
@@ -1745,6 +1759,8 @@ export interface FileRoutesByTo {
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
+  '/api/agent/v1/reads/confirm': typeof ApiAgentV1ReadsConfirmRoute
+  '/api/agent/v1/reads/page': typeof ApiAgentV1ReadsPageRoute
   '/api/agent/v1/tasks/follow': typeof ApiAgentV1TasksFollowRoute
   '/api/agent/v1/tasks/following': typeof ApiAgentV1TasksFollowingRoute
   '/api/agent/v1/tasks/idle-nudge': typeof ApiAgentV1TasksIdleNudgeRoute
@@ -1958,6 +1974,8 @@ export interface FileRoutesById {
   '/api/agent/v1/mention-actions_/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions_/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages_/search': typeof ApiAgentV1MessagesSearchRoute
+  '/api/agent/v1/reads/confirm': typeof ApiAgentV1ReadsConfirmRoute
+  '/api/agent/v1/reads/page': typeof ApiAgentV1ReadsPageRoute
   '/api/agent/v1/tasks_/follow': typeof ApiAgentV1TasksFollowRoute
   '/api/agent/v1/tasks_/following': typeof ApiAgentV1TasksFollowingRoute
   '/api/agent/v1/tasks_/idle-nudge': typeof ApiAgentV1TasksIdleNudgeRoute
@@ -2170,6 +2188,8 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
     | '/api/agent/v1/messages/search'
+    | '/api/agent/v1/reads/confirm'
+    | '/api/agent/v1/reads/page'
     | '/api/agent/v1/tasks/follow'
     | '/api/agent/v1/tasks/following'
     | '/api/agent/v1/tasks/idle-nudge'
@@ -2378,6 +2398,8 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
     | '/api/agent/v1/messages/search'
+    | '/api/agent/v1/reads/confirm'
+    | '/api/agent/v1/reads/page'
     | '/api/agent/v1/tasks/follow'
     | '/api/agent/v1/tasks/following'
     | '/api/agent/v1/tasks/idle-nudge'
@@ -2590,6 +2612,8 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions_/execute'
     | '/api/agent/v1/mention-actions_/pending'
     | '/api/agent/v1/messages_/search'
+    | '/api/agent/v1/reads/confirm'
+    | '/api/agent/v1/reads/page'
     | '/api/agent/v1/tasks_/follow'
     | '/api/agent/v1/tasks_/following'
     | '/api/agent/v1/tasks_/idle-nudge'
@@ -2765,6 +2789,8 @@ export interface RootRouteChildren {
   ApiAgentV1MentionActionsExecuteRoute: typeof ApiAgentV1MentionActionsExecuteRoute
   ApiAgentV1MentionActionsPendingRoute: typeof ApiAgentV1MentionActionsPendingRoute
   ApiAgentV1MessagesSearchRoute: typeof ApiAgentV1MessagesSearchRoute
+  ApiAgentV1ReadsConfirmRoute: typeof ApiAgentV1ReadsConfirmRoute
+  ApiAgentV1ReadsPageRoute: typeof ApiAgentV1ReadsPageRoute
   ApiAgentV1TasksFollowRoute: typeof ApiAgentV1TasksFollowRoute
   ApiAgentV1TasksFollowingRoute: typeof ApiAgentV1TasksFollowingRoute
   ApiAgentV1TasksIdleNudgeRoute: typeof ApiAgentV1TasksIdleNudgeRoute
@@ -3862,6 +3888,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1MessagesSearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/reads/confirm': {
+      id: '/api/agent/v1/reads/confirm'
+      path: '/api/agent/v1/reads/confirm'
+      fullPath: '/api/agent/v1/reads/confirm'
+      preLoaderRoute: typeof ApiAgentV1ReadsConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/reads/page': {
+      id: '/api/agent/v1/reads/page'
+      path: '/api/agent/v1/reads/page'
+      fullPath: '/api/agent/v1/reads/page'
+      preLoaderRoute: typeof ApiAgentV1ReadsPageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/tasks_/follow': {
       id: '/api/agent/v1/tasks_/follow'
       path: '/api/agent/v1/tasks/follow'
@@ -4714,6 +4754,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1MentionActionsExecuteRoute: ApiAgentV1MentionActionsExecuteRoute,
   ApiAgentV1MentionActionsPendingRoute: ApiAgentV1MentionActionsPendingRoute,
   ApiAgentV1MessagesSearchRoute: ApiAgentV1MessagesSearchRoute,
+  ApiAgentV1ReadsConfirmRoute: ApiAgentV1ReadsConfirmRoute,
+  ApiAgentV1ReadsPageRoute: ApiAgentV1ReadsPageRoute,
   ApiAgentV1TasksFollowRoute: ApiAgentV1TasksFollowRoute,
   ApiAgentV1TasksFollowingRoute: ApiAgentV1TasksFollowingRoute,
   ApiAgentV1TasksIdleNudgeRoute: ApiAgentV1TasksIdleNudgeRoute,

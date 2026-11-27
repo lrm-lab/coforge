@@ -194,16 +194,23 @@ export class TaskConversations {
    * read, over the task's own conversation. An Agent that follows the task takes a bookkeeping seat
    * there, as for attachment comments; the seat is never authority, the board's channel is.
    */
-  async read(principal: TaskPrincipal, ref: TaskConversationRef, page: AgentMessagesPage) {
+  async read(
+    principal: TaskPrincipal,
+    ref: TaskConversationRef,
+    page: AgentMessagesPage,
+    receiptCandidate = false,
+  ) {
     if (!principal.agentId) throw new AppError("ACCESS_DENIED");
     const agentId = principal.agentId;
-    const { task } = await this.resolve(principal, ref, { member: true });
+    const { task, member } = await this.resolve(principal, ref, { member: true });
     if (!task.discussionConversationId)
       return {
         messages: [],
         hasOlder: false,
         hasNewer: false,
         modelSeenUpToSeq: null,
+        receiptCandidate: receiptCandidate ? { readThrough: 0 } : undefined,
+        receiptScope: undefined,
         events: await taskEventsInWindow(
           this.ports.db,
           task.id,
@@ -214,18 +221,27 @@ export class TaskConversations {
       };
     const conversationId = task.discussionConversationId;
     const db = this.ports.db;
-    await db.conversationMember.upsert({
-      where: { conversationId_agentId: { conversationId, agentId } },
-      create: { workspaceId: principal.workspaceId, conversationId, agentId },
-      update: {},
-    });
+    if (!receiptCandidate)
+      await db.conversationMember.upsert({
+        where: { conversationId_agentId: { conversationId, agentId } },
+        create: { workspaceId: principal.workspaceId, conversationId, agentId },
+        update: {},
+      });
+    const target = await taskDiscussionDeliveryTarget(
+      db,
+      principal.workspaceId,
+      agentId,
+      conversationId,
+    );
     const result = await readAgentMessagePage(db, {
       workspaceId: principal.workspaceId,
       agentId,
       conversationId,
       threadRootId: null,
       // The delivery spelling is the cursor key: replayed deliveries dedupe against it.
-      ...(await taskDiscussionDeliveryTarget(db, principal.workspaceId, agentId, conversationId)),
+      ...target,
+      seatOptional: receiptCandidate,
+      receiptCandidate,
       isChannel: false,
       isUserAgentDirectConversation: false,
       page,
@@ -249,9 +265,13 @@ export class TaskConversations {
       page.throughSequence === undefined;
     return {
       ...result,
-      modelSeenUpToSeq:
-        result.modelSeenUpToSeq ??
-        (emptyUnanchoredPage ? (result.unreadCursorBefore ?? null) : null),
+      receiptScope: receiptCandidate
+        ? { ...target.consumptionScope, boardMemberId: memberId(member!), taskId: task.id }
+        : undefined,
+      modelSeenUpToSeq: receiptCandidate
+        ? null
+        : (result.modelSeenUpToSeq ??
+          (emptyUnanchoredPage ? (result.unreadCursorBefore ?? null) : null)),
       events: await taskEventsForReadPage(db, {
         taskId: task.id,
         conversationId,
@@ -283,6 +303,19 @@ export class TaskConversations {
       return id;
     });
     return { conversationId };
+  }
+
+  async resolveReadConfirmation(principal: TaskPrincipal, ref: TaskConversationRef) {
+    const { task, member } = await this.resolve(principal, ref, { member: true });
+    if (!principal.agentId || !member || !task.discussionConversationId)
+      throw new AppError("NOT_FOUND");
+    const target = await taskDiscussionDeliveryTarget(
+      this.ports.db,
+      principal.workspaceId,
+      principal.agentId,
+      task.discussionConversationId,
+    );
+    return { ...target.consumptionScope, boardMemberId: memberId(member), taskId: task.id };
   }
 
   async markRead(principal: TaskPrincipal, ref: TaskConversationRef, throughSequence: number) {

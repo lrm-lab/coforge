@@ -47,6 +47,7 @@ export async function readAgentMessagePage(
     page: AgentMessagesPage;
     consumptionScope?: AgentHistoryResponse["consumptionScope"];
     additionalScope?: Prisma.MessageWhereInput;
+    receiptCandidate?: boolean;
     conversationReadChanged?(input: ConversationReadChangedInput): Promise<void>;
     resolveAnchor(
       anchor: string,
@@ -65,6 +66,7 @@ export async function readAgentMessagePage(
     page,
     consumptionScope,
     additionalScope,
+    receiptCandidate,
     conversationReadChanged,
     resolveAnchor,
   } = input;
@@ -146,6 +148,29 @@ export async function readAgentMessagePage(
     });
     if (publication) void conversationReadChanged?.(publication)?.catch(() => {});
   };
+  const receiptFields = (
+    boundary: number | null,
+    rawRows: readonly { sequence: number }[],
+    shown: readonly { sequence: number }[],
+  ) => {
+    if (!receiptCandidate) return {};
+    const canConfirm =
+      (agentMember || seatOptional) &&
+      boundary !== null &&
+      boundary > readThrough &&
+      page.throughSequence === undefined &&
+      !noticesOnly &&
+      !additionalScope;
+    return {
+      receiptCandidate: {
+        readThrough,
+        ...(canConfirm && {
+          memberId: agentMember?.id ?? null,
+          checkpoints: readCheckpointSequences(readThrough, rawRows, shown),
+        }),
+      },
+    };
+  };
   // An `unread` read starts at the read position. A latest page moves it only when the shared
   // contiguity rule proves that it joins the existing read-through; an anchored page never joins.
   const window = noticesOnly
@@ -176,13 +201,17 @@ export async function readAgentMessagePage(
               : undefined,
         });
     const agentReadThroughSequence =
-      modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
+      !receiptCandidate && modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough
+        ? modelSeenUpToSeq
+        : 0;
     if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);
+    const messages = map(window.rows);
     return {
-      messages: map(window.rows),
+      messages,
+      ...receiptFields(modelSeenUpToSeq, window.rows, messages),
       hasOlder: window.hasOlder,
       hasNewer: window.hasNewer,
-      modelSeenUpToSeq,
+      modelSeenUpToSeq: receiptCandidate ? null : modelSeenUpToSeq,
       consumptionScope,
       ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
       ...(agentReadThroughSequence ? { readPositionAfter: agentReadThroughSequence } : {}),
@@ -215,17 +244,20 @@ export async function readAgentMessagePage(
           hasOlder: notice.hasOlder,
         });
     const agentReadThroughSequence =
-      modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
+      !receiptCandidate && modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough
+        ? modelSeenUpToSeq
+        : 0;
     if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);
     return {
       messages,
+      ...receiptFields(null, notice.rows, messages),
       hasOlder: notice.hasOlder,
       hasNewer: notice.hasNewer,
-      modelSeenUpToSeq,
+      modelSeenUpToSeq: receiptCandidate ? null : modelSeenUpToSeq,
       consumptionScope,
       ...readPositionReport(page.unread, isHistoryRead, {
         readThrough,
-        modelSeenUpToSeq,
+        modelSeenUpToSeq: receiptCandidate ? null : modelSeenUpToSeq,
         hasMore: notice.hasNewer,
       }),
       ...(agentReadThroughSequence ? { readPositionAfter: agentReadThroughSequence } : {}),
@@ -277,22 +309,41 @@ export async function readAgentMessagePage(
   // One contiguity rule: a page that joins what the Agent had read both reports its boundary and
   // moves the read-through there.
   const agentReadThroughSequence =
-    modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
+    !receiptCandidate && modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough
+      ? modelSeenUpToSeq
+      : 0;
   if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);
   return {
     messages,
+    ...receiptFields(modelSeenUpToSeq, pageRows, messages),
     hasOlder,
     hasNewer: page.before
       ? await anchorSideHasMessages(db, scope, anchor, "newer")
       : page.after || !isHistoryRead
         ? hasMore
         : false,
-    modelSeenUpToSeq,
+    modelSeenUpToSeq: receiptCandidate ? null : modelSeenUpToSeq,
     consumptionScope,
     ...readPositionReport(page.unread, isHistoryRead, {
       readThrough,
-      modelSeenUpToSeq,
+      modelSeenUpToSeq: receiptCandidate ? null : modelSeenUpToSeq,
       hasMore,
     }),
   };
+}
+
+function readCheckpointSequences(
+  readThrough: number,
+  rawRows: readonly { sequence: number }[],
+  messages: readonly { sequence: number }[],
+) {
+  if (messages.length === 0) return [rawRows.at(-1)!.sequence];
+  let rowIndex = 0;
+  return messages.map((message, index) => {
+    const next = messages[index + 1]?.sequence ?? Infinity;
+    let through = Math.max(readThrough, message.sequence);
+    while (rowIndex < rawRows.length && rawRows[rowIndex]!.sequence < next)
+      through = Math.max(through, rawRows[rowIndex++]!.sequence);
+    return message.sequence <= readThrough ? readThrough : through;
+  });
 }

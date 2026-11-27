@@ -119,8 +119,8 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
         this.findUserAgentConversation(workspaceId, userId, agentId),
       getOrCreateUserAgent: (workspaceId, userId, agentId) =>
         this.getOrCreateUserAgent(workspaceId, userId, agentId),
-      resolveAgentTarget: (workspaceId, agentId, target) =>
-        this.resolveAgentTarget(workspaceId, agentId, target),
+      resolveAgentTarget: (workspaceId, agentId, target, existingOnly) =>
+        this.resolveAgentTarget(workspaceId, agentId, target, existingOnly),
     };
   }
 
@@ -172,8 +172,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     workspaceId: string,
     agentId: string,
     target: string,
+    existingOnly = false,
   ): Promise<ResolvedAgentTarget> {
-    return resolveAgentTarget(this.#ports, workspaceId, agentId, target);
+    return resolveAgentTarget(this.#ports, workspaceId, agentId, target, existingOnly);
   }
 
   resolveAgentSendTarget(workspaceId: string, agentId: string, target: string) {

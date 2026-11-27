@@ -33,6 +33,7 @@ export function readDirectConversationMessagesPage(input: {
       isChannel,
       isUserAgentDirectConversation: resolved.isUserAgentDirectConversation === true,
       page: input.page,
+      receiptCandidate: input.page.receiptCandidate,
       consumptionScope: agentHistoryConsumptionScope(
         input.agentId,
         resolved,
@@ -40,6 +41,9 @@ export function readDirectConversationMessagesPage(input: {
       ),
       conversationReadChanged: input.conversationReadChanged,
       resolveAnchor: (anchor) => input.resolveAnchor(conversationId, threadRootId, anchor),
-    });
+    }).then((page) => ({
+      ...page,
+      receiptScope: input.page.receiptCandidate ? resolved : undefined,
+    }));
   });
 }

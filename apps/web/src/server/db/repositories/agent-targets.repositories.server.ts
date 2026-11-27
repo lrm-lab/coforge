@@ -66,6 +66,7 @@ export type DirectConversationPorts = {
     workspaceId: string,
     agentId: string,
     target: string,
+    existingOnly?: boolean,
   ): Promise<ResolvedAgentTarget>;
 };
 
@@ -122,14 +123,25 @@ export async function resolveAgentTarget(
   workspaceId: string,
   agentId: string,
   target: string,
+  existingOnly = false,
 ): Promise<ResolvedAgentTarget> {
+  const existing = (found: { id: string } | null) => {
+    if (!found) throw new AppError("NOT_FOUND");
+    return found;
+  };
   return resolveAgentTargetUsing(
     ports,
     workspaceId,
     agentId,
     target,
-    (userId) => agentDirectConversation(ports, workspaceId, userId, agentId),
-    (peerId) => getOrCreateAgentPeerConversation(ports.db, workspaceId, agentId, peerId),
+    (userId) =>
+      existingOnly
+        ? ports.findUserAgentConversation(workspaceId, userId, agentId).then(existing)
+        : agentDirectConversation(ports, workspaceId, userId, agentId),
+    (peerId) =>
+      existingOnly
+        ? findAgentPeerConversation(ports.db, workspaceId, agentId, peerId).then(existing)
+        : getOrCreateAgentPeerConversation(ports.db, workspaceId, agentId, peerId),
   );
 }
 

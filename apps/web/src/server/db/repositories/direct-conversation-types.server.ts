@@ -41,6 +41,7 @@ export type DirectConversationPageOptions = {
   throughSequence?: number;
   unread?: boolean;
   consumptionScope?: boolean;
+  receiptCandidate?: boolean;
 };
 export type LatestSenderFields = {
   latestSenderKind: MessageSenderKind;
