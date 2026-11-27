@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import { Check, HelpCircle, Minus, XClose as X } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
+import { KeyValueList, KeyValueRow } from "#src/components/ui/key-value-list";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
@@ -15,11 +16,6 @@ const ROLE_SUMMARY = {
   member: () => m.workspace_role_member_summary(),
 } satisfies Record<(typeof WORKSPACE_MEMBER_ROLES)[number], () => string>;
 
-/**
- * A help button beside a person's role that explains what each Workspace role may do: one line
- * per role, then capabilities by role, the way Slack's "Permissions by role" lays them out. A
- * dialog, not a tooltip, so it opens by click, keyboard and touch alike.
- */
 export function WorkspaceRoleHelp() {
   const [open, setOpen] = useState(false);
   return (
@@ -47,14 +43,17 @@ export function WorkspaceRoleHelp() {
                 <Heading slot="title" className="pr-8 text-md font-semibold text-primary">
                   {m.workspace_roles_help_title()}
                 </Heading>
-                <dl className="mt-3 space-y-1">
+                <KeyValueList className="mt-3 gap-y-1.5" labelWidth="compact">
                   {WORKSPACE_MEMBER_ROLES.map((role) => (
-                    <div key={role} className="flex flex-wrap gap-x-2 text-sm">
-                      <dt className="font-semibold text-primary">{workspaceRoleLabel(role)}</dt>
-                      <dd className="text-tertiary">{ROLE_SUMMARY[role]()}</dd>
-                    </div>
+                    <KeyValueRow
+                      key={role}
+                      label={workspaceRoleLabel(role)}
+                      valueClassName="font-normal text-secondary"
+                    >
+                      {ROLE_SUMMARY[role]()}
+                    </KeyValueRow>
                   ))}
-                </dl>
+                </KeyValueList>
                 <RoleMatrix />
                 <p className="mt-4 text-sm text-tertiary">{m.workspace_roles_owner_note()}</p>
               </>
@@ -66,7 +65,6 @@ export function WorkspaceRoleHelp() {
   );
 }
 
-/** Capabilities down the side, roles across the top, a check where the role has it. */
 function RoleMatrix() {
   return (
     <table className="mt-5 w-full border-collapse text-sm">

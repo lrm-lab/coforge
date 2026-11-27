@@ -15,6 +15,7 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "#src/components/ui/input-otp";
+import { KeyValueList, KeyValueRow } from "#src/components/ui/key-value-list";
 import type {
   ApprovableExternalAgent,
   ExternalGrantDetails,
@@ -309,14 +310,13 @@ function ExternalGrantSummary({ grant }: { grant: ExternalGrantDetails }) {
   return (
     <div className="rounded-xl border border-secondary bg-secondary_subtle p-4 text-sm">
       <p className="text-xs text-tertiary">{m.device_verify_external_machine()}</p>
-      <dl className="mt-2 space-y-1.5">
+      <KeyValueList className="mt-2" size="xs" labelWidth="compact">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-baseline justify-between gap-4">
-            <dt className="text-xs text-tertiary">{row.label}</dt>
-            <dd className="min-w-0 truncate font-mono text-xs text-primary">{row.value}</dd>
-          </div>
+          <KeyValueRow key={row.label} label={row.label} mono>
+            {row.value}
+          </KeyValueRow>
         ))}
-      </dl>
+      </KeyValueList>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Select } from "#src/components/base/select/select";
 import { EmptyState } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { KeyValueList, KeyValueRow } from "#src/components/ui/key-value-list";
 import {
   approveComputerAttach,
   refuseComputerAttach,
@@ -78,20 +79,11 @@ export function AttachApprovePage({
     <main className="mx-auto max-w-md p-8">
       <h1 className="text-xl font-semibold">{m.computer_attach_title()}</h1>
       <p className="mt-2 text-sm text-secondary">{m.computer_attach_description()}</p>
-      <dl className="mt-6 space-y-2 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="shrink-0 text-secondary">{m.computer_attach_machine()}</dt>
-          <dd className="min-w-0 text-end font-medium wrap-anywhere">{machineName}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="shrink-0 text-secondary">{m.computer_attach_hostname()}</dt>
-          <dd className="min-w-0 text-end font-medium wrap-anywhere">{hostname}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="shrink-0 text-secondary">{m.computer_os()}</dt>
-          <dd className="min-w-0 text-end font-medium wrap-anywhere">{os}</dd>
-        </div>
-      </dl>
+      <KeyValueList className="mt-6" labelWidth="default">
+        <KeyValueRow label={m.computer_attach_machine()}>{machineName}</KeyValueRow>
+        <KeyValueRow label={m.computer_attach_hostname()}>{hostname}</KeyValueRow>
+        <KeyValueRow label={m.computer_os()}>{os}</KeyValueRow>
+      </KeyValueList>
       <p dir="ltr" className="mt-6 text-center font-mono text-2xl font-semibold tracking-widest">
         {userCode}
       </p>

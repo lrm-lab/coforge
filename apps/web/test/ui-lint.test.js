@@ -311,3 +311,201 @@ test("no-handrolled-resize-handle rejects interactive native role='separator' bu
   );
   expect(report).toHaveBeenCalledTimes(2);
 });
+
+test("no-dt-colon rejects trailing ASCII and full-width colons in <dt> labels", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-dt-colon"].create({
+    report,
+    filename: "/repo/apps/web/src/features/apps/status.tsx",
+  });
+  const dtWithChildren = (children) => ({
+    type: "JSXElement",
+    openingElement: { name: { type: "JSXIdentifier", name: "dt" }, attributes: [] },
+    children,
+  });
+
+  visitor.JSXElement(dtWithChildren([{ type: "JSXText", value: "Status: " }]));
+  expect(report).toHaveBeenCalledTimes(1);
+
+  visitor.JSXElement(
+    dtWithChildren([
+      { type: "JSXExpressionContainer", expression: { type: "Identifier", name: "label" } },
+      { type: "JSXText", value: "：" },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXElement(
+    dtWithChildren([
+      { type: "JSXExpressionContainer", expression: { type: "Literal", value: "Host:" } },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(3);
+
+  visitor.JSXElement(
+    dtWithChildren([
+      {
+        type: "JSXExpressionContainer",
+        expression: {
+          type: "TemplateLiteral",
+          quasis: [{ value: { cooked: "Region：", raw: "Region：" } }],
+          expressions: [],
+        },
+      },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(4);
+
+  visitor.JSXElement({
+    type: "JSXElement",
+    openingElement: {
+      name: { type: "JSXIdentifier", name: "KeyValueRow" },
+      attributes: [
+        {
+          type: "JSXAttribute",
+          name: { type: "JSXIdentifier", name: "label" },
+          value: { type: "Literal", value: "Owner:" },
+        },
+      ],
+    },
+    children: [],
+  });
+  expect(report).toHaveBeenCalledTimes(5);
+
+  visitor.JSXElement(dtWithChildren([{ type: "JSXText", value: "HTTP: Status" }]));
+  expect(report).toHaveBeenCalledTimes(5);
+
+  visitor.JSXElement(
+    dtWithChildren([
+      { type: "JSXExpressionContainer", expression: { type: "Identifier", name: "label" } },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(5);
+
+  const upstreamVisitor = plugin.rules["no-dt-colon"].create({
+    report: mock(() => {}),
+    filename: "/repo/apps/web/src/components/base/foo.tsx",
+  });
+  expect(upstreamVisitor.JSXElement).toBeUndefined();
+});
+
+test("no-ragged-dl rejects horizontal flex <dt>/<dd> rows without fixed label width or edge alignment", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-ragged-dl"].create({
+    report,
+    filename: "/repo/apps/web/src/features/apps/webhook-delivery-status.tsx",
+  });
+  const classAttr = (value) =>
+    value === undefined
+      ? []
+      : [
+          {
+            type: "JSXAttribute",
+            name: { type: "JSXIdentifier", name: "className" },
+            value: { type: "Literal", value },
+          },
+        ];
+  const makeRowInDl = ({ rowClass, dtClass, ddClass }) => ({
+    type: "JSXElement",
+    openingElement: { name: { type: "JSXIdentifier", name: "dl" }, attributes: [] },
+    children: [
+      {
+        type: "JSXElement",
+        openingElement: {
+          name: { type: "JSXIdentifier", name: "div" },
+          attributes: classAttr(rowClass),
+        },
+        children: [
+          {
+            type: "JSXElement",
+            openingElement: {
+              name: { type: "JSXIdentifier", name: "dt" },
+              attributes: classAttr(dtClass),
+            },
+            children: [],
+          },
+          {
+            type: "JSXElement",
+            openingElement: {
+              name: { type: "JSXIdentifier", name: "dd" },
+              attributes: classAttr(ddClass),
+            },
+            children: [],
+          },
+        ],
+      },
+    ],
+  });
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex flex-wrap gap-x-2",
+      dtClass: "text-tertiary",
+      ddClass: "text-secondary",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(1);
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex items-baseline gap-2",
+      dtClass: "text-tertiary",
+      ddClass: "text-primary",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex min-h-8 items-center gap-3",
+      dtClass: "w-20 shrink-0 text-tertiary",
+      ddClass: "flex-1",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex flex-wrap items-center gap-x-3",
+      dtClass: "text-primary",
+      ddClass: "ms-auto text-tertiary",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex justify-between gap-4",
+      dtClass: "text-tertiary",
+      ddClass: "text-primary",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex flex-col gap-0.5",
+      dtClass: "text-tertiary",
+      ddClass: "text-primary",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex-1",
+      dtClass: "text-tertiary",
+      ddClass: "text-primary",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXElement(
+    makeRowInDl({
+      rowClass: "flex gap-2",
+      dtClass: "min-w-0 text-tertiary",
+      ddClass: "text-primary",
+    }),
+  );
+  expect(report).toHaveBeenCalledTimes(3);
+});
