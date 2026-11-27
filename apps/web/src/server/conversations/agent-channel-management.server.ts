@@ -381,7 +381,7 @@ export class AgentChannelManagement {
       workspaceId,
       conversationId,
       member,
-      { ...(operator ? { operator } : {}) },
+      operator ? { operator } : {},
     );
     if (notice)
       await announceMessageBestEffort(this.db, this.realtime, {
