@@ -16,6 +16,7 @@ import {
   workspaceStateDirectory,
 } from "@lrm/coforge-daemon";
 import { ComputerSetup, type SetupResumePort } from "#src/setup/computer-setup";
+import { createMachineAttachCommand } from "#src/setup/machine-attach-command";
 import { oneShotAttach } from "#src/setup/one-shot-attach";
 import { hostname } from "node:os";
 import { currentComputerNames, currentComputerPlatform } from "#src/platform";
@@ -126,27 +127,40 @@ export function createSetupCommand(
     platform: platform.os,
     homeDirectory: homedir(),
   });
+  const workspaceRoot = join(stateDirectory, "workspaces");
+  const resume = createResumePort(stateDirectory, COFORGE_SERVER_URL);
+  const launcher = (serverUrl: string) =>
+    createDaemonLauncher(platform.os, installDirectory, stateDirectory, serverUrl);
+  const metadataProvider = {
+    async get() {
+      const computerNames = currentComputerNames({ platform: platform.os });
+      return {
+        ...computerNames,
+        platform: platform.os,
+        osVersion: (await detectOperatingSystem({ platform: platform.os })).osVersion,
+        computerVersion: VERSION,
+        machineId: await resolveMachineId({
+          platform: platform.os,
+          fallback: new FileMachineIdFallback(join(stateDirectory, "machine-id")),
+        }),
+      };
+    },
+  };
+  const machineAttach = createMachineAttachCommand({
+    config,
+    workspaceRoot,
+    resume,
+    metadata: metadataProvider,
+    serverUrl: COFORGE_SERVER_URL,
+    launcher: () => launcher(COFORGE_SERVER_URL),
+  });
   const setup = new ComputerSetup({
     config,
-    workspaceRoot: join(stateDirectory, "workspaces"),
+    workspaceRoot,
     credentials,
-    metadataProvider: {
-      async get() {
-        const computerNames = currentComputerNames({ platform: platform.os });
-        return {
-          ...computerNames,
-          platform: platform.os,
-          osVersion: (await detectOperatingSystem({ platform: platform.os })).osVersion,
-          computerVersion: VERSION,
-          machineId: await resolveMachineId({
-            platform: platform.os,
-            fallback: new FileMachineIdFallback(join(stateDirectory, "machine-id")),
-          }),
-        };
-      },
-    },
+    metadataProvider,
     idempotencyKeyProvider: { create: registrationIdempotencyKey },
-    resume: createResumePort(stateDirectory, COFORGE_SERVER_URL),
+    resume,
     authenticate: {
       async authenticate(serverUrl, json) {
         const login = new ComputerLogin({
@@ -184,8 +198,7 @@ export function createSetupCommand(
           new HttpComputerRegisterTransport(serverUrl, credential.accessToken),
         ).register(request),
     }),
-    launcher: (serverUrl) =>
-      createDaemonLauncher(platform.os, installDirectory, stateDirectory, serverUrl),
+    launcher,
     oneShotAttach: (serverUrl, options) =>
       oneShotAttach(
         {
@@ -213,15 +226,21 @@ export function createSetupCommand(
             );
           }
         : attachStageEmitter(io, options.json);
-      const result = await setup.run({
-        workspaceSlug,
-        json: options.json,
-        oneShot: options.oneShot,
-        machineId: options.machineId,
-        fresh: options.fresh,
-        yes: options.yes,
-        onStage: stage,
-      });
+      const sessionResult =
+        options.oneShot && !options.fresh && !options.machineId
+          ? await machineAttach({ workspaceSlug, show: io.stderr, onStage: stage })
+          : undefined;
+      const result =
+        sessionResult ??
+        (await setup.run({
+          workspaceSlug,
+          json: options.json,
+          oneShot: options.oneShot,
+          machineId: options.machineId,
+          fresh: options.fresh,
+          yes: options.yes,
+          onStage: stage,
+        }));
       writeSetupResult(io.stdout, result, options.json);
     },
   };

@@ -130,10 +130,12 @@ client, or command-specific copy of an existing domain operation.
   the same flow, uses a Workspace-page setup intent, registers the Computer,
   adds one Workspace binding, and starts (or reuses) its Daemon automatically. The
   user must never be asked to run `coforge-daemon` separately.
-- `attach` is an additional public name for that same flow, declared through
-  Commander's alias support in `src/cli.ts`. It accepts the same Workspace and
-  JSON options and invokes the existing `setup/` use case. Do not create another
-  registration, authentication, or startup implementation for this command.
+- `attach` prefers the versioned HTTPS attach-session flow. The machine signs
+  the session's challenge with its protected Ed25519 identity and validates the
+  returned key with preflight before saving local runner state. A rerun can
+  recover a response lost after issuance. Existing links without machine
+  proof require a new approval. Only explicit lack of server support selects
+  the legacy one-shot flow; the daemon startup boundary is shared.
 - Setup takes the target Workspace from `--workspace <slug>`, which the Add
   Computer dialog renders with the current Workspace already filled in, so the
   user copies it rather than recalling it. `COFORGE_SETUP_INTENT` remains as the
