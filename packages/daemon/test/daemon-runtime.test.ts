@@ -2428,7 +2428,7 @@ describe("DaemonRuntime", () => {
     expect(targets).toEqual(["@ada"]);
     await runtime.stop();
   });
-  test("a server-held send stores the draft fields and the resend carries its seenUpToSeq", async () => {
+  test("a held draft survives restart without a read", async () => {
     const stateDirectory = join(tempRoot, `coforge-message-drafts-${crypto.randomUUID()}`);
     await seedCursor(
       "agent-a",
@@ -2610,7 +2610,7 @@ describe("DaemonRuntime", () => {
     expect(operations).toEqual(["send", "send"]);
     expect(messageRequests).toEqual([
       { idempotencyKey: "send-1", draftReholdCount: 0, seenUpToSeq: undefined },
-      { idempotencyKey: "send-1", draftReholdCount: 1, seenUpToSeq: 7 },
+      { idempotencyKey: "send-1", draftReholdCount: 1, seenUpToSeq: undefined },
     ]);
     await expect(
       recoveredRuntime.agentMessage(
@@ -2641,7 +2641,7 @@ describe("DaemonRuntime", () => {
     expect(messageRequests.at(-1)).toEqual({
       idempotencyKey: "send-3",
       draftReholdCount: 0,
-      seenUpToSeq: 7,
+      seenUpToSeq: undefined,
     });
     await recoveredRuntime.stop();
     await rm(stateDirectory, { recursive: true, force: true });
@@ -8669,7 +8669,7 @@ test("a start that fails after connecting stops that connection instead of leavi
   await expect(runtime.start(connection)).rejects.toThrow("ready failed");
   expect(calls).toEqual(["start", "ready", "stop"]);
 });
-test("a send the daemon holds locally is never issued, and what it showed is then reviewed", async () => {
+test("a local hold persists until an explicit read", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
     calls.push(request);
@@ -8706,8 +8706,8 @@ test("a send the daemon holds locally is never issued, and what it showed is the
       { ...send, idempotencyKey: "send-held-2", sendDraft: true },
       harness.apiKey,
     );
-    expect(resent.state).toBe("sent");
-    expect(calls.filter((call) => call.operation === "send")).toHaveLength(1);
+    expect(resent.state).toBe("held");
+    expect(calls.filter((call) => call.operation === "send")).toHaveLength(0);
   } finally {
     await harness.runtime.stop();
   }
@@ -8844,7 +8844,7 @@ test("--send-draft --anyway bypasses the daemon's own hold and reaches the trans
     await harness.runtime.stop();
   }
 });
-test("a locally held send shows the unreviewed window, and a resend after it goes through", async () => {
+test("a resend can explicitly bypass a local hold", async () => {
   const calls: AgentMessageRequest[] = [];
   const harness = await messageHarness(async (request) => {
     calls.push(request);
@@ -8876,7 +8876,7 @@ test("a locally held send shows the unreviewed window, and a resend after it goe
     expect(calls.filter((call) => call.operation === "send")).toHaveLength(0);
     const resent = await harness.runtime.agentMessage(
       harness.context,
-      { ...send, idempotencyKey: "send-window-2", sendDraft: true },
+      { ...send, idempotencyKey: "send-window-2", sendDraft: true, continueAnyway: true },
       harness.apiKey,
     );
     expect(resent.state).toBe("sent");

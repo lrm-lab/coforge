@@ -61,8 +61,6 @@ export async function agentTask(
     const result = await taskWriteWithFreshness(
       {
         messageAttention: ports.messageAttention,
-        agentMessage: transport.agentMessage?.bind(transport),
-        workspaceId: ports.workspaceId,
         agentTask: transport.agentTask.bind(transport),
       },
       agentId,

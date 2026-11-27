@@ -136,7 +136,6 @@ test("an unknown field is still rejected by the strict schema before the board i
 });
 
 test("a held operation's --anyway reaches the freshness gate instead of being read as malformed", async () => {
-  let advancedTo: number | undefined;
   let executed = 0;
   const result = await handleAgentTaskPost(
     request({
@@ -156,10 +155,6 @@ test("a held operation's --anyway reaches the freshness gate instead of being re
     async () => ({
       freshness: {
         readRecent: async () => ({ unseen: [], maxSequence: 7 }),
-        advanceReadThrough: async (sequence: number) => {
-          advancedTo = sequence;
-          return sequence;
-        },
       },
       scope: {} as never,
     }),
@@ -167,7 +162,6 @@ test("a held operation's --anyway reaches the freshness gate instead of being re
 
   expect(result.status).toBe(200);
   expect(executed).toBe(1);
-  expect(advancedTo).toBe(7);
 });
 
 test("a non-boolean --anyway is still refused as a malformed body", async () => {

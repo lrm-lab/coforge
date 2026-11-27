@@ -71,12 +71,11 @@ export async function advanceResolvedAgentReadThrough(
   { conversationId, threadRootId }: ResolvedAgentTarget,
   seenUpToSequence: number,
 ): Promise<number> {
-  const latest = await ports.db.message.findFirst({
-    where: { conversationId, threadRootId },
-    orderBy: { sequence: "desc" },
-    select: { sequence: true },
-  });
-  const bounded = Math.min(seenUpToSequence, latest?.sequence ?? 0);
+  const bounded = await boundResolvedAgentSeenSequence(
+    ports,
+    { conversationId, threadRootId },
+    seenUpToSequence,
+  );
   if (bounded && threadRootId) {
     const member = await ports.db.conversationMember.findUniqueOrThrow({
       where: { conversationId_agentId: { conversationId, agentId } },
@@ -116,6 +115,19 @@ export async function advanceResolvedAgentReadThrough(
       }
     });
   return bounded;
+}
+
+export async function boundResolvedAgentSeenSequence(
+  ports: Pick<DirectConversationPorts, "db">,
+  { conversationId, threadRootId }: Pick<ResolvedAgentTarget, "conversationId" | "threadRootId">,
+  seenUpToSequence: number,
+): Promise<number> {
+  const latest = await ports.db.message.findFirst({
+    where: { conversationId, threadRootId },
+    orderBy: { sequence: "desc" },
+    select: { sequence: true },
+  });
+  return Math.min(seenUpToSequence, latest?.sequence ?? 0);
 }
 
 /** These messages, oldest first, as Agent-facing records. */

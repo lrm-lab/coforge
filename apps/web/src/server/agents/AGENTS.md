@@ -106,12 +106,8 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - A key that already committed is answered from its request record before the
   target or its freshness is read (`reason: "already_committed"`): no later
   change may report a committed send as refused or held.
-- When every pending message was already seen, the boundary that may advance
-  over them is the larger of the Agent's report and the server's own
-  read-through, not the client's boundary alone. The `check` that showed those
-  messages already moved the read-through, so this is safe, and it is what
-  keeps an Agent's exact set small in the steady "notified → check → send"
-  loop.
+- Send and Task Board writes use freshness evidence within the request. Held,
+  forwarded, failed, and bypassed writes leave the read cursor untouched.
 - `agent-history-boundary.server.ts` is the one contiguity rule for an Agent
   history page: the `modelSeenUpToSeq` it reports and the read-through it moves.
   A page read from an explicit `fromSequence` never joins.

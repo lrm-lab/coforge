@@ -150,7 +150,7 @@ describe("Agent Task freshness", () => {
     }
   });
 
-  test("claim isolates exact-target freshness, bounds pending reads, and preserves Task results", async () => {
+  test("claim isolates exact-target freshness and preserves the upstream Task result", async () => {
     const messageCalls: AgentMessageRequest[] = [];
     const upstream = {
       protocolMajor: 1,
@@ -182,26 +182,19 @@ describe("Agent Task freshness", () => {
     );
     try {
       await harness.deliver(3, "#unrelated");
-      const firstTouch = await harness.runtime.agentTask(
-        harness.context,
-        { operation: "claim", idempotencyKey: "first-touch", target: "#tasks", number: 7 },
-        harness.apiKey,
-      );
-      expect(firstTouch).toMatchObject({ state: "held", freshnessContextMode: "inline" });
-      expect(messageCalls[0]).toMatchObject({ target: "#tasks", limit: 3 });
-
       const result = await harness.runtime.agentTask(
         harness.context,
         { operation: "claim", idempotencyKey: "claim-forward", target: "#tasks", number: 7 },
         harness.apiKey,
       );
       expect(result).toBe(upstream);
+      expect(messageCalls).toHaveLength(0);
     } finally {
       await harness.runtime.stop();
     }
   });
 
-  test("an unavailable exact-target pending read holds instead of forwarding or consuming", async () => {
+  test("a pending delivery holds repeatedly without a background read", async () => {
     const messageCalls: AgentMessageRequest[] = [];
     const taskCalls: TaskRequest[] = [];
     const harness = await messageHarness(
@@ -229,23 +222,18 @@ describe("Agent Task freshness", () => {
         number: 7,
       };
 
-      expect(await harness.runtime.agentTask(harness.context, command, harness.apiKey)).toEqual({
-        tasks: [],
-        state: "held",
-        freshnessContextMode: "inline",
-        heldMessages: [],
-        newMessageCount: 1,
-      });
-      expect(messageCalls[0]).toMatchObject({
-        target: "#tasks",
-        fromSequence: 5,
-        throughSequence: 5,
-        limit: 3,
-      });
-      expect(taskCalls).toHaveLength(0);
-
-      await harness.runtime.agentTask(harness.context, command, harness.apiKey);
-      expect(messageCalls).toHaveLength(2);
+      for (let repeat = 0; repeat < 2; repeat++) {
+        expect(
+          await harness.runtime.agentTask(harness.context, command, harness.apiKey),
+        ).toMatchObject({
+          tasks: [],
+          state: "held",
+          freshnessContextMode: "inline",
+          heldMessages: [{ sequence: 5 }],
+          newMessageCount: 1,
+        });
+      }
+      expect(messageCalls).toHaveLength(0);
       expect(taskCalls).toHaveLength(0);
     } finally {
       await harness.runtime.stop();
@@ -289,7 +277,7 @@ describe("Agent Task freshness", () => {
     }
   });
 
-  test("an attached write forwards the seen boundary and consumes only after it answers", async () => {
+  test("an attached write leaves its pending delivery unread", async () => {
     const messageCalls: AgentMessageRequest[] = [];
     const taskCalls: TaskRequest[] = [];
     const harness = await messageHarness(
@@ -329,23 +317,19 @@ describe("Agent Task freshness", () => {
       expect(messageCalls).toHaveLength(0);
       expect(taskCalls[0]).not.toHaveProperty("seenUpToSeq");
 
-      // The attached window was shown and the write answered: the consumed frontier moved over
-      // it, so the next write reports the boundary and the same delivery no longer holds a claim.
       const second = await harness.runtime.agentTask(
         harness.context,
         { operation: "claim", idempotencyKey: "claim", target: "#tasks", number: 7 },
         harness.apiKey,
       );
-      expect(second).toMatchObject({ tasks: [] });
-      expect(taskCalls[1]).toMatchObject({
-        consumptionEvidence: [{ target: { conversationId: "conversation-a" }, entry: { seq: 4 } }],
-      });
+      expect(second).toMatchObject({ state: "held", heldMessages: [{ sequence: 4 }] });
+      expect(taskCalls).toHaveLength(1);
     } finally {
       await harness.runtime.stop();
     }
   });
 
-  test("unclaim forwards the seen boundary and consumes its attached window like update", async () => {
+  test("unclaim keeps its attached window out of the next write’s read evidence", async () => {
     const taskCalls: TaskRequest[] = [];
     const harness = await messageHarness(
       async (request) => ({
@@ -384,10 +368,8 @@ describe("Agent Task freshness", () => {
       );
       expect(taskCalls).toHaveLength(2);
       expect(taskCalls[0]).toMatchObject({ operation: "unclaim" });
-      expect(taskCalls[1]).toMatchObject({
-        operation: "update",
-        consumptionEvidence: [{ target: { conversationId: "conversation-a" }, entry: { seq: 9 } }],
-      });
+      expect(taskCalls[1]?.operation).toBe("update");
+      expect(taskCalls[1]?.consumptionEvidence).toBeUndefined();
     } finally {
       await harness.runtime.stop();
     }

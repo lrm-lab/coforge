@@ -17,7 +17,7 @@ test.each([true, false])(
       threadRootId: "22222222-2222-4222-8222-222222222222",
     };
     const target = "#triage:22222222";
-    const advanced: number[] = [];
+    const bounded: number[] = [];
     const exact: (readonly number[] | undefined)[] = [];
     const response = await handleAgentMessagesPost(
       messagePost({
@@ -40,8 +40,8 @@ test.each([true, false])(
         repository: {
           agentTargetFreshness: async () => ({
             consumptionScope,
-            advanceReadThrough: async (seq) => {
-              advanced.push(seq);
+            boundSeenSequence: async (seq) => {
+              bounded.push(seq);
               return seq;
             },
             readPending: async (_seen, excluded) => {
@@ -55,7 +55,7 @@ test.each([true, false])(
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ consumptionScope });
-    expect(advanced).toEqual(matches ? [4] : []);
+    expect(bounded).toEqual(matches ? [4] : []);
     expect(exact).toEqual([matches ? [6] : undefined]);
   },
 );
@@ -93,7 +93,7 @@ test("a channel read opts into the server's resolved conversation scope", async 
 
 test("the Task POST uses scoped evidence only in its resolved conversation", async () => {
   const consumptionScope = { conversationId: "11111111-1111-4111-8111-111111111111" };
-  const advanced: number[] = [];
+  const bounded: number[] = [];
   const exact: (readonly number[] | undefined)[] = [];
   const response = await handleAgentTaskPost(
     new Request("https://server.example/api/agent/v1/tasks", {
@@ -118,8 +118,8 @@ test("the Task POST uses scoped evidence only in its resolved conversation", asy
       scope: {} as never,
       freshness: {
         consumptionScope,
-        advanceReadThrough: async (seq) => {
-          advanced.push(seq);
+        boundSeenSequence: async (seq) => {
+          bounded.push(seq);
           return seq;
         },
         readPending: async (_seen, excluded) => {
@@ -131,7 +131,7 @@ test("the Task POST uses scoped evidence only in its resolved conversation", asy
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ idempotencyKey: "same-key", consumptionScope });
-  expect(advanced).toEqual([5]);
+  expect(bounded).toEqual([5]);
   expect(exact).toEqual([[7]]);
 });
 

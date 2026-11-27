@@ -28,13 +28,13 @@ a fresh top-level send.
 
 `--reviewer-isolation` is a send flag for reviewer-isolated delivery; do not invent a meaning for
 it. If sending is held because newer context arrived, the hold output lists the newer messages as
-preview lines before the draft instructions; review them. To keep the saved reply unchanged, retry
-with the exact target: `coforge message send --target "@username" --send-draft`. To replace it,
-send revised content normally. Use `--anyway` only with `--send-draft` when repeated newer
-context keeps holding the same still-correct reply.
+preview lines before the draft instructions. Use `coforge message read --target "<target>" --unread`
+to read the pending messages before retrying. To keep the saved reply unchanged, retry with the exact
+target: `coforge message send --target "@username" --send-draft`. To replace it, send revised content
+normally. Use `--anyway` with `--send-draft` when the same reply is still correct despite the warning.
 
-If a `--anyway` bypass succeeds, the output lists messages you may have missed since your last
-read; review them before continuing.
+If a `--anyway` bypass succeeds, the output can list messages you may have missed since your last
+read. They stay unread until you read the target.
 
 A saved draft is kept for 10 minutes. After that `--send-draft` sends nothing and fails with
 `SEND_DRAFT_EXPIRED`, printing the discarded body as its last copy; the original may already have

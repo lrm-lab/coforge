@@ -27,7 +27,7 @@ const freshness = (pending: number[] = [], recent: number[] = []): AgentTargetFr
     maxSequence: recent.length ? Math.max(...recent) : undefined,
   }),
   readThrough: async () => 0,
-  advanceReadThrough: async (sequence: number) => sequence,
+  boundSeenSequence: async (sequence: number) => sequence,
 });
 
 describe("Agent task write freshness", () => {
@@ -56,13 +56,13 @@ describe("Agent task write freshness", () => {
     expect(executed).toBe(0);
   });
 
-  test("continueAnyway executes a held operation and advances over the held context", async () => {
+  test("continueAnyway executes a held operation without consuming the held context", async () => {
     let executed = 0;
-    let advancedTo: number | undefined;
-    const withAdvanced = freshness([4, 5], [4, 5]);
-    withAdvanced.advanceReadThrough = async (sequence: number) => {
-      advancedTo = sequence;
-      return sequence;
+    let recentReads = 0;
+    const forcedFreshness = freshness([4, 5], [4, 5]);
+    forcedFreshness.readRecent = async () => {
+      recentReads++;
+      return { unseen: [record(4), record(5)], maxSequence: 5 };
     };
     for (const operation of ["create", "claim", "assign"] as const) {
       const result = await executeAgentTaskWithFreshness(
@@ -73,7 +73,7 @@ describe("Agent task write freshness", () => {
               return { tasks: [] };
             },
           },
-          freshness: async () => ({ freshness: withAdvanced, scope: {} as never }),
+          freshness: async () => ({ freshness: forcedFreshness, scope: {} as never }),
         },
         principal,
         { operation, idempotencyKey: operation, target: "#tasks", continueAnyway: true },
@@ -81,7 +81,7 @@ describe("Agent task write freshness", () => {
       expect(result.state).toBeUndefined();
     }
     expect(executed).toBe(3);
-    expect(advancedTo).toBe(5);
+    expect(recentReads).toBe(0);
   });
 
   test("a held operation reports only the count under reviewer isolation", async () => {
@@ -125,7 +125,7 @@ describe("Agent task write freshness", () => {
     }
   });
 
-  test("the Agent's reported boundary settles what it already reviewed", async () => {
+  test("the Agent's reported boundary stays local to the freshness decision", async () => {
     let executed = 0;
     const result = await executeAgentTaskWithFreshness(
       {

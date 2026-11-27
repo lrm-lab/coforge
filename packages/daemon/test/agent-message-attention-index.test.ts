@@ -1045,7 +1045,6 @@ test("an operation that changes nothing writes no snapshot", () => {
   index.recordTargetAlias("agent-1", "@Agent", "@agent");
   index.recordExactSeen("agent-1", new Map([["@agent", [12]]]));
   index.recordExactSeen("agent-1", new Map([["@agent", [12, 8]]]));
-  index.recordSendContext("agent-1", "@agent", 7);
   index.recordHistoryRead("agent-1", {
     spelling: "@agent",
     target: "@agent",

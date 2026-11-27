@@ -1,4 +1,5 @@
-import { mergeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
+import { HELD_CONTEXT_LIMIT, mergeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentMessageTransportResponse } from "#src/connection/agent-http-clients";
 
 /**
@@ -139,4 +140,24 @@ export function sendSeenExactSeqs(
 ): number[] | undefined {
   const reported = mergeSeenExactSeqs(seenUpToSeq ?? 0, draft ?? [], shown);
   return reported.length > 0 ? reported : undefined;
+}
+
+export function pendingMessageRecords(
+  attention: AgentMessageAttentionIndex,
+  agentId: string,
+  target: string,
+) {
+  return attention
+    .pendingWindow(agentId, target, HELD_CONTEXT_LIMIT)
+    .map(({ delivery, receivedAt }) => ({
+      id: delivery.messageId,
+      sequence: delivery.sequence,
+      senderKind: delivery.latestSenderKind ?? "system",
+      senderHandle: delivery.latestSenderHandle ?? "",
+      senderDescription: delivery.latestSenderDescription ?? "",
+      target,
+      body: delivery.body,
+      createdAt: new Date(receivedAt).toISOString(),
+      attachments: [],
+    }));
 }

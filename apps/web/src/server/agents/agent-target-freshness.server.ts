@@ -5,7 +5,7 @@ import type {
 import type { AgentMessageRecord } from "./agent-messages.server";
 
 /**
- * The freshness reads and read-through advance of one already-resolved Agent-facing target. The
+ * The freshness reads of one already-resolved Agent-facing target. The
  * Agent's own messages are never context to review, and every read that takes
  * `excludingSequences` (`seenExactSeqs`, the messages the Agent was shown one by one) leaves those
  * out as well: this port is the one place that rule is applied.
@@ -29,10 +29,10 @@ export type AgentTargetFreshness = {
     limit: number,
     excludingSequences?: readonly number[],
   ): Promise<{ unseen: readonly AgentMessageRecord[]; maxSequence: number | undefined }>;
-  /** The server's own read-through for the target: what reads, checks and reported boundaries
+  /** The server's own read-through for the target: what reads and checks
    * have consumed, as this send found it. */
   readThrough?(): Promise<number>;
-  advanceReadThrough?(sequence: number): Promise<number>;
+  boundSeenSequence?(sequence: number): Promise<number>;
 };
 
 type FreshnessEvidence = {

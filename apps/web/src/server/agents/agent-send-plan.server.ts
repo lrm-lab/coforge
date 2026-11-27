@@ -14,8 +14,6 @@ type ForwardPlan = {
   decision: "forward" | "bypass";
   reason: string;
   fact: Omit<FreshnessDecisionFactInput, "agentId" | "target" | "decision" | "reason">;
-  /** The consume effect: the read-through advances over messages the Agent has seen. */
-  advanceTo?: number;
   /** A bypassed hold's report of what the Agent chose not to review. */
   recentUnread?: readonly AgentMessageRecord[];
 };
@@ -27,17 +25,11 @@ export async function planAgentSend(
   factId: (fact: Omit<FreshnessDecisionFactInput, "agentId" | "target">) => Promise<string>,
 ): Promise<(AgentSendMessageResult & { state: "held" }) | ForwardPlan> {
   const withheld = input.freshnessContextMode === "withheld";
-  // The Agent reports the boundary it has already reviewed; the server advances its own
-  // read-through to it (monotone) and uses the advanced value as the freshness boundary.
   let seen = 0;
   if (input.seenUpToSeq !== undefined) {
-    if (!freshness?.advanceReadThrough)
-      throw new Error("Agent read-through advancement is unavailable");
-    seen = await freshness.advanceReadThrough(input.seenUpToSeq);
+    if (!freshness?.boundSeenSequence) throw new Error("Agent freshness boundary is unavailable");
+    seen = await freshness.boundSeenSequence(input.seenUpToSeq);
   }
-  // What lies at or below that boundary, and what the Agent was shown one by one, is seen in either
-  // mode: the mode decides what a hold presents, not what the Agent has already seen. With no
-  // boundary, pending context starts above the Agent's own latest message.
   const pendingBoundary = seen || undefined;
   const excluded = input.seenExactSeqs?.length ? input.seenExactSeqs : undefined;
   const unconsumed = (await freshness?.readPending?.(pendingBoundary, excluded)) ?? [];
@@ -86,15 +78,6 @@ export async function planAgentSend(
         : {}),
     };
   }
-  // Pending context the Agent had all been shown: forward, and advance the boundary over it when a
-  // boundary already known reaches its newest message.
-  //
-  // The known boundary is not the client's alone (the Agent's reported `seenUpToSeq` and its
-  // daemon's ledger): the server's own read-through counts too, which the `check` that showed
-  // these messages already moved (the drain is ack-on-drain). That is what lets the steady
-  // "notified → check → send" loop advance the boundary, so the Agent's exact set stays small
-  // instead of growing to its 2500 cap; and it is safe because the drain already confirmed the
-  // Agent was shown those messages.
   const pendingMaxSeq = excluded
     ? ((await freshness?.maxPendingSequence?.(pendingBoundary)) ?? 0)
     : 0;
@@ -109,7 +92,6 @@ export async function planAgentSend(
         heldMessageCount: 0,
         omittedMessageCount: 0,
       },
-      advanceTo: known >= pendingMaxSeq ? pendingMaxSeq : undefined,
     };
   }
   // No pending context and a boundary: forward at that boundary.
@@ -123,7 +105,6 @@ export async function planAgentSend(
       : undefined;
   if (recent?.maxSequence !== undefined) {
     const recentMaxSeq = recent.maxSequence;
-    // Every recent message was already seen: forward and advance the boundary over the window.
     if (recent.unseen.length === 0)
       return {
         decision: "forward",
@@ -134,10 +115,7 @@ export async function planAgentSend(
           heldMessageCount: 0,
           omittedMessageCount: 0,
         },
-        advanceTo: recentMaxSeq,
       };
-    // `syncing_hold` over the unconsumed messages; the notice's boundary is the whole window's
-    // newest, which is what the Agent consumes by reading it.
     const heldMessages = recent.unseen.slice(-HELD_CONTEXT_LIMIT);
     return {
       state: "held",

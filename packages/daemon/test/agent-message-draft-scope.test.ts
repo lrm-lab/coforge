@@ -37,8 +37,11 @@ test.each(["send-draft", "continue", "old-draft"] as const)(
         return {
           ...response,
           accepted: true,
-          consumptionScope: { ...readScope(request.agentId, target), conversationId: replacement },
-          modelSeenUpToSeq: 7,
+          consumptionScope: {
+            ...readScope(request.agentId, target),
+            conversationId: request.idempotencyKey === "read-original" ? original : replacement,
+          },
+          modelSeenUpToSeq: request.idempotencyKey === "read-original" ? 31 : 70,
         };
       sends.push(request);
       return sends.length === 1
@@ -46,7 +49,7 @@ test.each(["send-draft", "continue", "old-draft"] as const)(
             ...response,
             accepted: false,
             state: "held",
-            seenUpToSeq: 31,
+            seenUpToSeq: 35,
             writeConsumptionScope:
               operation === "old-draft" ? undefined : { conversationId: original },
           }
@@ -67,6 +70,13 @@ test.each(["send-draft", "continue", "old-draft"] as const)(
     const before = await open();
     let continuationId: string | undefined;
     try {
+      if (operation !== "old-draft") {
+        await before.runtime.agentMessage(
+          before.context,
+          { idempotencyKey: "read-original", context: before.context, operation: "read", target },
+          before.apiKey,
+        );
+      }
       const held = await run(before, { operation: "send", target, content: "held reply" });
       continuationId = held.continuation?.id;
       await before.runtime.handleAgentMessage({
@@ -74,7 +84,7 @@ test.each(["send-draft", "continue", "old-draft"] as const)(
         requestId: "replacement-delivery",
         messageId: "replacement-message",
         deliveryId: "replacement-delivery",
-        sequence: 7,
+        sequence: 70,
         workspaceId: "workspace-a",
         conversationId: replacement,
         agentId: "agent-a",
@@ -91,6 +101,10 @@ test.each(["send-draft", "continue", "old-draft"] as const)(
     const saved = verify.read("agent-a");
     const draft = await new AgentMessageDraftStore(verify.stateDb("agent-a")).lookup(target);
     verify.close();
+    expect(saved.scopedTargets).toContainEqual({
+      target,
+      entry: expect.objectContaining({ conversationId: replacement, seq: 70 }),
+    });
     if (operation !== "old-draft") {
       expect(saved.scopedTargets).toContainEqual({
         target,
@@ -116,6 +130,7 @@ test.each(["send-draft", "continue", "old-draft"] as const)(
       }
       expect(sends).toHaveLength(2);
       expect(sends[1]?.idempotencyKey).toBe(sends[0]?.idempotencyKey);
+      expect(sends[1]?.seenUpToSeq).toBe(operation === "old-draft" ? undefined : 31);
       expect(sends[1]?.consumptionEvidence).toEqual(
         operation === "old-draft"
           ? undefined

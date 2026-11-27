@@ -9,7 +9,6 @@ import type {
   AgentConsumedSeqState,
 } from "#src/persistence/agent-consumed-seq-store";
 import { delivery, session } from "./fixtures/attention-delivery";
-import { messageRecord } from "./fixtures/message-record";
 
 const agentId = "agent-1";
 const target = "#team:#42";
@@ -121,48 +120,29 @@ test("a malformed forwarded read boundary cannot consume a later delivery", asyn
   expect(notices).toHaveLength(1);
 });
 
-test.each([
-  ["replacement", true],
-  [undefined, false],
-] as const)(
-  "a task hold shows the read page and uses only its receipt for consumption (%s)",
-  async (conversationId, consumed) => {
-    const { index } = attention();
-    taskRead(index, "replacement", 5);
-    taskRead(index, "original", 31);
-    await index.receive({
-      ...delivery("replacement-pending"),
-      target,
-      conversationId: "replacement",
-      sequence: 6,
-      body: "Unpreviewed ".repeat(130),
-    });
+test("a task hold shows pending context without consuming either conversation", async () => {
+  const { index } = attention();
+  taskRead(index, "replacement", 5);
+  taskRead(index, "original", 31);
+  await index.receive({
+    ...delivery("replacement-pending"),
+    target,
+    conversationId: "replacement",
+    sequence: 6,
+    body: "Unpreviewed ".repeat(130),
+  });
 
-    const hold = await heldTaskResult(
-      {
-        messageAttention: index,
-        workspaceId: "workspace-1",
-        agentMessage: async ({ idempotencyKey }) => ({
-          idempotencyKey,
-          accepted: true,
-          attentionCount: 1,
-          messages: [messageRecord(6, "@ada", target)],
-          ...(conversationId
-            ? { consumptionScope: { agentId, conversationId, channelType: "thread", target } }
-            : {}),
-        }),
-      },
-      agentId,
-      { operation: "claim", idempotencyKey: "held", target, number: 42 },
-      target,
-      "fixture-key",
-    );
+  const hold = heldTaskResult(
+    index,
+    agentId,
+    { operation: "claim", idempotencyKey: "held", target, number: 42 },
+    target,
+  );
 
-    expect(hold?.heldMessages?.map(({ sequence }) => sequence)).toEqual([6]);
-    expect(index.hasSeen(agentId, target, 6, "replacement")).toBe(consumed);
-    expect(index.modelSeenSequence(agentId, target, "original")).toBe(31);
-  },
-);
+  expect(hold?.heldMessages?.map(({ sequence }) => sequence)).toEqual([6]);
+  expect(index.hasSeen(agentId, target, 6, "replacement")).toBe(false);
+  expect(index.modelSeenSequence(agentId, target, "original")).toBe(31);
+});
 
 test("replaying an older conversation preserves both conversations' read frontiers", async () => {
   const { index, notices, acknowledgements } = attention();
@@ -351,7 +331,7 @@ test("restoring a short thread spelling consumes only the matching replay", asyn
   expect(notices).toHaveLength(1);
 });
 
-test("an unseen earlier read or write scope cannot replace the current rollback slot", () => {
+test("an unseen earlier read scope cannot replace the current rollback slot", () => {
   const deltas: AgentConsumedSeqDelta[] = [];
   const { index } = attention({
     read: () => ({ targets: {}, aliases: {}, nextReadOrder: 1 }),
@@ -361,14 +341,11 @@ test("an unseen earlier read or write scope cannot replace the current rollback 
   index.bindConversation(agentId, target, "replacement");
   taskRead(index, "replacement", 7);
   taskRead(index, "original-read", 31);
-  index.recordSendContext(agentId, target, 26, undefined, { conversationId: "original-write" });
 
   expect(deltas.map((delta) => delta.upsertTargets?.[0]?.entry.conversationId)).toEqual([
     "replacement",
     undefined,
-    undefined,
   ]);
   expect(index.modelSeenSequence(agentId, target, "original-read")).toBe(31);
-  expect(index.modelSeenSequence(agentId, target, "original-write")).toBe(26);
   expect(index.modelSeenSequence(agentId, target)).toBe(7);
 });

@@ -4,12 +4,12 @@ import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TaskCommand } from "@lrm/coforge-sdk/internal";
-import type { AgentMessageTransportResponse } from "#src/connection/agent-message-adapters";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import { AgentPreflightError } from "#src/daemon-runtime/agent-preflight-error";
 import { taskHoldOffered } from "#src/daemon-runtime/agent-task-hold-offers";
 import { taskWriteWithFreshness } from "#src/daemon-runtime/task-write-freshness";
+import { session } from "./fixtures/attention-delivery";
 
 // macOS tmpdir lives under /var, a symlink; the cursor store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -33,48 +33,33 @@ const freshDeps = (agentId = "agent-1") => {
   const attention = new AgentMessageAttentionIndex(
     "workspace-1",
     {
-      session: () => {
-        throw new Error("task writes never talk to the session");
-      },
+      session: () => session(),
     },
     async () => {},
     () => {},
     { shouldHold: () => false, enqueue: () => {}, busy: () => {}, consumedSeqs: store },
   );
   attention.bindConversation(agentId, "#c", "conversation-1");
-  const readMessages: Array<{ sequence: number; target: string }> = [];
   const calls: TaskCommand[] = [];
   return {
     attention,
     calls,
-    markRead: (sequence: number) => readMessages.push({ sequence, target: "#c" }),
+    deliver: (sequence: number) =>
+      attention.receive({
+        protocolMajor: 1,
+        method: "agent:v1:message:deliver",
+        requestId: "request",
+        workspaceId: "workspace-1",
+        agentId,
+        conversationId: "conversation-1",
+        messageId: `message-${sequence}`,
+        deliveryId: `delivery-${sequence}`,
+        target: "#c",
+        sequence,
+        body: "Unread ".repeat(150),
+      }),
     deps: {
       messageAttention: attention,
-      agentMessage: async () =>
-        ({
-          idempotencyKey: "read",
-          accepted: true,
-          attentionCount: 0,
-          messageId: "",
-          consumptionScope: {
-            agentId,
-            conversationId: "conversation-1",
-            channelType: "dm",
-            target: "#c",
-          },
-          summaries: [],
-          messages: readMessages.map((message) => ({
-            id: `m${message.sequence}`,
-            ...message,
-            senderKind: "human",
-            senderHandle: "ada",
-            senderDescription: "",
-            body: "unread context",
-            createdAt: "now",
-            attachments: [],
-          })),
-        }) as AgentMessageTransportResponse,
-      workspaceId: "workspace-1",
       agentTask: async (command: TaskCommand) => {
         calls.push(command);
         return { idempotencyKey: command.idempotencyKey, tasks: [] };
@@ -86,25 +71,33 @@ const freshDeps = (agentId = "agent-1") => {
 const command = (overrides: Partial<TaskCommand> = {}): TaskCommand =>
   ({ idempotencyKey: "request", operation: "create", target: "#c", ...overrides }) as TaskCommand;
 
-test("a create with unread context is held, and the shown messages are recorded", async () => {
+test("a create with unread context holds without advancing its cursor", async () => {
   const fresh = freshDeps();
-  fresh.markRead(9);
+  await fresh.deliver(9);
   const result = await taskWriteWithFreshness(fresh.deps, "agent-1", command(), "#c", "key");
   expect(result).toMatchObject({
     state: "held",
     heldMessages: [{ sequence: 9 }],
   });
-  // The hold showed message 9: the boundary advanced over it and the hold was offered.
-  expect(fresh.attention.modelSeenSequence("agent-1", "#c")).toBe(9);
+  expect(fresh.attention.modelSeenSequence("agent-1", "#c")).toBe(0);
   expect(taskHoldOffered("agent-1", "#c")).toBe(true);
 });
 
-test("an identical retry after a hold executes without --anyway", async () => {
+test("an identical retry releases the hold after an explicit read", async () => {
   const fresh = freshDeps();
-  fresh.markRead(9);
+  await fresh.deliver(9);
   const held = await taskWriteWithFreshness(fresh.deps, "agent-1", command(), "#c", "key");
   expect(held).toMatchObject({ state: "held" });
 
+  const stillHeld = await taskWriteWithFreshness(fresh.deps, "agent-1", command(), "#c", "key");
+  expect(stillHeld).toMatchObject({ state: "held" });
+  fresh.attention.recordHistoryRead("agent-1", {
+    spelling: "#c",
+    target: "#c",
+    through: 9,
+    shown: [9],
+    scope: { channelType: "dm", conversationId: "conversation-1", target: "#c" },
+  });
   const result = await taskWriteWithFreshness(fresh.deps, "agent-1", command(), "#c", "key");
   expect(result).toMatchObject({ idempotencyKey: "request", tasks: [] });
   expect(fresh.calls).toHaveLength(1);
@@ -112,7 +105,7 @@ test("an identical retry after a hold executes without --anyway", async () => {
 
 test("--anyway right after a hold executes the write", async () => {
   const fresh = freshDeps();
-  fresh.markRead(9);
+  await fresh.deliver(9);
   const held = await taskWriteWithFreshness(fresh.deps, "agent-1", command(), "#c", "key");
   expect(held).toMatchObject({ state: "held" });
 
@@ -128,17 +121,16 @@ test("--anyway right after a hold executes the write", async () => {
 
 test("--anyway without a prior hold is refused as a local precondition", async () => {
   const fresh = freshDeps("agent-2");
-  fresh.markRead(9);
+  await fresh.deliver(9);
   expect(
     taskWriteWithFreshness(fresh.deps, "agent-2", command({ continueAnyway: true }), "#c", "key"),
   ).rejects.toThrow(AgentPreflightError);
 });
 
-test("a create with --message-id bypasses channel top-level freshness and records thread holds on the thread target", async () => {
+test("a create with --message-id bypasses channel top-level freshness and keeps a thread hold separate from either read cursor", async () => {
   const fresh = freshDeps("agent-3");
   fresh.attention.bindConversation("agent-3", "#c:msg-1234", "conversation-1");
   fresh.attention.recordModelSeen("agent-3", "#c", 50);
-  fresh.markRead(60);
   const sent: TaskCommand[] = [];
   const deps = {
     ...fresh.deps,
@@ -176,6 +168,6 @@ test("a create with --message-id bypasses channel top-level freshness and record
   expect(sent).toHaveLength(1);
   expect(sent[0]!.seenUpToSeq).toBeUndefined();
   expect(fresh.attention.modelSeenSequence("agent-3", "#c")).toBe(50);
-  expect(fresh.attention.modelSeenSequence("agent-3", "#c:msg-1234")).toBe(55);
+  expect(fresh.attention.modelSeenSequence("agent-3", "#c:msg-1234")).toBe(0);
   expect(taskHoldOffered("agent-3", "#c:msg-1234")).toBe(true);
 });

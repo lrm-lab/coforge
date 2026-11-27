@@ -1,7 +1,7 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
 
 import {
-  advanceResolvedAgentReadThrough,
+  boundResolvedAgentSeenSequence,
   agentMessagesByIds,
 } from "./agent-message-reads.repositories.server";
 import { resolvedConsumptionScope } from "./resolved-agent-target.server";
@@ -17,9 +17,7 @@ import {
 } from "#src/server/db/repositories/agent-attention.repositories.server";
 
 /**
- * One Agent-facing target resolved once, with the freshness reads and the read-through advance
- * a send checks against it (`executeAgentSendMessageWithPolicy`), so they share that resolution,
- * the Agent's membership lookup, and each pending scope (a read and its count share one).
+ * Freshness queries share the resolved target, membership lookup and pending scope.
  */
 export async function agentTargetFreshness(
   ports: DirectConversationPorts,
@@ -49,8 +47,6 @@ export function agentResolvedTargetFreshness(
   options: { excludeSystemMessages?: boolean } = {},
 ) {
   const { conversationId, threadRootId, canonicalTarget, isChannel } = resolved;
-  // One membership lookup for every read of this send. Its read-through may predate this send's
-  // own advance, which only raises it: the planner takes the larger of the two.
   let member: Promise<{ id: string; agentReadThroughSequence: number } | null> | undefined;
   const agentMember = () =>
     (member ??= ports.db.conversationMember.findUnique({
@@ -89,8 +85,8 @@ export function agentResolvedTargetFreshness(
   };
   const freshness = {
     consumptionScope: resolvedConsumptionScope(conversationId, threadRootId),
-    advanceReadThrough: (seenUpToSequence: number) =>
-      advanceResolvedAgentReadThrough(ports, workspaceId, agentId, resolved, seenUpToSequence),
+    boundSeenSequence: (seenUpToSequence: number) =>
+      boundResolvedAgentSeenSequence(ports, resolved, seenUpToSequence),
     readThrough: async () => {
       const own = await agentMember();
       if (!own) return 0;

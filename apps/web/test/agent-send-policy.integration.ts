@@ -5,7 +5,7 @@ import { executeAgentSendMessageWithPolicy } from "#src/server/agents/agent-mess
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
-test("an Agent send forwards past its seen boundary, holds a newer reply, and refuses an unreachable target before sending", async () => {
+test("an Agent send preserves both read positions when forwarded, held, failed or forced", async () => {
   const connectionString = Bun.env.THREAD_TEST_DATABASE_URL;
   if (!connectionString) throw new Error("THREAD_TEST_DATABASE_URL is required (local PostgreSQL)");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -52,9 +52,37 @@ test("an Agent send forwards past its seen boundary, holds a newer reply, and re
         return sender.executeFromAgent(input);
       },
     };
-    const sendTo = (destination: string, seenUpToSeq?: number) =>
+    const readPositions = async () => {
+      const members = await db.conversationMember.findMany({
+        where: { conversationId: opened.conversationId },
+        orderBy: { id: "asc" },
+        select: { id: true, readThroughSequence: true, agentReadThroughSequence: true },
+      });
+      const threadReads = await db.threadRead.findMany({
+        where: { rootMessageId: root.id },
+        orderBy: { memberId: "asc" },
+        select: { memberId: true, readThroughSequence: true },
+      });
+      return { members, threadReads };
+    };
+    const originalReadPositions = await readPositions();
+    const afterEachWrite: (typeof originalReadPositions)[] = [];
+    const sendTo = (
+      destination: string,
+      seenUpToSeq?: number,
+      options: { force?: boolean; fail?: boolean } = {},
+    ) =>
       executeAgentSendMessageWithPolicy(
-        { repository: repo, sender: recordingSender },
+        {
+          repository: repo,
+          sender: options.fail
+            ? {
+                executeFromAgent: async () => {
+                  throw new Error("send failed");
+                },
+              }
+            : recordingSender,
+        },
         {
           idempotencyKey: crypto.randomUUID(),
           workspaceId: workspace.id,
@@ -62,6 +90,7 @@ test("an Agent send forwards past its seen boundary, holds a newer reply, and re
           target: destination,
           content: "response",
           seenUpToSeq,
+          continueAnyway: options.force,
         },
       );
 
@@ -78,6 +107,7 @@ test("an Agent send forwards past its seen boundary, holds a newer reply, and re
       select: { threadRootId: true, conversationId: true },
     });
     expect(stored).toEqual({ threadRootId: root.id, conversationId: opened.conversationId });
+    afterEachWrite.push(await readPositions());
 
     // A reply newer than the boundary the Agent reports holds the next send on it.
     const newerReply = await repo.sendMessage(
@@ -100,12 +130,22 @@ test("an Agent send forwards past its seen boundary, holds a newer reply, and re
       ["newer reply", `@${username}:${root.id}`],
     ]);
 
+    afterEachWrite.push(await readPositions());
+    await expect(sendTo(target, newerReply.sequence, { fail: true })).rejects.toThrow(
+      "send failed",
+    );
+    afterEachWrite.push(await readPositions());
+    const forced = await sendTo(target, newerReply.sequence, { force: true });
+    expect(forced).toMatchObject({ state: "sent", decision: "bypass" });
+    afterEachWrite.push(await readPositions());
+
     // An unreachable target is refused while reading its context, before the sender runs.
     await expect(sendTo("#not-joined")).rejects.toMatchObject({ code: "ACCESS_DENIED" });
     await expect(sendTo("@nobody-with-this-name", 5)).rejects.toMatchObject({
       code: "TARGET_NOT_ACCESSIBLE",
     });
-    expect(sentTargets).toEqual([target]);
+    expect(sentTargets).toEqual([target, target]);
+    expect(afterEachWrite).toEqual(Array(4).fill(originalReadPositions));
   } finally {
     await db.agentMessageDelivery.deleteMany({ where: { workspaceId: workspace.id } });
     await db.message.deleteMany({ where: { workspaceId: workspace.id } });

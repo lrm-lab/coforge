@@ -357,7 +357,7 @@ test("a send whose unreviewed messages the Agent was all shown one by one is not
       requestRecords: noRequestRecords,
       repository: {
         agentTargetFreshness: async () => ({
-          advanceReadThrough: async (sequence: number) => sequence,
+          boundSeenSequence: async (sequence: number) => sequence,
           readPending: async (after?: number, excluding?: readonly number[]) =>
             pending.filter(
               (row) => row.sequence > (after ?? 0) && !(excluding ?? []).includes(row.sequence),
@@ -371,7 +371,7 @@ test("a send whose unreviewed messages the Agent was all shown one by one is not
   expect(await result.json()).toMatchObject({ state: "sent", decision: "forward" });
 });
 
-test("a sent response carries the boundary the server advanced over messages the Agent had seen", async () => {
+test("a sent response omits the read cursor", async () => {
   const pending = [6, 8].map((sequence) => ({
     id: `message-${sequence}`,
     sequence,
@@ -390,7 +390,7 @@ test("a sent response carries the boundary the server advanced over messages the
       requestRecords: noRequestRecords,
       repository: {
         agentTargetFreshness: async () => ({
-          advanceReadThrough: async (sequence: number) => sequence,
+          boundSeenSequence: async (sequence: number) => sequence,
           readThrough: async () => 8,
           readPending: async (after?: number, excluding?: readonly number[]) =>
             pending.filter(
@@ -402,11 +402,9 @@ test("a sent response carries the boundary the server advanced over messages the
       sender: { executeFromAgent: async () => ({ id: "sent-1" }) },
     },
   );
-  expect(await result.json()).toMatchObject({
-    state: "sent",
-    reason: "exact_target_pending_already_seen",
-    seenUpToSeq: 8,
-  });
+  const sent = await result.json();
+  expect(sent).toMatchObject({ state: "sent", reason: "exact_target_pending_already_seen" });
+  expect(sent.seenUpToSeq).toBeUndefined();
 });
 
 test("rejects malformed mentions with 400", async () => {

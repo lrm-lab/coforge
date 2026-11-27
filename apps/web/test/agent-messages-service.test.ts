@@ -181,7 +181,7 @@ test("send policy forwards multiple attachmentIds to the sender in order", async
   });
 });
 
-test("send policy resolves the target once, then advances the read-through boundary before reading pending context", async () => {
+test("send policy resolves the target once, then bounds the request evidence before reading pending context", async () => {
   const calls: unknown[] = [];
   const result = await executeAgentSendMessageWithPolicy(
     {
@@ -189,8 +189,8 @@ test("send policy resolves the target once, then advances the read-through bound
         agentTargetFreshness: async (...args) => {
           calls.push(["target", ...args]);
           return {
-            advanceReadThrough: async (...advanceArgs) => {
-              calls.push(["advance", ...advanceArgs]);
+            boundSeenSequence: async (...boundaryArgs) => {
+              calls.push(["bound", ...boundaryArgs]);
               return 5;
             },
             readPending: async (...pendingArgs) => {
@@ -213,7 +213,7 @@ test("send policy resolves the target once, then advances the read-through bound
   );
   expect(calls).toEqual([
     ["target", "workspace-1", "agent-a", "@user"],
-    ["advance", 7],
+    ["bound", 7],
     ["pending", 5, undefined],
   ]);
   expect(result).toMatchObject({
@@ -223,7 +223,7 @@ test("send policy resolves the target once, then advances the read-through bound
   });
 });
 
-test("send policy fails closed when a trusted seen sequence cannot be advanced", async () => {
+test("send policy fails closed when a claimed boundary cannot be validated", async () => {
   await expect(
     executeAgentSendMessageWithPolicy(
       {
@@ -239,7 +239,7 @@ test("send policy fails closed when a trusted seen sequence cannot be advanced",
         seenUpToSeq: 7,
       },
     ),
-  ).rejects.toThrow("advancement is unavailable");
+  ).rejects.toThrow("freshness boundary is unavailable");
 });
 
 function pendingRow(sequence: number, body: string) {
@@ -303,7 +303,7 @@ test("send policy holds unseen pending context, then forwards once the Agent rep
   const sent = await executeAgentSendMessageWithPolicy(
     {
       repository: freshnessRepository({
-        advanceReadThrough: async () => 9,
+        boundSeenSequence: async () => 9,
         readPending: async (after) =>
           after === undefined ? pending : pending.filter((row) => row.sequence > after),
       }),
@@ -416,7 +416,7 @@ test("every freshness decision names its own fact id", async () => {
     executeAgentSendMessageWithPolicy(
       {
         repository: freshnessRepository({
-          advanceReadThrough: async () => options.seenUpToSeq ?? 0,
+          boundSeenSequence: async () => options.seenUpToSeq ?? 0,
           readPending: async () => [],
           ...(options.readRecent ? { readRecent: options.readRecent } : {}),
         }),
@@ -467,7 +467,7 @@ test("send policy leaves out of its pending context the messages the Agent was s
   const pending = [pendingRow(7, "checked"), pendingRow(9, "never shown")];
   const excluded: unknown[] = [];
   const freshness: AgentTargetFreshness = {
-    advanceReadThrough: async () => 4,
+    boundSeenSequence: async () => 4,
     readPending: async (after, excluding) => {
       excluded.push(excluding);
       return pending.filter(
@@ -535,15 +535,10 @@ test("a first touch holds only on the recent context the Agent was not shown, pr
   expect(held.heldMessages?.map((message) => message.id)).toEqual(["message-4"]);
 });
 
-test("a first touch whose recent context the Agent was all shown forwards and advances the boundary over it", async () => {
-  const advanced: number[] = [];
+test("a first touch whose recent context the Agent was all shown forwards without returning a read position", async () => {
   const sent = await executeAgentSendMessageWithPolicy(
     {
       repository: freshnessRepository({
-        advanceReadThrough: async (sequence) => {
-          advanced.push(sequence);
-          return sequence;
-        },
         readPending: async () => [],
         readRecent: recentContext([pendingRow(4, "checked"), pendingRow(5, "checked")]),
       }),
@@ -556,21 +551,20 @@ test("a first touch whose recent context the Agent was all shown forwards and ad
     decision: "forward",
     reason: "target_first_touch_recent_context_already_seen",
     messageId: "message-6",
-    seenUpToSeq: 5,
   });
-  expect(advanced).toEqual([5]);
+  expect(sent.seenUpToSeq).toBeUndefined();
 });
 
-test("pending messages the Agent was all shown forward, advancing the boundary only when a known boundary reaches them", async () => {
+test("pending messages the Agent was all shown forward, regardless of the stored read-through", async () => {
   const pending = [pendingRow(6, "checked"), pendingRow(8, "checked")];
   const send = async (readThrough: number) => {
-    const advanced: number[] = [];
+    const bounded: number[] = [];
     let pendingReads = 0;
     const result = await executeAgentSendMessageWithPolicy(
       {
         repository: freshnessRepository({
-          advanceReadThrough: async (sequence) => {
-            advanced.push(sequence);
+          boundSeenSequence: async (sequence) => {
+            bounded.push(sequence);
             return Math.min(sequence, 8);
           },
           readThrough: async () => readThrough,
@@ -592,27 +586,25 @@ test("pending messages the Agent was all shown forward, advancing the boundary o
       sendInput({ seenUpToSeq: 5, seenExactSeqs: [6, 8] }),
     );
     expect(pendingReads).toBe(1);
-    return { result, advanced };
+    return { result, bounded };
   };
 
-  // The check that showed them moved the server's read-through past them: the boundary advances.
   const caughtUp = await send(8);
   expect(caughtUp.result).toMatchObject({
     state: "sent",
     decision: "forward",
     reason: "exact_target_pending_already_seen",
-    seenUpToSeq: 8,
   });
-  expect(caughtUp.advanced).toEqual([5, 8]);
+  expect(caughtUp.result.seenUpToSeq).toBeUndefined();
+  expect(caughtUp.bounded).toEqual([5]);
 
-  // Nothing known reaches message 8: the send goes, and no boundary moves.
   const behind = await send(5);
   expect(behind.result).toMatchObject({
     state: "sent",
     reason: "exact_target_pending_already_seen",
   });
   expect(behind.result.seenUpToSeq).toBeUndefined();
-  expect(behind.advanced).toEqual([5]);
+  expect(behind.bounded).toEqual([5]);
 });
 
 test("a withheld send still treats what lies at or below the reported boundary as seen", async () => {
@@ -620,7 +612,7 @@ test("a withheld send still treats what lies at or below the reported boundary a
   await executeAgentSendMessageWithPolicy(
     {
       repository: freshnessRepository({
-        advanceReadThrough: async (sequence) => sequence,
+        boundSeenSequence: async (sequence) => sequence,
         readPending: async (after) => {
           boundaries.push(after);
           return [];

@@ -7,7 +7,6 @@ import { agentSendResponse } from "./agent-send-result";
 import { getLogger } from "@logtape/logtape";
 import {
   diagnosticErrorCode,
-  HELD_CONTEXT_LIMIT,
   mentionsInContent,
   threadParentTarget,
   type AgentMessageContinuationOffer,
@@ -17,6 +16,7 @@ import {
 import {
   locallyHeldSend,
   planAgentInboxFreshness,
+  pendingMessageRecords,
   sendSeenExactSeqs,
 } from "./agent-inbox-freshness";
 import { reportHeldSendFreshnessDecision } from "./agent-inbox-freshness-activity";
@@ -26,7 +26,7 @@ import { continueHeldSend, heldSendContinuation } from "./agent-message-continue
 import { elideForAgent } from "./context-elision";
 import { agentLogScope, checkPendingMessages } from "./agent-message-check";
 import { settleAgentSend } from "./agent-send-settlement";
-import { matchesConsumptionScope } from "./message-consumption-key";
+import { displayConsumptionRoot, matchesConsumptionScope } from "./message-consumption-key";
 import { settleHistoryRead } from "./agent-history-read";
 import { searchPage, searchFields } from "./search-page";
 const logger = getLogger(["coforge", "daemon", "agent-message"]);
@@ -132,12 +132,14 @@ export class AgentMessageOperations {
         AGENT_MESSAGE_BODY_REQUIRED_MESSAGE,
         "AGENT_MESSAGE_BODY_REQUIRED",
       );
-    const draftSeenUpToSeq = request.sendDraft ? draft?.seenUpToSeq : priorDraft?.seenUpToSeq;
     const modelSeenSequence = this.#ports.attention.modelSeenSequence(agentId, target);
-    const seenUpToSeq = draftSeenUpToSeq ?? (modelSeenSequence > 0 ? modelSeenSequence : undefined);
+    const originalEvidence = originalDraft ? writeContext?.evidence?.[0]?.entry : undefined;
+    const seenUpToSeq = originalDraft ? originalEvidence?.seq : modelSeenSequence || undefined;
     const seenExactSeqs = sendSeenExactSeqs(
-      request.sendDraft ? draft?.seenExactSeqs : priorDraft?.seenExactSeqs,
-      this.#ports.attention.seenExactSequences(agentId, target),
+      undefined,
+      originalDraft
+        ? (originalEvidence?.exactSeqs ?? [])
+        : this.#ports.attention.seenExactSequences(agentId, target),
       seenUpToSeq,
     );
     const attachmentIds = request.sendDraft ? draft?.attachmentIds : request.attachmentIds;
@@ -200,10 +202,6 @@ export class AgentMessageOperations {
       pendingMessageCount: this.#ports.attention.pendingMessageCount(agentId, target),
       pendingMaxSequence: this.#ports.attention.pendingMaxSequence(agentId, target),
     });
-    const localConversationId =
-      freshness.decision === "local_hold"
-        ? this.#ports.attention.pendingConversationId(agentId, target)
-        : undefined;
     const result =
       freshness.decision === "local_hold"
         ? locallyHeldSend(
@@ -213,19 +211,7 @@ export class AgentMessageOperations {
               draftReholdCount,
               freshnessContextMode: request.freshnessContextMode,
             },
-            this.#ports.attention
-              .pendingWindow(agentId, target, HELD_CONTEXT_LIMIT)
-              .map(({ delivery, receivedAt }) => ({
-                id: delivery.messageId,
-                sequence: delivery.sequence,
-                senderKind: delivery.latestSenderKind ?? "system",
-                senderHandle: delivery.latestSenderHandle ?? "",
-                senderDescription: delivery.latestSenderDescription ?? "",
-                target,
-                body: delivery.body,
-                createdAt: new Date(receivedAt).toISOString(),
-                attachments: [],
-              })),
+            pendingMessageRecords(this.#ports.attention, agentId, target),
           )
         : await settleAgentSend(
             {
@@ -241,7 +227,7 @@ export class AgentMessageOperations {
               sendDraft: request.sendDraft,
               seenUpToSeq,
               seenExactSeqs,
-              consumptionEvidence: writeContext?.evidence,
+              consumptionEvidence: writeContext?.evidence ?? (originalScope ? [] : undefined),
               freshnessContextMode: request.freshnessContextMode,
               attachmentIds: attachmentIds ? [...attachmentIds] : undefined,
               mentions: mentions ? [...mentions] : undefined,
@@ -271,18 +257,21 @@ export class AgentMessageOperations {
       request.freshnessContextMode === "withheld" || result.freshnessContextMode === "withheld";
     let continuation: AgentMessageContinuationOffer | undefined;
     if (held) {
+      const localConversationId =
+        freshness.decision === "local_hold"
+          ? this.#ports.attention.pendingConversationId(agentId, target)
+          : undefined;
+      const localScope = localConversationId
+        ? { conversationId: localConversationId, threadRootId: displayConsumptionRoot(target) }
+        : undefined;
       const heldDraft = {
         content,
         attachmentIds,
         mentions,
         reholdCount: draftReholdCount + 1,
-        consumptionScope: originalDraft ? draftScope : (writeScope ?? draftScope),
-        seenUpToSeq:
-          !contextWasWithheld && (writeScope || localConversationId)
-            ? (result.seenUpToSeq ?? seenUpToSeq)
-            : seenUpToSeq,
-        seenExactSeqs:
-          contextWasWithheld || (!writeScope && !localConversationId) ? seenExactSeqs : undefined,
+        consumptionScope: originalDraft ? draftScope : (writeScope ?? draftScope ?? localScope),
+        seenUpToSeq,
+        seenExactSeqs,
         idempotencyKey,
       };
       await inbox.replace(target, heldDraft);
@@ -295,26 +284,9 @@ export class AgentMessageOperations {
     } else if (result.accepted) {
       await inbox.clearIfIdempotencyKeyMatches(target, idempotencyKey);
     }
-    let presented = 0;
-    if (held && !contextWasWithheld) {
-      presented = result.seenUpToSeq ?? 0;
-      for (const message of result.messages)
-        if (message.target === target && message.sequence > presented) presented = message.sequence;
-    }
     const recentUnread = contextWasWithheld
       ? []
       : (result.recentUnread ?? []).filter((message) => message.target === target);
-    let through = presented;
-    if (!held && result.accepted) through = Math.max(through, result.seenUpToSeq ?? 0);
-    for (const message of recentUnread) through = Math.max(through, message.sequence);
-    this.#ports.attention.recordSendContext(
-      agentId,
-      target,
-      through,
-      presented > 0 ? { sequence: presented } : undefined,
-      writeScope,
-      localConversationId,
-    );
     if (held && !contextWasWithheld)
       await reportHeldSendFreshnessDecision({
         agentId,

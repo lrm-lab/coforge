@@ -150,7 +150,7 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-  test("an accepted send whose pending messages were all read moves the frontier and empties the exact set", async () => {
+  test("an accepted send cannot replace exact read evidence with a frontier", async () => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
       if (request.operation === "read")
@@ -172,8 +172,8 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await run(harness, "send", { operation: "send", target: "@ada", content: "one" });
       await run(harness, "send", { operation: "send", target: "@ada", content: "two" });
       expect(sends[0]).toMatchObject({ seenExactSeqs: [6, 8] });
-      expect(sends[1]?.seenUpToSeq).toBe(8);
-      expect(sends[1]?.seenExactSeqs).toBeUndefined();
+      expect(sends[1]?.seenUpToSeq).toBeUndefined();
+      expect(sends[1]?.seenExactSeqs).toEqual([6, 8]);
     } finally {
       await harness.runtime.stop();
     }
@@ -202,9 +202,11 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-  test("a locally held send presents the newest message the Agent has not seen as its boundary", async () => {
+  test("a locally held draft waits for an explicit read of the pending message", async () => {
     const { harness, sends } = await harnessWithSends(async (request) =>
-      request.around ? page(request, [messageRecord(7, "@ada", "@ada")]) : page(request, []),
+      request.around
+        ? page(request, [messageRecord(7, "@ada", "@ada")])
+        : page(request, [messageRecord(5, "@ada", "@ada")], { modelSeenUpToSeq: 5 }),
     );
     try {
       await harness.deliver(5, "@ada");
@@ -214,6 +216,14 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       expect(sends).toHaveLength(0);
       expect(held).toMatchObject({ state: "held", decision: "local_hold" });
       expect(held.messages.map(({ sequence }) => sequence)).toEqual([5]);
+      const stillHeld = await run(harness, "still-held", {
+        operation: "send",
+        target: "@ada",
+        sendDraft: true,
+      });
+      expect(stillHeld.state).toBe("held");
+      expect(sends).toHaveLength(0);
+      await run(harness, "read-pending", { operation: "read", target: "@ada" });
       const resent = await run(harness, "resend", {
         operation: "send",
         target: "@ada",
@@ -241,7 +251,7 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-  test("a held send's frontier replaces the exact sequences it covers in the draft", async () => {
+  test("a held send keeps exact read evidence in the draft", async () => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
       if (request.operation === "read") return page(request, [messageRecord(6, "@ada", "@ada")]);
@@ -267,8 +277,8 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await run(harness, "send", { operation: "send", target: "@ada", content: "reply" });
       await run(harness, "resend", { operation: "send", target: "@ada", sendDraft: true });
       expect(sends[0]).toMatchObject({ seenExactSeqs: [6] });
-      expect(sends[1]?.seenUpToSeq).toBe(8);
-      expect(sends[1]?.seenExactSeqs).toBeUndefined();
+      expect(sends[1]?.seenUpToSeq).toBeUndefined();
+      expect(sends[1]?.seenExactSeqs).toEqual([6]);
     } finally {
       await harness.runtime.stop();
     }
@@ -337,7 +347,7 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
-  test("recentUnread from a bypassed hold is returned and advances modelSeen for future sends", async () => {
+  test("recentUnread from a bypassed hold is returned without advancing modelSeen", async () => {
     const sends: AgentMessageRequest[] = [];
     const harness = await messageHarness(async (request) => {
       if (request.operation !== "send")
@@ -398,7 +408,8 @@ describe("the Agent read boundary (exact seen sequences)", () => {
         },
         harness.apiKey,
       );
-      expect(sends[1]).toMatchObject({ seenUpToSeq: 11 });
+      expect(sends[1]?.seenUpToSeq).toBeUndefined();
+      expect(sends[1]).toHaveProperty("consumptionEvidence", undefined);
     } finally {
       await harness.runtime.stop();
     }

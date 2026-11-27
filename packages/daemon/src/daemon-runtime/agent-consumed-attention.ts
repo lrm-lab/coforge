@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import { mergeSeenExactSeqs, threadRootTarget } from "@lrm/coforge-sdk/internal";
-import type { AgentConsumptionScope, AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
+import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type {
   AgentConsumedSeqDelta,
   AgentConsumedSeqEntry,
@@ -9,7 +9,6 @@ import type {
 import {
   displayConsumptionRoot,
   lookupConsumptionKey,
-  matchesConsumptionScope,
   rememberConsumptionSpelling,
 } from "./message-consumption-key";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
@@ -126,34 +125,6 @@ export class AgentConsumedAttention {
       entry,
       scope?.conversationId,
     );
-  }
-  recordSendContext(
-    agentId: string,
-    target: string,
-    through: number,
-    review?: {
-      sequence: number;
-    },
-    authority?: AgentConsumptionScope,
-    deliveryConversationId?: string,
-  ): void {
-    if (!Number.isInteger(through) || through < 1) return;
-    if (authority && !matchesConsumptionScope(target, authority)) return;
-    const conversationId = authority?.conversationId ?? deliveryConversationId;
-    if (!conversationId) return;
-    const entry = this.#targetState(
-      agentId,
-      target,
-      conversationId,
-      authority?.threadRootId,
-      false,
-    );
-    const newAuthority = authority !== undefined && !entry.serverScope;
-    if (newAuthority) entry.serverScope = true;
-    const changed = this.#advanceFrontier(agentId, target, through, "send_context", entry);
-    if (review) this.#takeReadOrder(agentId, target, review.sequence, entry);
-    if (changed || review || newAuthority)
-      this.#persistTargetAndAliases(agentId, target, undefined, entry, conversationId);
   }
   seenExactSequences(agentId: string, target: string, conversationId?: string): readonly number[] {
     this.#consumedState(agentId);

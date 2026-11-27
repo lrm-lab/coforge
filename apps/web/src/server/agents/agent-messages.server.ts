@@ -237,13 +237,6 @@ export async function reconcileAgentSendMessage(
   return { state: "committed", messageId: record.message.id };
 }
 
-/**
- * The plan for a send's effect on the Agent's inbox, and for a first touch's recent context,
- * decided on the server, where the target's pending and recent context live. A message counts as
- * seen when the Agent sent it, when it is at or below the boundary the Agent reported, or when the
- * Agent reports it among `seenExactSeqs`, whatever the freshness mode. The consume effects are the
- * read-through advance here and the `seenUpToSeq` a sent result carries back to the daemon.
- */
 export async function executeAgentSendMessageWithPolicy(
   dependencies: {
     repository: Pick<
@@ -300,8 +293,6 @@ export async function executeAgentSendMessageWithPolicy(
     factId,
   );
   if ("state" in plan) return { ...plan, consumptionScope };
-  const advanced =
-    plan.advanceTo !== undefined ? await advance(freshness, plan.advanceTo) : undefined;
   const sent = await executeAgentSendMessage(dependencies.sender, input);
   return {
     state: "sent",
@@ -313,20 +304,8 @@ export async function executeAgentSendMessageWithPolicy(
     pendingMentionActions: sent.pendingMentionActions,
     unresolvedMentionHandles: sent.unresolvedMentionHandles,
     producerFactId: await factId({ decision: plan.decision, reason: plan.reason, ...plan.fact }),
-    ...(advanced !== undefined ? { seenUpToSeq: advanced } : {}),
     ...(plan.recentUnread ? { recentUnread: plan.recentUnread } : {}),
   };
-}
-
-/** The consume effect on the server: the read-through advances over messages the Agent has
- * seen, and the result tells the daemon the boundary it reached. */
-async function advance(
-  freshness: AgentTargetFreshness | undefined,
-  sequence: number,
-): Promise<number | undefined> {
-  if (!freshness?.advanceReadThrough) return undefined;
-  const reached = await freshness.advanceReadThrough(sequence);
-  return reached > 0 ? reached : undefined;
 }
 
 export async function readAgentMessages(

@@ -345,9 +345,6 @@ export class AgentMessageAttentionIndex {
   writeContext(agentId: string, target: string, scope?: AgentConsumptionScope) {
     return scopedWriteContext(this.#consumption, agentId, target, scope);
   }
-  recordSendContext(...args: Parameters<AgentConsumedAttention["recordSendContext"]>) {
-    return this.#consumption.recordSendContext(...args);
-  }
   seenExactSequences(...args: Parameters<AgentConsumedAttention["seenExactSequences"]>) {
     return this.#consumption.seenExactSequences(...args);
   }
@@ -433,9 +430,11 @@ export class AgentMessageAttentionIndex {
   unreadDeliveries(agentId: string) {
     return this.#pending.unreadDeliveries(agentId);
   }
+
   pendingConversationId(agentId: string, target: string): string | undefined {
     return this.#pending.pendingConversationId(agentId, target);
   }
+
   pendingMessageCount(agentId: string, target: string): number {
     return this.#pending.pendingMessageCount(agentId, target);
   }

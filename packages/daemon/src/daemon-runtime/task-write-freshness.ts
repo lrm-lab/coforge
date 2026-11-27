@@ -1,26 +1,20 @@
 import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
-import { agentConsumptionScopeSchema } from "@lrm/coforge-sdk/internal/agent-consumption";
-import { matchesConsumptionScope } from "./message-consumption-key";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { recordTaskHoldOffered, taskHoldOffered } from "./agent-task-hold-offers";
-import { heldTaskResult, type HeldTaskResultDeps } from "./held-task-result";
+import { heldTaskResult } from "./held-task-result";
+import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 
 /** Task writes that must wait for the Agent to review unread target context first. */
 const FRESHNESS_HELD_OPERATIONS = ["create", "claim", "assign"];
 /** Task writes that go through on unread context, with what the Agent missed attached. */
 const FRESHNESS_ATTACH_OPERATIONS = ["unclaim", "update", "amend"];
 
-type TaskWriteFreshnessPorts = HeldTaskResultDeps & {
+type TaskWriteFreshnessPorts = {
+  messageAttention: AgentMessageAttentionIndex;
   agentTask: NonNullable<DaemonConnectionClient["agentTask"]>;
 };
 
-/**
- * The daemon-owned freshness policy around a task mutation: held operations answer the attention
- * preflight's hold, everything gated forwards the model-visible boundary so the server applies its
- * own gate, and a passed write's shown context is consumed only after it answered — a failed
- * command never marks unseen messages seen.
- */
 export async function taskWriteWithFreshness(
   ports: TaskWriteFreshnessPorts,
   agentId: string,
@@ -41,7 +35,7 @@ export async function taskWriteWithFreshness(
         { retryable: false },
       );
     if (command.continueAnyway !== true && !sourceThreadCreate) {
-      const held = await heldTaskResult(ports, agentId, command, target, agentApiKey);
+      const held = heldTaskResult(ports.messageAttention, agentId, command, target);
       if (held) {
         recordTaskHoldOffered(agentId, holdKey);
         return held;
@@ -53,16 +47,6 @@ export async function taskWriteWithFreshness(
     { ...command, consumptionEvidence: messageAttention.writeContext(agentId, holdKey).evidence },
     agentApiKey,
   );
-  const held = result.state === "held";
-  if (held) recordTaskHoldOffered(agentId, holdKey);
-  const scope = agentConsumptionScopeSchema.safeParse(result.consumptionScope).data;
-  const shown = held ? (result.heldMessages ?? []) : (result.recentUnread ?? []);
-  const shownTarget = sourceThreadCreate ? shown[0]?.target : target;
-  if (scope && shownTarget && matchesConsumptionScope(shownTarget, scope)) {
-    let through = 0;
-    for (const message of shown)
-      if (message.target === shownTarget && message.sequence > through) through = message.sequence;
-    messageAttention.recordSendContext(agentId, shownTarget, through, undefined, scope);
-  }
+  if (result.state === "held") recordTaskHoldOffered(agentId, holdKey);
   return result;
 }

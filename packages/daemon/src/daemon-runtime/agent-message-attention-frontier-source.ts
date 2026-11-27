@@ -3,7 +3,7 @@
  * lives in memory beside the state it describes, keyed by that state's own object, so nothing is
  * persisted and a restart honestly reads `loaded`: the file holds the number, not the reason.
  */
-export type FrontierSource = "history_read" | "send_context" | "model_seen" | "loaded" | "unset";
+export type FrontierSource = "history_read" | "model_seen" | "loaded" | "unset";
 
 const sources = new WeakMap<object, FrontierSource>();
 
