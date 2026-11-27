@@ -7,6 +7,38 @@ const TERMINAL_RETENTION_MS = 86_400_000;
 const MAX_VISIBLE_REQUESTS = 50;
 const SWEEP_BATCH = 150;
 
+type AttachStateRow = {
+  status: string;
+  failureReason: string | null;
+  expiresAt: Date;
+  approvedAt: Date | null;
+  terminalAt: Date | null;
+  readyAt: Date | null;
+  boundAt: Date | null;
+};
+
+function visibleAttachState(row: AttachStateRow, now: Date) {
+  const deadline = row.approvedAt
+    ? new Date(row.approvedAt.getTime() + ATTACH_COMPLETION_MS)
+    : row.expiresAt;
+  const pending = row.status === "awaiting_approval";
+  const completing = row.status === "approved" || row.status === "completing";
+  const timedOut = (pending || completing) && deadline <= now;
+  return {
+    status: timedOut ? (pending ? "expired" : "failed") : row.status,
+    failureReason: timedOut
+      ? pending
+        ? "approval_expired"
+        : "completion_timeout"
+      : row.failureReason,
+    expiresAt: deadline.toISOString(),
+    finishedAt: (timedOut
+      ? deadline
+      : (row.terminalAt ?? row.readyAt ?? row.boundAt)
+    )?.toISOString(),
+  };
+}
+
 export async function readMachineAttachApproval(
   db: PrismaClient,
   id: string,
@@ -23,14 +55,14 @@ export async function readMachineAttachApproval(
       targetWorkspaceId: true,
       status: true,
       expiresAt: true,
+      approvedAt: true,
+      terminalAt: true,
+      readyAt: true,
+      boundAt: true,
+      failureReason: true,
     },
   });
-  if (
-    !session?.machinePublicKey ||
-    session.status !== "awaiting_approval" ||
-    session.expiresAt <= now
-  )
-    return null;
+  if (!session?.machinePublicKey) return null;
   const workspaces = await db.workspace.findMany({
     where: {
       ...(session.targetWorkspaceId ? { id: session.targetWorkspaceId } : {}),
@@ -44,6 +76,7 @@ export async function readMachineAttachApproval(
     machineName: session.machineName,
     hostname: session.hostname,
     os: session.os,
+    ...visibleAttachState(session, now),
     fingerprint: await attachPublicKeyFingerprint(session.machinePublicKey),
     workspaces,
   };
@@ -80,30 +113,12 @@ export async function listMachineAttachRequests(
         readyAt: true,
       },
     });
-    return rows.map((row) => {
-      const deadline = row.approvedAt
-        ? new Date(row.approvedAt.getTime() + ATTACH_COMPLETION_MS)
-        : row.expiresAt;
-      const pending = row.status === "awaiting_approval";
-      const completing = row.status === "approved" || row.status === "completing";
-      const timedOut = (pending || completing) && deadline <= now;
-      return {
-        id: row.id,
-        machineName: row.machineName,
-        createdAt: row.createdAt.toISOString(),
-        status: timedOut ? (pending ? "expired" : "failed") : row.status,
-        failureReason: timedOut
-          ? pending
-            ? "approval_expired"
-            : "completion_timeout"
-          : row.failureReason,
-        expiresAt: deadline.toISOString(),
-        finishedAt: (timedOut
-          ? deadline
-          : (row.terminalAt ?? row.readyAt ?? row.boundAt)
-        )?.toISOString(),
-      };
-    });
+    return rows.map((row) => ({
+      id: row.id,
+      machineName: row.machineName,
+      createdAt: row.createdAt.toISOString(),
+      ...visibleAttachState(row, now),
+    }));
   });
 }
 
