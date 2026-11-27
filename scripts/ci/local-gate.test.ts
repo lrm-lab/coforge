@@ -9,10 +9,15 @@ import { useTestRepo } from "../git-hooks/test-repo";
 const gate = join(import.meta.dir, "local-gate.ts");
 const repo = useTestRepo();
 const local = { CI: "false" };
+// Each phase gets the ordinary five-second test budget: prepare the repos, run the first
+// gate, fetch the new ref, then run the second gate.
+const STALE_ORIGIN_TEST_TIMEOUT_MS = 4 * 5_000;
+// A seeded history and the full range check each spend time starting Git processes.
+const HOOKS_WITH_RANGE_TEST_TIMEOUT_MS = 2 * 5_000;
 
 const runGate = (env: Record<string, string> = local) => repo.run([process.execPath, gate], env);
 
-function withOrigin(kind: "tracking-ref" | "bare-remote" = "tracking-ref"): string {
+function withOrigin(kind: "tracking-ref" | "bare-remote" = "tracking-ref") {
   const remote = `${repo.home}/origin.git`;
   repo.ok("remote", "add", "origin", remote);
   if (kind === "bare-remote") {
@@ -21,7 +26,6 @@ function withOrigin(kind: "tracking-ref" | "bare-remote" = "tracking-ref"): stri
   } else {
     repo.ok("update-ref", "refs/remotes/origin/main", "HEAD");
   }
-  return remote;
 }
 
 function installed() {
@@ -133,27 +137,30 @@ test("a trailing blank line in an unpushed commit fails the gate, as pre-push an
   expect(result.stderr).toContain("notes.txt");
 });
 
-test("a stale origin/main judges from its old commit until it is fetched", () => {
-  installed();
-  repo.seed({ "README.md": "# Repo\n" });
-  const remote = withOrigin("bare-remote");
-  const stale = repo.head();
-  // Someone else's commit reaches main, and this clone builds on it without fetching origin.
-  repo.seed({ "theirs.ts": "x".repeat(20_001) });
-  repo.ok("push", "-q", remote, "HEAD:main");
-  // Newer git matches a pushed URL to the remote configured with it and advances origin/main;
-  // older git does not. Pin the stale tracking ref so the test does not depend on the version.
-  repo.ok("update-ref", "refs/remotes/origin/main", stale);
-  repo.seed({ "mine.md": "# Mine\n" });
+test(
+  "a stale origin/main judges from its old commit until it is fetched",
+  () => {
+    installed();
+    const stale = repo.seed({ "README.md": "# Repo\n" });
+    // Someone else's commit reaches main, and this clone builds on it without fetching origin.
+    repo.seed({ "theirs.ts": "x".repeat(20_001) });
+    // Seed the finished remote in one local clone, then exercise the real fetch below.
+    const remote = join(repo.home, "origin.git");
+    repo.ok("clone", "-q", "--bare", ".", remote);
+    repo.ok("remote", "add", "origin", remote);
+    repo.ok("update-ref", "refs/remotes/origin/main", stale);
+    repo.seed({ "mine.md": "# Mine\n" });
 
-  const result = runGate();
-  expect(result.exitCode).not.toBe(0);
-  expect(result.stderr).toContain(stale);
-  expect(result.stderr).toContain("git fetch origin");
+    const result = runGate();
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain(stale);
+    expect(result.stderr).toContain("git fetch origin");
 
-  repo.ok("fetch", "-q", "origin");
-  expect(runGate()).toMatchObject({ exitCode: 0, stderr: "" });
-});
+    repo.ok("fetch", "-q", "origin");
+    expect(runGate()).toMatchObject({ exitCode: 0, stderr: "" });
+  },
+  STALE_ORIGIN_TEST_TIMEOUT_MS,
+);
 
 test("CI=true skips the gate: the Plan checks job runs the hard rules", () => {
   repo.ok("config", "--unset", "core.hooksPath");
@@ -178,22 +185,30 @@ test("with no origin remote, or no origin/main, the range part is skipped in one
   expect(unfetched.stdout).toContain("git fetch origin");
 });
 
-test("a custom hooks path fails with the fix command, and the range is still checked", () => {
-  repo.seed({ "README.md": "# Repo\n" });
-  withOrigin();
+test("a custom hooks path fails with the fix command", () => {
   repo.ok("config", "core.hooksPath", "my-hooks");
 
-  const clean = runGate();
-  expect(clean.exitCode).not.toBe(0);
-  expect(clean.stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
-  expect(clean.stderr).toContain("git config --local core.hooksPath .githooks");
-
-  repo.seed({ "big.ts": "x".repeat(20_001) });
-  const violation = runGate();
-  expect(violation.exitCode).not.toBe(0);
-  expect(violation.stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
-  expect(violation.stderr).toContain("big.ts: 5,001 tokens, new file over the limit");
+  const result = runGate();
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
+  expect(result.stderr).toContain("git config --local core.hooksPath .githooks");
 });
+
+test(
+  "a range violation is still reported with a custom hooks path",
+  () => {
+    repo.seed({ "README.md": "# Repo\n" });
+    withOrigin();
+    repo.ok("config", "core.hooksPath", "my-hooks");
+    repo.seed({ "big.ts": "x".repeat(20_001) });
+
+    const result = runGate();
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
+    expect(result.stderr).toContain("big.ts: 5,001 tokens, new file over the limit");
+  },
+  HOOKS_WITH_RANGE_TEST_TIMEOUT_MS,
+);
 
 test("outside a git work tree the gate does nothing", () => {
   const outside = join(repo.home, "tarball");
