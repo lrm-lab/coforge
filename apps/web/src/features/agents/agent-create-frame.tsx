@@ -37,6 +37,12 @@ import { localizeHref } from "#src/paraglide/runtime";
 import { useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { cx } from "#src/utils/cx";
 import { AGENT_ILLUSTRATIONS } from "./agent-illustrations";
+import {
+  codexCompatibleComputerIneligibility,
+  codexCompatibleComputerIneligibilityLabel,
+  type CodexCompatibleComputerCandidate,
+  type CodexCompatibleSupportStatus,
+} from "./codex-compatible-computer-eligibility";
 
 const ADD_COMPUTER_KEY = "\u0000add-computer";
 
@@ -252,6 +258,7 @@ export type AgentCreateComputerItem = {
   name: string;
   displayName: string;
   online?: boolean;
+  runtimes?: CodexCompatibleComputerCandidate["runtimes"];
 };
 
 export function AgentCreateEmptyComputers({
@@ -297,6 +304,8 @@ export function AgentCreateComputerSelect({
   computerError,
   controlSize,
   selectedKey,
+  codexCompatibleMode = false,
+  codexCompatibleSupport,
   onAddComputer,
   onSelectComputer,
 }: {
@@ -305,9 +314,22 @@ export function AgentCreateComputerSelect({
   computerError?: string;
   controlSize: ReturnType<typeof useDialogControlSize>;
   selectedKey: string;
+  codexCompatibleMode?: boolean;
+  codexCompatibleSupport?: ReadonlyMap<string, CodexCompatibleSupportStatus>;
   onAddComputer: () => void;
   onSelectComputer: (computerId: string) => void;
 }) {
+  const options = computers.map((item) => ({
+    item,
+    ineligibleReason: codexCompatibleComputerIneligibility(
+      item,
+      codexCompatibleSupport?.get(item.id),
+      codexCompatibleMode,
+    ),
+  }));
+  const disabledKeys = new Set(
+    options.flatMap((entry) => (entry.ineligibleReason ? [entry.item.id] : [])),
+  );
   return (
     <div data-field="computerId" className="min-w-0">
       <Select
@@ -321,21 +343,28 @@ export function AgentCreateComputerSelect({
         label={m.agent_create_computer()}
         className="min-w-0"
         selectedKey={selectedKey}
+        disabledKeys={disabledKeys}
         onSelectionChange={(key) => {
           if (key === ADD_COMPUTER_KEY) {
             onAddComputer();
             return;
           }
-          if (key !== null) {
+          if (key !== null && !disabledKeys.has(String(key))) {
             onSelectComputer(String(key));
           }
         }}
       >
-        {computers.map((item) => (
+        {options.map(({ item, ineligibleReason }) => (
           <Select.Item
             key={item.id}
             id={item.id}
+            isDisabled={Boolean(ineligibleReason)}
             label={item.displayName.trim() || item.name}
+            supportingText={
+              ineligibleReason
+                ? codexCompatibleComputerIneligibilityLabel(ineligibleReason)
+                : undefined
+            }
             aria-label={`${item.displayName.trim() || item.name}, ${item.online ? m.computer_status_online() : m.computer_status_offline()}`}
             icon={<ComputerStatusIcon computer={item} online={Boolean(item.online)} />}
             className={computerOptionClassName(Boolean(item.online))}

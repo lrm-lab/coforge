@@ -29,8 +29,14 @@ import {
   ComputerStatusIcon,
   computerOptionClassName,
 } from "#src/features/computers/computer-status-icon";
+import { useCodexCompatibleSupportByComputer } from "#src/features/computers/use-codex-compatible-support";
 import { fieldHint, scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
+import {
+  codexCompatibleComputerIneligibility,
+  codexCompatibleComputerIneligibilityLabel,
+  type CodexCompatibleComputerCandidate,
+} from "./codex-compatible-computer-eligibility";
 import {
   agentEnvironmentNameError,
   agentEnvironmentRowsChanged,
@@ -58,6 +64,7 @@ export type AgentRuntimeComputerOption = {
   name: string;
   displayName: string;
   online?: boolean;
+  runtimes?: CodexCompatibleComputerCandidate["runtimes"];
 };
 
 type EnvironmentRow = { key: string; value: string };
@@ -97,6 +104,7 @@ export function AgentRuntimeConfigForm({
 }) {
   const controlSize = useDialogControlSize();
   const [runtimeDirty, setRuntimeDirty] = useState(false);
+  const [codexState, setCodexState] = useState({ isCodex: false, isCodexCompatible: false });
   const formRef = useRef<HTMLFormElement>(null);
   const seeded = useRef(false);
   const prevComputerError = useRef<string | undefined>(undefined);
@@ -130,6 +138,21 @@ export function AgentRuntimeConfigForm({
   }, [computerId, form]);
 
   const showComputerPicker = Boolean(computers && computers.length > 0);
+  const codexCompatibleSupport = useCodexCompatibleSupportByComputer(
+    computers?.map((computer) => computer.id) ?? [],
+    showComputerPicker && !computerLocked && (codexState.isCodex || codexState.isCodexCompatible),
+  );
+  const computerOptions = (computers ?? []).map((computer) => ({
+    computer,
+    ineligibleReason: codexCompatibleComputerIneligibility(
+      computer,
+      codexCompatibleSupport.get(computer.id),
+      codexState.isCodexCompatible,
+    ),
+  }));
+  const disabledComputerKeys = new Set(
+    computerOptions.flatMap((entry) => (entry.ineligibleReason ? [entry.computer.id] : [])),
+  );
 
   useEffect(() => {
     if (!showComputerPicker) return;
@@ -211,8 +234,10 @@ export function AgentRuntimeConfigForm({
                   size={controlSize}
                   label={m.agent_form_computer()}
                   className="min-w-0"
+                  disabledKeys={disabledComputerKeys}
                   onSelectionChange={() => {
                     setRuntimeDirty(true);
+                    setCodexState({ isCodex: false, isCodexCompatible: false });
                     onFieldErrorClear?.("computerId");
                     onFieldErrorClear?.("provider");
                     onFieldErrorClear?.("modelProvider");
@@ -221,11 +246,17 @@ export function AgentRuntimeConfigForm({
                     onFieldErrorClear?.("apiKey");
                   }}
                 >
-                  {computers!.map((computer) => (
+                  {computerOptions.map(({ computer, ineligibleReason }) => (
                     <Select.Item
                       key={computer.id}
                       id={computer.id}
+                      isDisabled={Boolean(ineligibleReason)}
                       label={computer.displayName}
+                      supportingText={
+                        ineligibleReason
+                          ? codexCompatibleComputerIneligibilityLabel(ineligibleReason)
+                          : undefined
+                      }
                       aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
                       icon={
                         <ComputerStatusIcon computer={computer} online={Boolean(computer.online)} />
@@ -254,6 +285,7 @@ export function AgentRuntimeConfigForm({
               onFieldErrorClear={onFieldErrorClear}
               onLoad={onLoad}
               onDirtyChange={setRuntimeDirty}
+              onCodexStateChange={setCodexState}
             />
           ) : (
             <p className="text-sm text-tertiary">{m.agent_form_computer_required()}</p>

@@ -82,5 +82,9 @@
   "agent_form_codex_api_key_help": "Encrypted and used only by this Agent, separate from this Computer’s ChatGPT sign-in.",
   "agent_form_codex_api_key_origin_changed_help": "Changing the host, scheme, or port requires re-entering the API key; the previous key is not carried over.",
   "agent_form_codex_compatible_endpoint_required": "Enter a valid base URL and model name.",
-  "agent_form_codex_compatible_key_required": "Enter an API key. Changing the endpoint host, scheme, or port requires re-entering the key."
+  "agent_form_codex_compatible_key_required": "Enter an API key. Changing the endpoint host, scheme, or port requires re-entering the key.",
+  "agent_form_codex_compatible_computer_checking": "Checking compatibility…",
+  "agent_form_codex_compatible_computer_offline": "Offline — unavailable",
+  "agent_form_codex_compatible_computer_codex_unavailable": "Codex unavailable",
+  "agent_form_codex_compatible_computer_unsupported": "API key not supported"
 }

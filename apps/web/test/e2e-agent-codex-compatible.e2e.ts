@@ -9,6 +9,7 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import { ownedWorkspaceCreateData } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import {
   browserSession,
+  elementAtRest,
   hydratedElement,
   localBrowserE2e,
   pageHydrated,
@@ -23,9 +24,13 @@ const { browser, evaluate, waitFor } = browserSession(browserPath, session);
 let workspaceId = "";
 let workspaceSlug = "";
 let computerId = "";
+let legacyComputerId = "";
 
 async function refreshLeaseAndPresence() {
   await getComputerStatusCache().put({ workspaceId, computerId }, true);
+  if (legacyComputerId) {
+    await getComputerStatusCache().put({ workspaceId, computerId: legacyComputerId }, true);
+  }
   await getCodexCompatibleCapabilityLease().record(workspaceId, computerId, [
     CODEX_COMPATIBLE_PROVIDER_CAPABILITY,
   ]);
@@ -70,6 +75,34 @@ beforeAll(async () => {
     select: { id: true },
   });
   computerId = computer.id;
+
+  const legacyComputer = await db.computer.create({
+    data: {
+      ownerId: DEV_BROWSER_USER.id,
+      machineId: `codex-legacy-${suffix}`,
+      name: `codex-legacy-${suffix}.local`,
+      displayName: "Legacy Codex Host",
+      kind: "local",
+      runtimeAuth: {
+        collectedAtMs: Date.now(),
+        runtimes: {
+          codex: { provider: "codex", state: "logged_out" },
+        },
+      },
+      workspaces: { create: { workspaceId } },
+      runtimes: {
+        create: {
+          workspaceId,
+          provider: RUNTIME_PROVIDER.CODEX,
+          version: "0.118.0",
+          displayName: "Codex",
+          isPublic: true,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  legacyComputerId = legacyComputer.id;
   await refreshLeaseAndPresence();
 });
 
@@ -80,14 +113,20 @@ afterAll(async () => {
       .put({ workspaceId, computerId }, false)
       .catch(() => undefined);
   }
+  if (legacyComputerId && workspaceId) {
+    await getComputerStatusCache()
+      .put({ workspaceId, computerId: legacyComputerId }, false)
+      .catch(() => undefined);
+  }
   if (workspaceId) {
     await db.agent.deleteMany({ where: { workspaceId } }).catch(() => undefined);
     await db.computerRuntime.deleteMany({ where: { workspaceId } }).catch(() => undefined);
     await db.workspaceComputer.deleteMany({ where: { workspaceId } }).catch(() => undefined);
     await db.workspace.deleteMany({ where: { id: workspaceId } }).catch(() => undefined);
   }
-  if (computerId) {
-    await db.computer.deleteMany({ where: { id: computerId } }).catch(() => undefined);
+  const computerIds = [computerId, legacyComputerId].filter(Boolean);
+  if (computerIds.length > 0) {
+    await db.computer.deleteMany({ where: { id: { in: computerIds } } }).catch(() => undefined);
   }
   await db.$disconnect();
 });
@@ -105,6 +144,20 @@ test("codex custom API key flow works across create, profile usage, same-origin 
     `document.querySelector('[role="dialog"]')?.innerText.includes("Use API key") ?? false`,
   );
 
+  await browser("click", '[data-field="computerId"] button');
+  await waitFor(
+    `document.querySelector('[role="listbox"]')?.innerText.includes("Legacy Codex Host") ?? false`,
+  );
+  const beforeCompatibleOption = await evaluate<{ ariaDisabled: string | null }>(`(() => {
+    const opt = [...document.querySelectorAll('[role="listbox"] [role="option"]')].find(
+      (item) => (item.textContent ?? "").includes("Legacy Codex Host"),
+    );
+    return { ariaDisabled: opt?.getAttribute("aria-disabled") ?? null };
+  })()`);
+  expect(beforeCompatibleOption.ariaDisabled).not.toBe("true");
+  await browser("press", "Escape");
+  await waitFor(`document.querySelector('[role="listbox"]') === null`);
+
   await evaluate(`(() => {
     const button = [...document.querySelectorAll('[role="dialog"] button')].find(
       (b) => b.textContent.trim() === "Use API key",
@@ -113,6 +166,82 @@ test("codex custom API key flow works across create, profile usage, same-origin 
     return Boolean(button);
   })()`);
 
+  await waitFor(
+    `document.querySelector('[role="dialog"] input[name="baseUrl"]') !== null && document.querySelector('[role="dialog"] input[name="apiKey"]') !== null && document.querySelector('[role="dialog"] input[name="model"]') !== null`,
+  );
+
+  await browser("click", '[data-field="computerId"] button');
+  await waitFor(
+    `document.querySelector('[role="listbox"]')?.innerText.includes("Legacy Codex Host") ?? false`,
+  );
+  await waitFor(
+    `!(document.querySelector('[role="listbox"]')?.innerText ?? "").includes("Checking compatibility")`,
+  );
+  const compatibleOptions = await evaluate<{
+    compatDisabled: string | null;
+    legacyDisabled: string | null;
+    legacyText: string;
+  }>(`(() => {
+    const options = [...document.querySelectorAll('[role="listbox"] [role="option"]')];
+    const compat = options.find((item) => (item.textContent ?? "").includes("Codex Relay Studio"));
+    const legacy = options.find((item) => (item.textContent ?? "").includes("Legacy Codex Host"));
+    return {
+      compatDisabled: compat?.getAttribute("aria-disabled") ?? null,
+      legacyDisabled: legacy?.getAttribute("aria-disabled") ?? null,
+      legacyText: (legacy?.textContent ?? "").trim(),
+    };
+  })()`);
+  expect(compatibleOptions.compatDisabled).not.toBe("true");
+  expect(compatibleOptions.legacyDisabled).toBe("true");
+  expect(compatibleOptions.legacyText).toContain("API key not supported");
+
+  await evaluate(`(() => {
+    const legacy = [...document.querySelectorAll('[role="listbox"] [role="option"]')].find(
+      (item) => (item.textContent ?? "").includes("Legacy Codex Host"),
+    );
+    legacy?.click();
+    return Boolean(legacy);
+  })()`);
+  await browser("wait", "100");
+  const afterDisabledClick = await evaluate<{ selectedComputer: string; hasBaseUrl: boolean }>(`({
+    selectedComputer: document.querySelector('[data-field="computerId"] button')?.textContent?.trim() ?? "",
+    hasBaseUrl: document.querySelector('[role="dialog"] input[name="baseUrl"]') !== null,
+  })`);
+  expect(afterDisabledClick.selectedComputer).toContain("Codex Relay Studio");
+  expect(afterDisabledClick.hasBaseUrl).toBe(true);
+  await browser("press", "Escape");
+  await waitFor(`document.querySelector('[role="listbox"]') === null`);
+
+  await browser("find", "role", "button", "click", "--name", "Custom API key (OpenAI-compatible)");
+  await waitFor(
+    `document.querySelector('[role="listbox"]')?.innerText.includes("ChatGPT account (Computer login)") ?? false`,
+  );
+  await browser("find", "role", "option", "click", "--name", "ChatGPT account (Computer login)");
+  await waitFor(
+    `document.querySelector('[role="listbox"]') === null && (document.querySelector('[role="dialog"]')?.innerText.includes("Use API key") ?? false)`,
+  );
+
+  await browser("click", '[data-field="computerId"] button');
+  await waitFor(
+    `document.querySelector('[role="listbox"]')?.innerText.includes("Legacy Codex Host") ?? false`,
+  );
+  const backToAccountOption = await evaluate<{ ariaDisabled: string | null }>(`(() => {
+    const opt = [...document.querySelectorAll('[role="listbox"] [role="option"]')].find(
+      (item) => (item.textContent ?? "").includes("Legacy Codex Host"),
+    );
+    return { ariaDisabled: opt?.getAttribute("aria-disabled") ?? null };
+  })()`);
+  expect(backToAccountOption.ariaDisabled).not.toBe("true");
+  await browser("press", "Escape");
+  await waitFor(`document.querySelector('[role="listbox"]') === null`);
+
+  await evaluate(`(() => {
+    const button = [...document.querySelectorAll('[role="dialog"] button')].find(
+      (b) => b.textContent.trim() === "Use API key",
+    );
+    button?.click();
+    return Boolean(button);
+  })()`);
   await waitFor(
     `document.querySelector('[role="dialog"] input[name="baseUrl"]') !== null && document.querySelector('[role="dialog"] input[name="apiKey"]') !== null && document.querySelector('[role="dialog"] input[name="model"]') !== null`,
   );
@@ -194,9 +323,10 @@ test("codex custom API key flow works across create, profile usage, same-origin 
   expect(popoverState).toEqual({ hasRefresh: false, hasReset: false });
 
   await browser("press", "Escape");
+  await waitFor(`document.querySelector('[role="dialog"]') === null`);
   await browser("click", 'button[aria-label="Edit runtime configuration"]');
   await waitFor(
-    `document.querySelector('[role="dialog"] form input[name="baseUrl"]')?.value === "https://relay.example.com/v1"`,
+    `document.querySelector('[role="dialog"] form input[name="baseUrl"]')?.value === "https://relay.example.com/v1" && (document.querySelector('[role="dialog"]')?.innerText.includes("Custom API key (OpenAI-compatible)") ?? false)`,
   );
 
   const editInitial = await evaluate<{
@@ -226,6 +356,7 @@ test("codex custom API key flow works across create, profile usage, same-origin 
   ).toBe(false);
 
   await refreshLeaseAndPresence();
+  await waitFor(elementAtRest(`document.querySelector('[role="dialog"] button[type="submit"]')`));
   await browser("click", '[role="dialog"] button[type="submit"]');
   await waitFor(`document.querySelector('[role="dialog"]') === null`);
   await waitFor(`document.body.innerText.includes("https://relay.example.com/v2")`);

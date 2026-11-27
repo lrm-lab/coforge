@@ -63,5 +63,9 @@
   "agent_form_codex_api_key_help": "密钥加密保存并仅用于此 Agent，与电脑上的 ChatGPT 登录隔离。",
   "agent_form_codex_api_key_origin_changed_help": "修改接口域名、协议或端口后必须重新输入 API Key，不会沿用旧地址密钥。",
   "agent_form_codex_compatible_endpoint_required": "请填写有效的接口地址和模型名称。",
-  "agent_form_codex_compatible_key_required": "请填写 API Key；修改接口域名、协议或端口后需要重新输入。"
+  "agent_form_codex_compatible_key_required": "请填写 API Key；修改接口域名、协议或端口后需要重新输入。",
+  "agent_form_codex_compatible_computer_checking": "正在检查兼容性…",
+  "agent_form_codex_compatible_computer_offline": "已离线，暂不可选",
+  "agent_form_codex_compatible_computer_codex_unavailable": "Codex 不可用",
+  "agent_form_codex_compatible_computer_unsupported": "不支持自定义 API Key"
 }

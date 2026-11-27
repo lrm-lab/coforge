@@ -77,6 +77,7 @@ export function AgentRuntimeFields({
   onLoad,
   initialOptions,
   onDirtyChange,
+  onCodexStateChange,
   providerNotice,
 }: {
   open: boolean;
@@ -96,6 +97,7 @@ export function AgentRuntimeFields({
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
   initialOptions?: RuntimeOptions;
   onDirtyChange?: (dirty: boolean) => void;
+  onCodexStateChange?: (state: { isCodex: boolean; isCodexCompatible: boolean }) => void;
   providerNotice?: (context: RuntimeProviderNoticeContext) => ReactNode;
 }) {
   const controlSize = useDialogControlSize();
@@ -144,15 +146,14 @@ export function AgentRuntimeFields({
   const piConfigured = isPi && piProviderChoice === "";
   const piBuiltin = isPi && !piConfigured;
   const sizesApply = modelSizesApply(provider, piBuiltin ? piProviderChoice : "");
+  const isCodex = provider === RUNTIME_PROVIDER.CODEX;
   const queriedCodexCompatible = useCodexCompatibleSupport(
     computerId,
-    open && provider === RUNTIME_PROVIDER.CODEX && options?.codexCompatible === undefined,
+    open && isCodex && options?.codexCompatible === undefined,
   );
   const codexCompatibleSupported = options?.codexCompatible ?? queriedCodexCompatible;
   const showCodexCompatibleSection =
-    provider === RUNTIME_PROVIDER.CODEX &&
-    !failed &&
-    (codexCompatibleSupported || initialCodexCompatible);
+    isCodex && !failed && (codexCompatibleSupported || initialCodexCompatible);
   const isCodexCompatible =
     showCodexCompatibleSection && selectsCodexCompatible(provider, modelProvider);
 
@@ -313,6 +314,10 @@ export function AgentRuntimeFields({
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
+    onCodexStateChange?.({ isCodex, isCodexCompatible });
+  }, [isCodex, isCodexCompatible, onCodexStateChange]);
 
   function resetModelFields() {
     setModelKey("");

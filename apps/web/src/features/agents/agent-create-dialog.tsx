@@ -27,6 +27,7 @@ import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields"
 import { AgentRuntimeSignInNotice } from "./agent-runtime-sign-in-notice";
 import type { RuntimeSignInComputer } from "./agent-runtime-sign-in-state";
 import { RuntimeSignInDialog } from "#src/features/computers/runtime-sign-in-dialog";
+import { useCodexCompatibleSupportByComputer } from "#src/features/computers/use-codex-compatible-support";
 import { useRuntimeAuthSignals } from "#src/features/computers/use-runtime-auth-signals";
 import { runtimeProviderLabel } from "./runtime-provider-display";
 import { finishedAgentUsername } from "./agent-username";
@@ -121,8 +122,13 @@ export function LocalAgentForm({
   const [error, setError] = useState("");
   const [initialComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
   const [runtimeChanged, setRuntimeChanged] = useState(false);
+  const [codexState, setCodexState] = useState({ isCodex: false, isCodexCompatible: false });
   const [signingIn, setSigningIn] = useState<RuntimeAuthProvider>();
   const [signedIn, setSignedIn] = useState<ReadonlySet<string>>(new Set());
+  const codexCompatibleSupport = useCodexCompatibleSupportByComputer(
+    computers.map((candidate) => candidate.id),
+    !computerLocked && (codexState.isCodex || codexState.isCodexCompatible),
+  );
 
   const form = useAppForm({
     defaultValues: {
@@ -307,6 +313,8 @@ export function LocalAgentForm({
                   )}
                   controlSize={controlSize}
                   selectedKey={field.state.value}
+                  codexCompatibleMode={codexState.isCodexCompatible}
+                  codexCompatibleSupport={codexCompatibleSupport}
                   onAddComputer={() => {
                     onClose();
                     void router.navigate({
@@ -320,6 +328,7 @@ export function LocalAgentForm({
                     clearFieldError("model");
                     clearFieldError("baseUrl");
                     clearFieldError("apiKey");
+                    setCodexState({ isCodex: false, isCodexCompatible: false });
                     field.handleChange(id);
                   }}
                 />
@@ -375,6 +384,7 @@ export function LocalAgentForm({
                                     onModelErrorClear={() => clearFieldError("model")}
                                     onFieldErrorClear={clearFieldError}
                                     onDirtyChange={setRuntimeChanged}
+                                    onCodexStateChange={setCodexState}
                                     providerNotice={({
                                       provider,
                                       modelProvider,
