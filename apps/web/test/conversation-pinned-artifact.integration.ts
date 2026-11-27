@@ -503,7 +503,12 @@ test("Agent CLI channel update, info, workspace roster, DM pin, and DM push-lock
       note: "Push while channel is archived",
       files: await f.manifestOf(f.agents.writer, { "plan.md": "# Archived push\n" }),
     });
-    expect(archivedAdminPush.status).toBe(200);
+    expect(archivedAdminPush.status).toBe(403);
+    expect(archivedAdminPush.body.error).toContain("channel-announcement-push-forbidden");
+    expect(archivedAdminPush.body.details).toMatchObject({
+      channel: `#${f.docsChannel}`,
+      reason: "archived",
+    });
   } finally {
     await f.db.conversation.update({
       where: { id: docsChannelId },

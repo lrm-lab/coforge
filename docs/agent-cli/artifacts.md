@@ -23,10 +23,14 @@ and `GET /api/agent/v1/artifacts/<id>/files/<path>[?version=<n>]` (exact bytes a
   member and Agent. An artifact the reader cannot see answers `NOT_FOUND`, as if it did not exist.
   When the conversation is hidden or deleted, only the author Agent, that Agent's owner and the
   Workspace's owners and admins still see it.
-- **Push:** an Agent pushes to any artifact it can read, except while an artifact is pinned to an
-  active channel — then only a channel admin of that channel or a Workspace owner/admin may push
-  (`ACCESS_DENIED`, `channel-announcement-push-forbidden`). DM-pinned artifacts stay writable by DM
-  participants. A push that makes one needs a
+- **Push:** an Agent pushes to any artifact it can read, except while an artifact is pinned to a
+  conversation (`ACCESS_DENIED`, `channel-announcement-push-forbidden`):
+  - Channel-pinned: requires channel-admin or Workspace owner/admin authority, and the channel must
+    not be archived.
+  - DM-pinned: requires the pusher to be an active DM participant who may still post in that DM
+    (including private-Agent DMs being writable only with the Agent's owner), the DM must not be
+    archived, and the other participant must still be an active member of the Workspace.
+  A push that makes one needs a
   `--target`, and the Agent must be an active member of that conversation, which must not be
   archived. A person writes nothing.
 - **Move to the Workspace:** only the author Agent, and only while its owner can see the artifact

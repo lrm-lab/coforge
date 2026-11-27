@@ -33,7 +33,10 @@ import { lockComments } from "./artifact-comment-write.server";
 import { settleWrite } from "./artifact-activity-wake.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
 import { ArtifactVisibility } from "./artifact-visibility.server";
-import { pinnedChannelPushBlock } from "#src/server/conversations/channel-read-access.server";
+import {
+  pinnedChannelPushBlock,
+  type PinnedArtifactPushBlock,
+} from "#src/server/conversations/channel-read-access.server";
 import { writeVersion } from "./artifact-version-write.server";
 
 export type ArtifactHome = { kind: "conversation"; conversationId: string } | { kind: "public" };
@@ -46,6 +49,22 @@ export const ARTIFACT_LABEL_LIMIT = 60;
 
 export function artifactHomeKey(home: ArtifactHome): string {
   return home.kind === "conversation" ? `conversation:${home.conversationId}` : home.kind;
+}
+
+function pinnedPushBlockHint(block: PinnedArtifactPushBlock): string {
+  if (block.kind === "channel") {
+    if (block.reason === "archived") {
+      return `${block.channel} is archived, so its announcement cannot be changed. Unarchive ${block.channel} first, or push a copy as a new artifact into an active conversation.`;
+    }
+    return `Only a channel admin of ${block.channel} or a Workspace owner or admin can push updates to this artifact while it is pinned there.`;
+  }
+  if (block.reason === "archived") {
+    return `${block.target} is archived, so its pinned content cannot be changed. Push a copy as a new artifact into an active conversation.`;
+  }
+  if (block.reason === "peer_not_member") {
+    return `The other participant in ${block.target} is no longer an active member of this Workspace, so its pinned content cannot be changed. Push a copy as a new artifact into an active conversation.`;
+  }
+  return `You cannot send messages in ${block.target}, so its pinned content cannot be changed. Push a copy as a new artifact into a conversation you can post in.`;
 }
 
 function invalid(errorId: string): never {
@@ -167,8 +186,11 @@ export class Artifacts {
     if (pinBlock) {
       throw new AppError("ACCESS_DENIED", {
         errorId: "channel-announcement-push-forbidden",
-        details: { channel: `#${pinBlock.channelName}` },
-        hint: `Only a channel admin of #${pinBlock.channelName} or a Workspace owner or admin can push updates to this artifact while it is pinned there.`,
+        details: {
+          channel: pinBlock.kind === "channel" ? pinBlock.channel : pinBlock.target,
+          reason: pinBlock.reason,
+        },
+        hint: pinnedPushBlockHint(pinBlock),
       });
     }
     const added = [...(input.files ?? [])];
