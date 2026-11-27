@@ -2,6 +2,7 @@ import { useRef, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button as AriaButton } from "react-aria-components";
 import {
+  CheckCircle,
   ChevronDown,
   Globe02,
   Grid01,
@@ -28,6 +29,7 @@ import type {
   GalleryFilters,
   GalleryScope,
   GallerySort,
+  GalleryStatus,
   GalleryView,
 } from "./artifact-gallery-model";
 import { useScopeLabels } from "./artifact-scope";
@@ -197,6 +199,55 @@ export function AuthorFilter({
       />
       {authorIds.length > 0 && <ClearButton onClear={() => onChange([])} />}
     </div>
+  );
+}
+
+const STATUS_OPTIONS: readonly GalleryStatus[] = ["unsettled", "all", "settled"];
+
+const STATUS_LABELS: Record<GalleryStatus, () => string> = {
+  unsettled: m.ag_status_unsettled,
+  all: m.ag_status_all,
+  settled: m.ag_status_settled,
+};
+
+export function StatusFilter({
+  status,
+  onChange,
+}: {
+  status: GalleryStatus;
+  onChange: (status: GalleryStatus) => void;
+}) {
+  const label = m.ag_status_label({ status: STATUS_LABELS[status]() });
+  return (
+    <Dropdown.Root>
+      <AriaButton
+        aria-label={label}
+        data-artifact-status-filter=""
+        className={chipClass(status !== "all")}
+      >
+        <CheckCircle aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+        <span className="max-w-48 truncate">{label}</span>
+        <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
+      </AriaButton>
+      <Dropdown.Popover placement="bottom start">
+        <Dropdown.Menu
+          aria-label={label}
+          selectionMode="single"
+          selectedKeys={[status]}
+          disallowEmptySelection
+          onAction={(key) => onChange(key as GalleryStatus)}
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <Dropdown.Item
+              key={option}
+              id={option}
+              data-artifact-status-option={option}
+              label={STATUS_LABELS[option]()}
+            />
+          ))}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
   );
 }
 

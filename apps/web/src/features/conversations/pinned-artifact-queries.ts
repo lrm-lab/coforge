@@ -1,8 +1,10 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { queryOptions, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
+import { refreshArtifact } from "#src/features/artifacts/artifact-queries";
 import {
   decodeArtifactAccessChangedEvent,
+  decodeArtifactSettlementChangedEvent,
   decodeArtifactVersionPublishedEvent,
 } from "#src/features/artifacts/artifact-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
@@ -119,6 +121,14 @@ export function useConversationPinnedArtifact(
       const pinChanged = decodeConversationPinnedArtifactChangedEvent(data);
       if (pinChanged?.conversationId === conversationId) {
         void invalidateConversationPinnedArtifact(queryClient, conversationId);
+        return;
+      }
+      const settlementChanged = decodeArtifactSettlementChangedEvent(data);
+      if (settlementChanged) {
+        void refreshArtifact(queryClient, settlementChanged.artifactId, conversationId);
+        if (settlementChanged.artifactId === pinnedArtifactId) {
+          void invalidateConversationPinnedArtifact(queryClient, conversationId);
+        }
         return;
       }
       if (!pinnedArtifactId) return;

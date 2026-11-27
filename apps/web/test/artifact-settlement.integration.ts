@@ -260,3 +260,72 @@ test("gallery cards, marks, and realtime settlement signals reflect settled and 
   });
   expect(published).toHaveLength(3);
 });
+
+test("human settle auto-follows and agent CLI settle/unsettle broadcasts realtime signals", async () => {
+  const artifactId = await f.make("Auto Follow & Agent CLI Signal", undefined, {
+    target: `#${f.docsChannel}`,
+  });
+  const settlements = new ArtifactSettlements(f.db);
+
+  await settlements.settle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  const afterHumanSettle = await f.db.artifactFollow.findUnique({
+    where: { artifactId_userId: { artifactId, userId: f.alice } },
+    select: { following: true },
+  });
+  expect(afterHumanSettle?.following).toBe(true);
+
+  await settlements.unsettle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  await f.db.artifactFollow.update({
+    where: { artifactId_userId: { artifactId, userId: f.alice } },
+    data: { following: false },
+  });
+  await settlements.settle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+  const revivedFollow = await f.db.artifactFollow.findUnique({
+    where: { artifactId_userId: { artifactId, userId: f.alice } },
+    select: { following: true },
+  });
+  expect(revivedFollow?.following).toBe(true);
+
+  await settlements.unsettle({
+    workspaceId: f.workspaceId,
+    artifactId,
+    actor: { userId: f.alice },
+  });
+
+  const agentSignals: Array<{ channel: string; event: ArtifactSignalEvent }> = [];
+  const signals = {
+    publish: async (channel: string, event: ArtifactSignalEvent) => {
+      agentSignals.push({ channel, event });
+    },
+  };
+  const cliSettle = await f.post(
+    f.agents.reader,
+    { operation: "settle", artifact: artifactId },
+    { signals },
+  );
+  expect(cliSettle.status).toBe(200);
+  expect(cliSettle.body.changed).toBe(true);
+  const cliUnsettle = await f.post(
+    f.agents.reader,
+    { operation: "unsettle", artifact: artifactId },
+    { signals },
+  );
+  expect(cliUnsettle.status).toBe(200);
+  expect(cliUnsettle.body.changed).toBe(true);
+  expect(agentSignals.map((entry) => entry.event)).toEqual([
+    { type: "artifact.settlement.changed.v1", workspaceId: f.workspaceId, artifactId },
+    { type: "artifact.settlement.changed.v1", workspaceId: f.workspaceId, artifactId },
+  ]);
+});

@@ -36,6 +36,7 @@ export function ArtifactPageHeader({
   entryPath,
   title,
   shownVersion,
+  titleStatus,
   home,
   homeName,
   detailsTrigger,
@@ -43,7 +44,6 @@ export function ArtifactPageHeader({
   titleContainerRef,
   onChooseVersion,
   comments,
-  settlement,
   share,
   menu,
   pane,
@@ -53,6 +53,7 @@ export function ArtifactPageHeader({
   entryPath: string | undefined;
   title: string;
   shownVersion?: number;
+  titleStatus?: ReactNode;
   home: ArtifactHome | undefined;
   homeName: string | undefined;
   detailsTrigger?: ReactNode;
@@ -60,7 +61,6 @@ export function ArtifactPageHeader({
   titleContainerRef?: RefObject<HTMLDivElement | null>;
   onChooseVersion: (version: number) => void;
   comments?: ReactNode;
-  settlement?: ReactNode;
   share?: ReactNode;
   menu?: ReactNode;
   pane?: ArtifactPaneControls;
@@ -135,6 +135,7 @@ export function ArtifactPageHeader({
                 </Dropdown.Popover>
               </Dropdown.Root>
             )}
+            {titleStatus}
           </div>
           {mobileMeta && (
             <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:hidden">
@@ -146,10 +147,9 @@ export function ArtifactPageHeader({
       <span className="hidden flex-1 sm:block" />
       <div className="flex shrink-0 items-center gap-1">
         {comments}
-        {settlement}
         {share}
         {menu}
-        {(comments || settlement || share || menu) && (overlay || pane) && (
+        {(comments || share || menu) && (overlay || pane) && (
           <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-border-secondary" />
         )}
         {overlay && (

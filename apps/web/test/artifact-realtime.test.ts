@@ -1,8 +1,13 @@
 import { expect, test } from "bun:test";
 import {
+  formatSettledTime,
+  settlementErrorKind,
+} from "#src/features/artifacts/use-artifact-settlement";
+import {
   decodeArtifactSettlementChangedEvent,
   decodeArtifactVersionPublishedEvent,
 } from "#src/features/artifacts/artifact-realtime";
+import { AppError } from "#src/lib/app-error";
 import {
   conversationRealtimeChannel,
   workspaceConversationChannel,
@@ -83,4 +88,26 @@ test("announceSettlementChange publishes to the home channel and widens for work
     { channel: conversationRealtimeChannel(CONVERSATION_ID), event: settlementEvent },
     { channel: workspaceConversationChannel(WORKSPACE_ID), event: settlementEvent },
   ]);
+});
+
+test("settlementErrorKind separates permission denials from generic failures", () => {
+  expect(settlementErrorKind(new AppError("ACCESS_DENIED"))).toBe("forbidden");
+  expect(settlementErrorKind(new AppError("NOT_FOUND"))).toBe("failed");
+  expect(settlementErrorKind(new AppError("INTERNAL_ERROR"))).toBe("failed");
+  expect(settlementErrorKind(new Error("boom"))).toBe("failed");
+  expect(settlementErrorKind(null)).toBe("failed");
+});
+
+test("formatSettledTime formats absolute short month/day/time and guards invalid timestamps", () => {
+  const iso = "2026-11-27T14:05:00.000Z";
+  expect(formatSettledTime(iso, { locale: "en", timeZone: "UTC", timeFormat: "24h" })).toContain(
+    "Nov 27",
+  );
+  expect(formatSettledTime(iso, { locale: "en", timeZone: "UTC", timeFormat: "24h" })).toContain(
+    "14:05",
+  );
+  expect(formatSettledTime(iso, { locale: "zh-CN", timeZone: "UTC", timeFormat: "24h" })).toContain(
+    "14:05",
+  );
+  expect(formatSettledTime("not-a-date", { locale: "en", timeZone: "UTC" })).toBe("not-a-date");
 });

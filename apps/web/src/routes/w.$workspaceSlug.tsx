@@ -49,6 +49,7 @@ import { useSidebarShortcut } from "#src/features/settings/sidebar-shortcut";
 import { markShownWorkspace, shownWorkspace } from "#src/features/workspaces/shown-workspace";
 import { LeaveDeletedWorkspace } from "#src/features/workspaces/leave-deleted-workspace";
 import { ReferencedTasksRealtime } from "#src/features/tasks/referenced-task";
+import { ArtifactSettlementRealtime } from "#src/features/artifacts/artifact-settlement-realtime";
 import {
   otherTaskParamSchema,
   parseOtherTask,
@@ -255,6 +256,7 @@ function AppLayout() {
                     <LeaveDeletedWorkspace workspaceId={currentWorkspace.id} />
                     <WorkspaceFeaturesRealtime workspaceId={currentWorkspace.id} />
                     <ReferencedTasksRealtime workspaceId={currentWorkspace.id} userId={user.id} />
+                    <ArtifactSettlementRealtime workspaceId={currentWorkspace.id} />
                     <BrowserPushLifecycle
                       enabled={notifications.enabled}
                       publicKey={notifications.publicKey}

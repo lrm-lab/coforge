@@ -39,7 +39,7 @@ import {
 import type { VisibilityChoice } from "./artifact-scope";
 import { ArtifactSettlementDetailsSection } from "./artifact-settlement-control";
 import { VersionPublisherAvatar, VersionTimelineRow } from "./artifact-version-menu";
-import type { ArtifactReopenedView, ArtifactSettledView } from "./use-artifact-settlement";
+import type { ArtifactSettlementState } from "./use-artifact-settlement";
 
 const DETAIL_CHANGED_PATHS_SHOWN = 2;
 
@@ -56,8 +56,7 @@ export function ArtifactDetailsPopover({
   triggerRef,
   shownVersion,
   latestVersion,
-  settled = null,
-  reopened = null,
+  settlement,
   scope,
   home,
   homeName,
@@ -76,8 +75,7 @@ export function ArtifactDetailsPopover({
   triggerRef?: RefObject<HTMLElement | null>;
   shownVersion: number;
   latestVersion: number;
-  settled?: ArtifactSettledView;
-  reopened?: ArtifactReopenedView;
+  settlement: ArtifactSettlementState;
   scope: VisibilityChoice;
   home: ArtifactHome | undefined;
   homeName: string | undefined;
@@ -106,11 +104,7 @@ export function ArtifactDetailsPopover({
         aria-label={m.av_details_label()}
         className="flex min-h-0 flex-col divide-y divide-border-secondary overflow-y-auto outline-hidden"
       >
-        <ArtifactSettlementDetailsSection
-          settled={settled}
-          reopened={reopened}
-          latestVersion={latestVersion}
-        />
+        <ArtifactSettlementDetailsSection settlement={settlement} />
         <VersionSection
           artifactId={artifactId}
           shownVersion={shownVersion}

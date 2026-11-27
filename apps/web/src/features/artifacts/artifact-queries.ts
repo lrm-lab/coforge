@@ -107,6 +107,7 @@ export function refreshArtifact(
             "marks",
             "viewers",
             "comments",
+            "following",
             "mentionable",
             "link-sharing",
           ].includes(String(kind));

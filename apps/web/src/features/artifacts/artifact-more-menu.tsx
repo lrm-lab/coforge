@@ -10,6 +10,7 @@ import {
   InfoCircle,
   LinkExternal01,
   Monitor02,
+  RefreshCcw01,
   SearchLg,
   Stars01,
   Trash01,
@@ -17,7 +18,6 @@ import {
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { VersionMenu } from "./artifact-version-menu";
 import type { ArtifactVisibility } from "./use-artifact-visibility";
@@ -94,25 +94,6 @@ export function ArtifactMoreMenu({
             else onAction(key as MoreAction);
           }}
         >
-          {phone && onToggleSettlement && (
-            <>
-              <Dropdown.Item
-                id="toggle-settlement"
-                leading={
-                  <CheckCircle
-                    aria-hidden="true"
-                    className={cn(
-                      "size-[1.125rem] shrink-0 stroke-[1.9px]",
-                      !settled && "text-utility-green-500",
-                    )}
-                  />
-                }
-                isDisabled={settlementPending}
-                label={settled ? m.av_menu_unsettle() : m.av_menu_settle()}
-              />
-              <Dropdown.Separator />
-            </>
-          )}
           {onOpenDetails && (
             <Dropdown.Item id="details" icon={InfoCircle} label={m.av_details_label()} />
           )}
@@ -155,6 +136,26 @@ export function ArtifactMoreMenu({
           <Dropdown.Separator />
           {visibility.canChange && (
             <Dropdown.Item id="rename" icon={Edit03} label={m.av_menu_rename()} />
+          )}
+          {onToggleSettlement && (
+            <Dropdown.Item
+              id="toggle-settlement"
+              leading={
+                settled ? (
+                  <RefreshCcw01
+                    aria-hidden="true"
+                    className="size-[1.125rem] shrink-0 stroke-[1.9px]"
+                  />
+                ) : (
+                  <CheckCircle
+                    aria-hidden="true"
+                    className="size-[1.125rem] shrink-0 stroke-[1.9px] text-utility-green-500"
+                  />
+                )
+              }
+              isDisabled={settlementPending}
+              label={settled ? m.av_unsettle_action() : m.av_settle_action()}
+            />
           )}
           {phone && hasMultipleVersions && (
             <Dropdown.SubmenuTrigger openOnHover={false}>

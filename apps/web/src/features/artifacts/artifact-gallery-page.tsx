@@ -1,6 +1,7 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { AlertCircle, SearchLg, XClose } from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -9,7 +10,9 @@ import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { GalleryWireframe, NoResultsWireframe } from "#src/components/ui/empty-wireframes";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { messageSlots } from "#src/lib/message-slots";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { loadArtifactGallery } from "./artifact-gallery.functions";
 import { GalleryGridCard } from "./artifact-gallery-card";
 import {
@@ -17,15 +20,19 @@ import {
   ConversationFilter,
   RelatedToggle,
   SortMenu,
+  StatusFilter,
   ViewSwitch,
 } from "./artifact-gallery-filters";
 import { GalleryList } from "./artifact-gallery-list";
 import {
   emptyGalleryState,
+  filterGalleryByStatus,
   initialFilters,
+  isGalleryCardDimmed,
   useGalleryView,
   type EmptyGalleryState,
   type GalleryFilters,
+  type GalleryStatus,
 } from "./artifact-gallery-model";
 import { LoadingBody } from "./artifact-page-states";
 import { ARTIFACTS_KEY } from "./artifact-queries";
@@ -78,7 +85,7 @@ function DebouncedSearchInput({
 function useGallery(filters: GalleryFilters) {
   const { query, scope, authorAgentIds, related, sort } = filters;
   return useInfiniteQuery({
-    queryKey: [...ARTIFACTS_KEY, "gallery", filters],
+    queryKey: [...ARTIFACTS_KEY, "gallery", { query, scope, authorAgentIds, related, sort }],
     queryFn: ({ pageParam }) =>
       loadArtifactGallery({
         data: {
@@ -94,6 +101,59 @@ function useGallery(filters: GalleryFilters) {
     getNextPageParam: (last) => last.nextCursor,
     staleTime: 30_000,
   });
+}
+
+function SettledStatusStrip({
+  status,
+  hiddenCount,
+  dimmedCount,
+  onStatusChange,
+}: {
+  status: GalleryStatus;
+  hiddenCount: number;
+  dimmedCount: number;
+  onStatusChange: (status: GalleryStatus) => void;
+}) {
+  const locale = getLocale();
+  const numberFormat = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  if (status === "settled") return null;
+  if (status === "unsettled" && hiddenCount > 0) {
+    return (
+      <p data-artifact-settled-strip="" data-mode="hidden" className="mb-3 text-xs text-tertiary">
+        {messageSlots(m.ag_settled_hidden_note, {
+          count: numberFormat.format(hiddenCount),
+          action: (
+            <AriaButton
+              data-artifact-settled-strip-action=""
+              onPress={() => onStatusChange("all")}
+              className="cursor-pointer rounded-sm font-medium text-primary underline-offset-2 outline-focus-ring hover:underline focus-visible:outline-2"
+            >
+              {m.ag_settled_hidden_action()}
+            </AriaButton>
+          ),
+        })}
+      </p>
+    );
+  }
+  if (status === "all" && dimmedCount > 0) {
+    return (
+      <p data-artifact-settled-strip="" data-mode="dimmed" className="mb-3 text-xs text-tertiary">
+        {messageSlots(m.ag_settled_dimmed_note, {
+          count: numberFormat.format(dimmedCount),
+          action: (
+            <AriaButton
+              data-artifact-settled-strip-action=""
+              onPress={() => onStatusChange("unsettled")}
+              className="cursor-pointer rounded-sm font-medium text-primary underline-offset-2 outline-focus-ring hover:underline focus-visible:outline-2"
+            >
+              {m.ag_settled_dimmed_action()}
+            </AriaButton>
+          ),
+        })}
+      </p>
+    );
+  }
+  return null;
 }
 
 export function ArtifactGalleryPage({
@@ -123,6 +183,10 @@ export function ArtifactGalleryPage({
     setFilters((previous) => ({ ...previous, ...patch }));
   const gallery = useGallery(filters);
   const cards = gallery.data?.pages.flatMap((page) => page.artifacts) ?? [];
+  const { visible, hiddenSettledCount, dimmedSettledCount } = useMemo(
+    () => filterGalleryByStatus(cards, filters.status),
+    [cards, filters.status],
+  );
   const emptyState = emptyGalleryState(filters);
   const clearAll = () => {
     setResetToken((count) => count + 1);
@@ -130,10 +194,10 @@ export function ArtifactGalleryPage({
   };
   const overlayOpen = Boolean(openArtifactId && onCloseArtifact);
   const countLabel =
-    !gallery.isPending && cards.length > 0
+    !gallery.isPending && visible.length > 0
       ? gallery.hasNextPage
-        ? m.ag_count_more({ count: cards.length })
-        : m.ag_count({ count: cards.length })
+        ? m.ag_count_more({ count: visible.length })
+        : m.ag_count({ count: visible.length })
       : null;
 
   return (
@@ -158,6 +222,7 @@ export function ArtifactGalleryPage({
             authorIds={filters.authorAgentIds}
             onChange={(authorAgentIds) => update({ authorAgentIds })}
           />
+          <StatusFilter status={filters.status} onChange={(status) => update({ status })} />
           <RelatedToggle on={filters.related} onChange={(related) => update({ related })} />
           <span className="flex-1" />
           <SortMenu sort={filters.sort} onChange={(sort) => update({ sort })} />
@@ -188,16 +253,36 @@ export function ArtifactGalleryPage({
               onClear={clearAll}
               onSeeAll={() => update({ related: false })}
             />
+          ) : visible.length === 0 && !gallery.hasNextPage ? (
+            <StatusEmptyGallery
+              status={filters.status}
+              onShowAll={() => update({ status: "all" })}
+            />
           ) : (
             <>
-              {view === "grid" ? (
-                <div className="grid grid-cols-1 gap-3 min-[24rem]:grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
-                  {cards.map((card) => (
-                    <GalleryGridCard key={card.id} card={card} sort={filters.sort} />
-                  ))}
+              <SettledStatusStrip
+                status={filters.status}
+                hiddenCount={hiddenSettledCount}
+                dimmedCount={dimmedSettledCount}
+                onStatusChange={(status) => update({ status })}
+              />
+              {visible.length > 0 && (
+                <div data-artifact-gallery-items="">
+                  {view === "grid" ? (
+                    <div className="grid grid-cols-1 gap-3 min-[24rem]:grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
+                      {visible.map((card) => (
+                        <GalleryGridCard
+                          key={card.id}
+                          card={card}
+                          sort={filters.sort}
+                          dimmed={isGalleryCardDimmed(card, filters.status)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <GalleryList cards={visible} sort={filters.sort} status={filters.status} />
+                  )}
                 </div>
-              ) : (
-                <GalleryList cards={cards} sort={filters.sort} />
               )}
               {gallery.hasNextPage && (
                 <div className="mt-4 flex flex-col items-center gap-2">
@@ -236,6 +321,28 @@ export function ArtifactGalleryPage({
         </div>
       )}
     </main>
+  );
+}
+
+function StatusEmptyGallery({
+  status,
+  onShowAll,
+}: {
+  status: GalleryStatus;
+  onShowAll: () => void;
+}) {
+  return (
+    <EmptyState
+      size="page"
+      live="polite"
+      picture={<GalleryWireframe />}
+      title={status === "settled" ? m.ag_empty_settled() : m.ag_empty_unsettled()}
+      primaryAction={
+        <Button size="sm" color="secondary" onPress={onShowAll}>
+          {status === "settled" ? m.ag_see_all() : m.ag_show_settled()}
+        </Button>
+      }
+    />
   );
 }
 

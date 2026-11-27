@@ -7,7 +7,9 @@ import {
 } from "#src/features/artifacts/artifact-comment-threads";
 import {
   emptyGalleryState,
+  filterGalleryByStatus,
   initialFilters,
+  isGalleryCardDimmed,
   type GalleryFilters,
 } from "#src/features/artifacts/artifact-gallery-model";
 import { canCopyEmbed } from "#src/features/artifacts/artifact-link-sharing";
@@ -169,4 +171,37 @@ test("B7: clearReviewSearch removes only review while keeping version and commen
     review: undefined,
     version: 2,
   });
+});
+
+test("B3: filterGalleryByStatus hides plain settled cards by default, keeps mentioned/commented, and dims in all", () => {
+  const working = { id: "w", settled: null, mentionsYou: false, newComments: 0 };
+  const settledQuiet = {
+    id: "sq",
+    settled: { at: "2026-11-27T10:00:00Z", version: 2, by: { kind: "user", name: "Ada" } },
+    mentionsYou: false,
+    newComments: 0,
+  };
+  const settledMentioned = { ...settledQuiet, id: "sm", mentionsYou: true };
+  const settledComments = { ...settledQuiet, id: "sc", newComments: 2 };
+  const cards = [working, settledQuiet, settledMentioned, settledComments];
+
+  const unsettled = filterGalleryByStatus(cards, "unsettled");
+  expect(unsettled.visible.map((c) => c.id)).toEqual(["w", "sm", "sc"]);
+  expect(unsettled.hiddenSettledCount).toBe(1);
+  expect(unsettled.dimmedSettledCount).toBe(0);
+
+  const all = filterGalleryByStatus(cards, "all");
+  expect(all.visible.map((c) => c.id)).toEqual(["w", "sq", "sm", "sc"]);
+  expect(all.hiddenSettledCount).toBe(0);
+  expect(all.dimmedSettledCount).toBe(3);
+
+  const settled = filterGalleryByStatus(cards, "settled");
+  expect(settled.visible.map((c) => c.id)).toEqual(["sq", "sm", "sc"]);
+  expect(settled.hiddenSettledCount).toBe(0);
+  expect(settled.dimmedSettledCount).toBe(0);
+
+  expect(isGalleryCardDimmed(working, "all")).toBe(false);
+  expect(isGalleryCardDimmed(settledQuiet, "all")).toBe(true);
+  expect(isGalleryCardDimmed(settledQuiet, "settled")).toBe(false);
+  expect(isGalleryCardDimmed(settledQuiet, "unsettled")).toBe(false);
 });

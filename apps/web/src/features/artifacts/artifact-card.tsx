@@ -24,6 +24,7 @@ import {
   useArtifactActor,
   type ArtifactCard,
 } from "./artifact-queries";
+import { SettledBadge } from "./artifact-settlement-control";
 import { useArtifactLink } from "./artifact-beside-chat";
 import { useOptionalInlineEmbedPool } from "./inline-embed-pool-context";
 
@@ -154,7 +155,7 @@ function ArtifactCardWithMarks({ card }: { card: ArtifactCard }) {
         <Link
           {...linkTo(card.id)}
           onClick={(event) => event.stopPropagation()}
-          className="min-w-0 truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"
+          className="min-w-0 max-w-full truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"
         >
           {title}
         </Link>
@@ -193,23 +194,28 @@ export function ArtifactCardFace({
     >
       <ArtifactIcon entryPath={card.entryPath} />
       <div className="min-w-0 flex-1">
-        <p className="flex min-w-0 items-baseline gap-2">
-          {titleAs ? (
-            titleAs(title)
-          ) : (
-            <span className="min-w-0 truncate text-sm font-semibold text-primary">{title}</span>
-          )}
-          <span className="shrink-0 text-xs text-quaternary tabular-nums">
-            v{card.currentVersion}
-          </span>
-          <span className="shrink-0 text-xs text-quaternary">{kind}</span>
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
+            {titleAs ? (
+              titleAs(title)
+            ) : (
+              <span className="min-w-0 max-w-full truncate text-sm font-semibold text-primary">
+                {title}
+              </span>
+            )}
+            <span className="shrink-0 text-xs text-quaternary tabular-nums">
+              v{card.currentVersion}
+            </span>
+            {settled && <SettledBadge label={m.av_settled_badge()} settled={settled} />}
+            <span className="shrink-0 text-xs text-quaternary">{kind}</span>
+          </div>
           {marks && (
             <ArrowUpRight
               aria-hidden="true"
-              className="ml-auto size-4 shrink-0 text-fg-quaternary"
+              className="mt-0.5 size-4 shrink-0 text-fg-quaternary"
             />
           )}
-        </p>
+        </div>
         {facts && (
           <p data-artifact-facts className="mt-0.5 truncate text-xs text-tertiary tabular-nums">
             {facts}
@@ -228,13 +234,13 @@ export function ArtifactCardFace({
               <span className="max-w-32 truncate">{scope.label}</span>
             </span>
           )}
-          {(marks || settled) && (
+          {marks && (marks.hasUpdates || marks.newComments > 0 || marks.mentionsYou) && (
             <CardBadges
+              showSettled={false}
               card={{
-                hasUpdates: marks?.hasUpdates ?? false,
-                newComments: marks?.newComments ?? 0,
-                mentionsYou: marks?.mentionsYou ?? false,
-                settled,
+                hasUpdates: marks.hasUpdates,
+                newComments: marks.newComments,
+                mentionsYou: marks.mentionsYou,
               }}
             />
           )}

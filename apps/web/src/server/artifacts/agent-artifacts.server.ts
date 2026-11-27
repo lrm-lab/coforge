@@ -462,13 +462,13 @@ export async function runAgentArtifactOperation(
         (parsed.data as z.infer<typeof RULES.unfollow>).artifact,
       );
     case "settle":
-      return new ArtifactSettlements(services.db).settle({
+      return new ArtifactSettlements(services.db, services.signals).settle({
         workspaceId,
         artifactId: (parsed.data as z.infer<typeof RULES.settle>).artifact,
         actor: { agentId },
       });
     case "unsettle":
-      return new ArtifactSettlements(services.db).unsettle({
+      return new ArtifactSettlements(services.db, services.signals).unsettle({
         workspaceId,
         artifactId: (parsed.data as z.infer<typeof RULES.unsettle>).artifact,
         actor: { agentId },

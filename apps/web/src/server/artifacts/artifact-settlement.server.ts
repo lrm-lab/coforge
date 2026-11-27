@@ -3,7 +3,7 @@ import { AppError } from "#src/lib/app-error";
 import { errorType } from "#src/server/errors/error-type.server";
 import { artifactTier, requireArtifactRead, type ArtifactActor } from "./artifact-access.server";
 import { actorNames, actorOf } from "./artifact-actor-names.server";
-import { followByWriting } from "./artifact-follows.server";
+import { followByWriting, startFollowing } from "./artifact-follows.server";
 import { announceSettlementChange, type ArtifactSignals } from "./artifact-signals.server";
 
 export type ArtifactSettlementActor = { kind: "user" | "agent"; name: string };
@@ -260,16 +260,30 @@ export class ArtifactSettlements {
 
     const [[view], followed] = await Promise.all([
       resolveSettlementViews(this.db, input.workspaceId, [result.row]),
-      settling && result.changed && input.actor.agentId !== undefined
-        ? followByWriting(this.db, {
-            artifactId: result.row.id,
-            agentId: input.actor.agentId,
-          }).catch((error) => {
-            console.warn(
-              JSON.stringify({ event: "artifacts:follow_failed", error_type: errorType(error) }),
-            );
-            return { newlyFollowing: false };
-          })
+      settling && result.changed
+        ? input.actor.agentId !== undefined
+          ? followByWriting(this.db, {
+              artifactId: result.row.id,
+              agentId: input.actor.agentId,
+            }).catch((error) => {
+              console.warn(
+                JSON.stringify({ event: "artifacts:follow_failed", error_type: errorType(error) }),
+              );
+              return { newlyFollowing: false };
+            })
+          : input.actor.userId !== undefined
+            ? startFollowing(this.db, result.row.id, [{ userId: input.actor.userId }])
+                .then(() => ({ newlyFollowing: false }))
+                .catch((error) => {
+                  console.warn(
+                    JSON.stringify({
+                      event: "artifacts:follow_failed",
+                      error_type: errorType(error),
+                    }),
+                  );
+                  return { newlyFollowing: false };
+                })
+            : Promise.resolve({ newlyFollowing: false })
         : Promise.resolve({ newlyFollowing: false }),
       result.changed
         ? announceSettlementChange(this.signals, {

@@ -22,10 +22,7 @@ import { ArtifactPresenceChip } from "./artifact-presence-chip";
 import type { ArtifactDocument } from "./artifact-queries";
 import { artifactPageRoute, galleryEntryState } from "./artifact-search";
 import { ArtifactSharePopover } from "./artifact-share-popover";
-import {
-  ArtifactSettlementHeaderControl,
-  ArtifactSettlementMobileChip,
-} from "./artifact-settlement-control";
+import { SettledBadge } from "./artifact-settlement-control";
 import { encodeArtifactShortId } from "./artifact-short-id";
 import { VisibilityPill } from "./artifact-visibility-pill";
 import type { ArtifactSettlementState } from "./use-artifact-settlement";
@@ -247,8 +244,7 @@ export function ArtifactViewerHeader({
         titleAs: (standalone ? "h1" : "h2") as "h1" | "h2",
         shownVersion,
         latestVersion,
-        settled: settlement.settled,
-        reopened: settlement.reopened,
+        settlement,
         scope: visibility.current,
         home,
         homeName,
@@ -266,6 +262,16 @@ export function ArtifactViewerHeader({
         entryPath={entryPath}
         title={title}
         shownVersion={loaded && hasMultipleVersions ? shownVersion : undefined}
+        titleStatus={
+          loaded && settlement.settled ? (
+            <SettledBadge
+              label={m.av_settled_badge()}
+              settled={settlement.settled}
+              tooltipPlacement="bottom"
+              className="max-sm:hidden"
+            />
+          ) : undefined
+        }
         home={home}
         homeName={homeName}
         pane={pane}
@@ -285,7 +291,6 @@ export function ArtifactViewerHeader({
             />
           )
         }
-        settlement={loaded && <ArtifactSettlementHeaderControl settlement={settlement} />}
         share={
           loaded && (
             <ArtifactSharePopover
@@ -299,7 +304,13 @@ export function ArtifactViewerHeader({
         mobileMeta={
           loaded && (
             <>
-              <ArtifactSettlementMobileChip settlement={settlement} />
+              {settlement.settled && (
+                <SettledBadge
+                  label={m.av_settled_badge()}
+                  settled={settlement.settled}
+                  tooltipPlacement="bottom"
+                />
+              )}
               <VisibilityPill visibility={visibility} />
               <ArtifactPresenceChip
                 workspaceId={workspaceId}
@@ -324,8 +335,10 @@ export function ArtifactViewerHeader({
               visibility={visibility}
               settled={settlement.settled !== null}
               settlementPending={settlement.pending}
-              onToggleSettlement={() =>
-                void (settlement.settled ? settlement.unsettle() : settlement.settle())
+              onToggleSettlement={
+                settlement.canSettle
+                  ? () => void (settlement.settled ? settlement.unsettle() : settlement.settle())
+                  : undefined
               }
               onChooseVersion={onChooseVersion}
               onOpenDetails={hasRecentSwitcher ? () => setDetailsOpen(true) : undefined}

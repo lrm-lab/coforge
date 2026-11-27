@@ -2,6 +2,7 @@ import { useState } from "react";
 
 export type GalleryView = "grid" | "list";
 export type GallerySort = "opened" | "updated";
+export type GalleryStatus = "unsettled" | "all" | "settled";
 export type GalleryScope =
   | { kind: "conversation"; conversationId: string }
   | { kind: "workspace" }
@@ -11,6 +12,7 @@ export type GalleryFilters = {
   query: string;
   scope: GalleryScope | undefined;
   authorAgentIds: string[];
+  status: GalleryStatus;
   related: boolean;
   sort: GallerySort;
 };
@@ -19,6 +21,7 @@ export const initialFilters: GalleryFilters = {
   query: "",
   scope: undefined,
   authorAgentIds: [],
+  status: "unsettled",
   related: false,
   sort: "opened",
 };
@@ -40,6 +43,43 @@ export function emptyGalleryState(filters: GalleryFilters): EmptyGalleryState {
       clearKind: narrowed || filters.related ? "filters" : "search",
     };
   return { kind: "no-match-filters", showSeeAll: filters.related };
+}
+
+export function isGalleryCardDimmed(card: { settled: unknown }, status: GalleryStatus): boolean {
+  return status === "all" && card.settled !== null && card.settled !== undefined;
+}
+
+export function filterGalleryByStatus<
+  T extends { settled: unknown; mentionsYou: boolean; newComments: number },
+>(cards: readonly T[], status: GalleryStatus) {
+  if (status === "all") {
+    const dimmedSettledCount = cards.filter((card) => isGalleryCardDimmed(card, status)).length;
+    return {
+      visible: [...cards],
+      hiddenSettledCount: 0,
+      dimmedSettledCount,
+    };
+  }
+  if (status === "settled") {
+    const visible = cards.filter((card) => card.settled !== null && card.settled !== undefined);
+    return {
+      visible,
+      hiddenSettledCount: 0,
+      dimmedSettledCount: 0,
+    };
+  }
+  const visible = cards.filter(
+    (card) =>
+      card.settled === null ||
+      card.settled === undefined ||
+      card.mentionsYou ||
+      card.newComments > 0,
+  );
+  return {
+    visible,
+    hiddenSettledCount: cards.length - visible.length,
+    dimmedSettledCount: 0,
+  };
 }
 
 const VIEW_KEY = "coforge:artifacts:view";

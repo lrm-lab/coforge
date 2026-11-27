@@ -10,6 +10,7 @@ import { messageSlots } from "#src/lib/message-slots";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { commentsCap } from "./artifact-comment-threads";
+import { useGalleryCardMenu } from "./artifact-gallery-context-menu";
 import type { GallerySort } from "./artifact-gallery-model";
 import { GalleryCardVisibility } from "./artifact-gallery-visibility";
 import { artifactDownloadUrl, artifactThumbnailUrl } from "./artifact-download-url";
@@ -22,19 +23,22 @@ import { SettledBadge } from "./artifact-settlement-control";
 
 export function CardBadges({
   card,
+  showSettled = true,
 }: {
   card: Pick<GalleryCard, "hasUpdates" | "newComments" | "mentionsYou"> & {
     settled?: GalleryCard["settled"];
   };
+  showSettled?: boolean;
 }) {
   const badges: string[] = [];
   if (card.hasUpdates) badges.push(m.av_card_updates());
   if (card.newComments > 0) badges.push(m.av_card_new_comments({ count: card.newComments }));
   if (card.mentionsYou) badges.push(m.av_card_mention());
-  if (!card.settled && badges.length === 0) return null;
+  const showBadge = showSettled && card.settled;
+  if (!showBadge && badges.length === 0) return null;
   return (
     <span className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
-      {card.settled && <SettledBadge label={m.av_settled_badge()} />}
+      {showBadge && <SettledBadge label={m.av_settled_badge()} settled={card.settled} />}
       {badges.map((badge) => (
         <span
           key={badge}
@@ -54,8 +58,8 @@ function Preview({ card }: { card: GalleryCard }) {
   return (
     <div
       className={cn(
-        "h-full overflow-hidden px-3 pt-3 text-xs/5 text-tertiary",
-        "[mask-image:linear-gradient(to_bottom,black_65%,transparent)]",
+        "h-full overflow-hidden px-3 pt-10 text-xs/5 text-tertiary",
+        "[mask-image:linear-gradient(to_bottom,black_75%,transparent)]",
       )}
     >
       <MarkdownPreview markdown={stripLeadingTitleHeading(card.preview, card.title)} />
@@ -107,19 +111,43 @@ function ImagePreview({ card }: { card: GalleryCard }) {
 export const GalleryGridCard = memo(function GalleryGridCard({
   card,
   sort,
+  dimmed = false,
 }: {
   card: GalleryCard;
   sort: GallerySort;
+  dimmed?: boolean;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
   const scopeOf = useScopeOf();
   const scope = scopeOf(card);
   const displayTitle = card.title || m.doc_untitled();
+  const { cardRef, onContextMenu, onKeyDown, renderMenu } = useGalleryCardMenu(card);
   return (
-    <article className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition-[border-color] duration-100 hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring">
-      <div className="h-32 border-b border-secondary">
+    <article
+      ref={cardRef}
+      data-artifact-card={card.id}
+      data-settled={card.settled ? "" : undefined}
+      data-dimmed={dimmed ? "" : undefined}
+      onContextMenu={onContextMenu}
+      onKeyDown={onKeyDown}
+      className={cn(
+        "group/card relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition-[border-color,opacity] duration-150 hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring",
+        dimmed && "grayscale opacity-60 hover:opacity-85 focus-within:opacity-85",
+      )}
+    >
+      <div className="relative h-32 border-b border-secondary">
         <Preview card={card} />
+        <div className="pointer-events-none absolute top-2 right-2 z-10 flex items-center gap-1">
+          {card.settled && (
+            <span className="pointer-events-auto inline-flex rounded-md bg-primary shadow-xs">
+              <SettledBadge label={m.av_settled_badge()} settled={card.settled} />
+            </span>
+          )}
+          {renderMenu(
+            "pointer-events-auto bg-primary shadow-xs ring-1 ring-secondary opacity-80 group-hover/card:opacity-100 group-focus-within/card:opacity-100 data-[open=true]:opacity-100 hover:bg-primary_hover",
+          )}
+        </div>
       </div>
       <div className="flex flex-col gap-1.5 p-3">
         <p className="flex min-w-0 items-baseline gap-1.5">
@@ -130,6 +158,7 @@ export const GalleryGridCard = memo(function GalleryGridCard({
                 params={{ workspaceSlug }}
                 search={{ artifact: card.id }}
                 resetScroll={false}
+                data-artifact-open=""
                 className="min-w-0 truncate text-sm font-semibold text-primary outline-none before:absolute before:inset-0"
               >
                 <span className="inline-block max-w-full truncate align-bottom">
@@ -157,7 +186,7 @@ export const GalleryGridCard = memo(function GalleryGridCard({
             <GalleryCardVisibility artifactId={card.id} tier={card.access} scope={scope} />
           </div>
         </div>
-        <CardBadges card={card} />
+        <CardBadges card={card} showSettled={false} />
         <WhenLine card={card} sort={sort} className="text-xs text-quaternary" />
       </div>
     </article>
