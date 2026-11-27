@@ -1,13 +1,16 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { createMigratedScratchDatabase, type ScratchDatabase } from "./support/scratch-database";
 
 /**
  * The reads of unfinished Tasks (the Tasks page overview and an Agent's `task list --mine`) find
  * them as an index range over their statuses, instead of reading every Task the Workspace ever
  * finished and discarding it. A Workspace is given a finished history far larger than its open
  * work, as it has once in use; each read runs once to record its SQL, which is then planned.
+ * Other suites' open Tasks change the selectivity of the status index, so analyze only this
+ * fixture's data in a separate database with the same migrated schema.
  *
  * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL, matching
  * `message-search-plan.integration.test.ts`.
@@ -15,6 +18,32 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 /** Ten times the 4 open Tasks, and still two orders of magnitude below the finished history. */
 const UNFINISHED_ROW_BUDGET = 40;
+
+let db: PrismaClient;
+let scratch: ScratchDatabase | undefined;
+const taskReads: { query: string; params: unknown[] }[] = [];
+
+beforeAll(async () => {
+  if (!connectionString) return;
+  scratch = await createMigratedScratchDatabase(connectionString, "unfinished_task_plan");
+  const client = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: scratch.url }),
+    log: [{ emit: "event", level: "query" }],
+  });
+  db = client;
+  client.$on("query", (event) => {
+    if (event.query.includes('FROM "public"."tasks"'))
+      taskReads.push({ query: event.query, params: JSON.parse(event.params) });
+  });
+}, 120_000);
+
+afterAll(async () => {
+  try {
+    await db?.$disconnect();
+  } finally {
+    await scratch?.drop();
+  }
+});
 
 type PlanNode = {
   "Node Type": string;
@@ -55,15 +84,7 @@ function taskRowsRead(nodes: PlanNode[]): number {
 test.skipIf(!connectionString)(
   "the unfinished Task reads range over the open statuses in a Task index",
   async () => {
-    const db = new PrismaClient({
-      adapter: new PrismaPg({ connectionString: connectionString! }),
-      log: [{ emit: "event", level: "query" }],
-    });
-    const taskReads: { query: string; params: unknown[] }[] = [];
-    db.$on("query", (event) => {
-      if (event.query.includes('FROM "public"."tasks"'))
-        taskReads.push({ query: event.query, params: JSON.parse(event.params) });
-    });
+    taskReads.length = 0;
     const handle = crypto.randomUUID().slice(0, 8);
     const user = await db.user.create({
       data: { displayName: `unfinished-plan-${handle}`, username: `unfinished-plan-${handle}` },
@@ -132,13 +153,7 @@ test.skipIf(!connectionString)(
         const taskScans = nodes.filter((node) => node["Relation Name"] === "tasks");
         expect(taskScans).toHaveLength(1);
         expect(taskScans[0]!["Node Type"]).not.toBe("Seq Scan");
-        // The 4 open Tasks, not the 4,000 finished ones. Checked before the index condition so a
-        // failure reports the rows read. Known to fail on a database already full of other
-        // Workspaces' Tasks: there the `--mine` read BitmapAnds both Task indexes without their
-        // `status` column and filters the finished history out of the heap, because the
-        // statistics do not know this owner's Tasks are nearly all finished. That costs about 1 ms
-        // at this test's extreme 4,000, and the fix (a partial index on open Tasks) is not worth a
-        // migration yet.
+        // Report actual row work before checking where the index applied the status predicate.
         expect(taskRowsRead(nodes)).toBeLessThanOrEqual(UNFINISHED_ROW_BUDGET);
         // A bitmap scan carries its index condition on the child Bitmap Index Scan.
         const taskIndexConds = nodes.flatMap((node) =>
@@ -149,7 +164,6 @@ test.skipIf(!connectionString)(
     } finally {
       await db.workspace.delete({ where: { id: workspace.id } });
       await db.user.delete({ where: { id: user.id } });
-      await db.$disconnect();
     }
   },
 );
