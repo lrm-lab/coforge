@@ -60,6 +60,7 @@ import {
 } from "./sidebar-lists";
 import { listedDirectIds } from "./sidebar-rows";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
+import { subscribeConversationReveal } from "./phone-conversation-jump";
 
 export function useConversationDetailVisible() {
   return useContext(ConversationListContext)?.detailVisible ?? true;
@@ -120,15 +121,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     browsing ||
     pathname === workspacePath(workspaceSlug) ||
     pathname === workspacePath(workspaceSlug, "/");
-  useEffect(() => {
-    let pathname = router.state.location.pathname;
-    return router.subscribe("onResolved", () => {
-      const next = router.state.location.pathname;
-      if (next === pathname) return;
-      pathname = next;
-      setBrowsing(false);
-    });
-  }, [router]);
+  useEffect(() => subscribeConversationReveal(router, () => setBrowsing(false)), [router]);
 
   const rememberedPath = useRef<string | undefined>(undefined);
   useEffect(() => {

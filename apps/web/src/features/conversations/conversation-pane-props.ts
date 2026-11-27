@@ -33,5 +33,6 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation"> & {
   channels?: readonly ChannelSuggestion[];
   jumpMessage?: string;
   onJumpMessageConsumed?: () => void;
+  paneVisible?: boolean;
   keepsReadCursor?: boolean;
 };

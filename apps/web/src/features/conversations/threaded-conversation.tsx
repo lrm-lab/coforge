@@ -375,6 +375,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         channels={channelList}
         jumpMessage={jumpMessage ?? jumpMessageId}
         onJumpMessageConsumed={jumpMessage ? onJumpMessageConsumed : clearJumpMessage}
+        paneVisible={detailVisible}
         onLoadMessageAround={onLoadMessageAround}
         onReadLatest={onReadLatest}
         header={header}
@@ -449,6 +450,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           >
             <ThreadPane
               {...threadPaneProps(root)}
+              paneVisible={detailVisible && threadPaneVisible(rootId)}
               onClose={threadClose}
               threadContext={threadContext}
               onViewInConversation={() => viewInConversation(rootId)}

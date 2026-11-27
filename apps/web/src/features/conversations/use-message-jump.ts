@@ -1,5 +1,6 @@
 import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import type { Store } from "@tanstack/react-store";
 import { useAppToast } from "#src/components/ui/toast";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -20,6 +21,8 @@ export function tellJumpFailure(toast: ReturnType<typeof useAppToast>, error: un
 }
 
 export function useMessageJump({
+  historyRef,
+  paneVisible = true,
   messages,
   openedSystemMessages,
   revealSystemMessage,
@@ -31,6 +34,8 @@ export function useMessageJump({
   bottomPin,
   uiStore,
 }: {
+  historyRef: RefObject<HTMLDivElement | null>;
+  paneVisible?: boolean;
   messages: readonly { id: string; sequence: number }[];
   openedSystemMessages: ReadonlySet<string>;
   revealSystemMessage: (messageId: string) => boolean;
@@ -80,18 +85,40 @@ export function useMessageJump({
   const revealSystemMessageRef = useRef(revealSystemMessage);
   revealSystemMessageRef.current = revealSystemMessage;
 
+  const routerHash = useRouterState({ select: (state) => state.location.hash });
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const normalizedHash = routerHash.replace(/^#/, "");
+  const hashMessageId = normalizedHash.startsWith("message-")
+    ? normalizedHash.slice("message-".length)
+    : undefined;
+  const hasHashMessage =
+    hashMessageId !== undefined && messages.some((candidate) => candidate.id === hashMessageId);
+
   const flashedAnchorRef = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
+    if (!paneVisible) {
+      flashedAnchorRef.current = undefined;
+      return;
+    }
+    let raf = 0;
     function scrollToMessageAnchor() {
       const anchor = window.location.hash.slice(1);
-      if (!anchor.startsWith("message-")) return;
+      if (!anchor.startsWith("message-")) {
+        flashedAnchorRef.current = undefined;
+        return;
+      }
+      const targetId = anchor.slice("message-".length);
+      if (!messagesRef.current.some((candidate) => candidate.id === targetId)) return;
       const scroll = () => {
-        const message = document.getElementById(anchor);
+        const container = historyRef.current;
+        const message = container
+          ? container.querySelector<HTMLElement>(`#${CSS.escape(anchor)}`)
+          : document.getElementById(anchor);
         if (!message) {
-          const messageId = anchor.slice("message-".length);
-          if (revealSystemMessageRef.current(messageId)) {
+          if (revealSystemMessageRef.current(targetId)) {
             setFollowingLatest(false);
-            pendingMessageIdRef.current = messageId;
+            pendingMessageIdRef.current = targetId;
           }
           return;
         }
@@ -100,16 +127,20 @@ export function useMessageJump({
         landedOn(message);
         if (flashedAnchorRef.current !== anchor) {
           flashedAnchorRef.current = anchor;
-          flashMessageRow(anchor.slice("message-".length));
+          flashMessageRow(targetId);
         }
       };
       scroll();
-      requestAnimationFrame(scroll);
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(scroll);
     }
     scrollToMessageAnchor();
     window.addEventListener("hashchange", scrollToMessageAnchor);
-    return () => window.removeEventListener("hashchange", scrollToMessageAnchor);
-  }, [firstSequence]);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("hashchange", scrollToMessageAnchor);
+    };
+  }, [firstSequence, routerHash, hasHashMessage, paneVisible]);
 
   useLayoutEffect(() => {
     const messageId = pendingMessageIdRef.current;
@@ -170,9 +201,10 @@ export function useMessageJump({
       attemptedJumpRef.current = undefined;
       return;
     }
+    if (!paneVisible) return;
     if (decision.action === "ignore") return;
     attemptedJumpRef.current = decision.id;
     if (decision.action === "show") void showMessageRef.current(decision.id, { opening: true });
     onJumpMessageConsumed?.();
-  }, [jumpMessage, onJumpMessageConsumed]);
+  }, [jumpMessage, onJumpMessageConsumed, paneVisible]);
 }

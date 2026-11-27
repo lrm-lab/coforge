@@ -75,6 +75,7 @@ export function ConversationPane({
   channels,
   jumpMessage,
   onJumpMessageConsumed,
+  paneVisible = true,
   mentionCompletion = true,
   mentionMemberLimit,
   keepsReadCursor = true,
@@ -205,6 +206,8 @@ export function ConversationPane({
     revealGroupMessage: revealSystemMessage,
   } = useSystemMessageGroups(streamItems);
   useMessageJump({
+    historyRef,
+    paneVisible,
     messages: conversation.messages,
     openedSystemMessages,
     revealSystemMessage,

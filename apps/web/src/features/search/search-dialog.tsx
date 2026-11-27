@@ -13,6 +13,7 @@ import { Input as AriaInput } from "react-aria-components";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { channelLabel } from "#src/features/conversations/channel-visibility";
+import { requestCloseChatList } from "#src/features/conversations/phone-conversation-jump";
 import { isImeComposing } from "#src/lib/ime";
 import { m } from "#src/paraglide/messages";
 import type { SearchIntent } from "./search-dialog-context";
@@ -182,6 +183,7 @@ export function SearchDialog({
                   filters={filters}
                   onOpen={(entity) => {
                     memory.recordOpen(query, entity);
+                    requestCloseChatList();
                     onClose();
                   }}
                   onClear={() => {
@@ -213,6 +215,7 @@ export function SearchDialog({
                   }}
                   onOpen={(entity) => {
                     memory.recordOpen("", searchEntityKey(entity));
+                    requestCloseChatList();
                     onClose();
                   }}
                 />
