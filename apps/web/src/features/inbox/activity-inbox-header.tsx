@@ -68,16 +68,14 @@ export function ActivityInboxHeader({
           )
         }
       />
-      <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-4 pt-2">
-        <div className="-mb-px flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <ActivityInboxTabs
-            filter={filter}
-            onFilterChange={onFilterChange}
-            onFilterIntent={onFilterIntent}
-            counts={counts}
-          />
-        </div>
-        {moreActions && <div className="-me-1.5 pb-1.5">{moreActions}</div>}
+      <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-4">
+        <ActivityInboxTabs
+          filter={filter}
+          onFilterChange={onFilterChange}
+          onFilterIntent={onFilterIntent}
+          counts={counts}
+        />
+        {moreActions && <div className="-me-1.5 flex shrink-0 items-center">{moreActions}</div>}
       </div>
     </>
   );

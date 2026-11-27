@@ -4,7 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowUpRight, Inbox01, Paperclip } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
-import { Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Select, type SelectItemType } from "#src/components/base/select/select";
@@ -15,6 +14,7 @@ import { EmptyState } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
+import { UnderlineFilterGroup } from "#src/components/ui/underline-filter-group";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { formatDateForDisplay } from "#src/lib/dates";
@@ -149,38 +149,42 @@ export function FeedbackInboxPage({
         ]}
       />
 
+      <div
+        className={cx(
+          "shrink-0 border-b border-secondary px-page",
+          mobileDetailOpen ? "hidden lg:block" : "block",
+        )}
+      >
+        <UnderlineFilterGroup
+          aria-label={m.feedback_status_label()}
+          value={selectedFilterKey}
+          onChange={(next) => {
+            void navigate({
+              to: "/w/$workspaceSlug/feedback",
+              params: { workspaceSlug: slug },
+              search: next === "all" ? {} : { status: next as FeedbackStatus },
+            });
+          }}
+          items={[
+            { id: "all", label: m.feedback_inbox_filter_all() },
+            ...FEEDBACK_STATUSES.map((status) => ({
+              id: status,
+              label: STATUS_LABELS[status](),
+            })),
+          ]}
+        />
+      </div>
+
       <section
         aria-label={m.feedback_inbox_title()}
-        className="flex min-h-0 w-full flex-1 flex-col gap-3 px-page py-4"
+        className="flex min-h-0 w-full flex-1 flex-col gap-3 px-page py-3"
       >
         <div
           className={cx(
-            "shrink-0 flex-col gap-2.5 lg:flex lg:flex-row lg:items-center lg:justify-between",
+            "shrink-0 items-center justify-between gap-2.5 lg:flex",
             mobileDetailOpen ? "hidden" : "flex",
           )}
         >
-          <Tabs
-            selectedKey={selectedFilterKey}
-            onSelectionChange={(key) => {
-              const next = String(key);
-              void navigate({
-                to: "/w/$workspaceSlug/feedback",
-                params: { workspaceSlug: slug },
-                search: next === "all" ? {} : { status: next as FeedbackStatus },
-              });
-            }}
-            className="w-fit max-w-full"
-          >
-            <Tabs.List type="button-minimal" size="sm" className="w-fit max-w-full flex-wrap">
-              <Tabs.Item id="all">{m.feedback_inbox_filter_all()}</Tabs.Item>
-              {FEEDBACK_STATUSES.map((status) => (
-                <Tabs.Item key={status} id={status}>
-                  {STATUS_LABELS[status]()}
-                </Tabs.Item>
-              ))}
-            </Tabs.List>
-          </Tabs>
-
           <div className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-xs font-medium text-tertiary">
               {m.feedback_routing_label()}

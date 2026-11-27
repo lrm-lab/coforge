@@ -68,7 +68,9 @@ export function TabbedHeader({
               !tabsOverflow && "[touch-action:pan-y_pinch-zoom]",
             )}
           >
-            <div className="flex min-h-9 w-max shrink-0 items-center">{tabs}</div>
+            <div className="flex min-h-9 w-max shrink-0 items-center any-pointer-coarse:min-h-11">
+              {tabs}
+            </div>
           </div>
         )}
       </header>

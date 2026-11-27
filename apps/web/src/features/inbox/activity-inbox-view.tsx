@@ -470,7 +470,7 @@ export function ActivityInboxView({
       aria-hidden={(phone && pane) || (desktop && isTaskExpanded) ? true : undefined}
       style={phoneListStyle}
       className={cn(
-        "relative flex min-h-0 flex-1 flex-col bg-primary",
+        "relative flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
         phone
           ? cn(
               "max-lg:absolute max-lg:inset-0 max-lg:z-10",

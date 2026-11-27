@@ -1,11 +1,9 @@
-import { useRef } from "react";
 import { ChevronDown } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
+import { UnderlineFilterGroup } from "#src/components/ui/underline-filter-group";
 import { CountBadge } from "#src/components/ui/unread-marker";
-import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
 import { formatCappedCount } from "#src/lib/unread-count";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -114,58 +112,19 @@ export function ActivityInboxTabs({
   onFilterIntent?: (filter: ActivityInboxFilter) => void;
   counts: Partial<Record<ActivityInboxFilter, number>>;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const indicator = useSlidingIndicator(containerRef, {
-    activeKey: `${filter}:${counts.unread ?? 0}:${counts.mentions ?? 0}:${counts.tasks ?? 0}:${counts.artifacts ?? 0}`,
-    variant: "underline",
-  });
   return (
-    <div ref={containerRef} className="relative w-max shrink-0">
-      <Tabs
-        selectedKey={filter}
-        onSelectionChange={(key) => {
-          const next = FILTER_TABS.find((tab) => tab.id === key);
-          if (next) onFilterChange(next.id);
-        }}
-        className="w-max shrink-0"
-      >
-        <TabList
-          type="underline"
-          size="sm"
-          aria-label={m.activity_inbox_filter_label()}
-          className={cn(
-            "before:hidden @max-[22rem]/tabbed-header:gap-2",
-            indicator.visible && "[&_[role=tab][aria-selected=true]]:border-transparent",
-          )}
-        >
-          {FILTER_TABS.map((tab) => (
-            <Tab
-              key={tab.id}
-              id={tab.id}
-              className={({ isSelected }) =>
-                cn("gap-1.5 font-medium", isSelected ? "text-primary" : "text-tertiary")
-              }
-              onPointerEnter={() => onFilterIntent?.(tab.id)}
-              onFocus={() => onFilterIntent?.(tab.id)}
-            >
-              {() => (
-                <>
-                  {tab.label()}
-                  <CountBadge count={counts[tab.id]} size="sm" />
-                </>
-              )}
-            </Tab>
-          ))}
-        </TabList>
-      </Tabs>
-      {indicator.visible && (
-        <span
-          ref={indicator.indicatorRef}
-          aria-hidden="true"
-          style={indicator.style}
-          className="pointer-events-none absolute bottom-0 left-0 z-20 h-0.5 rounded-full bg-fg-brand-primary_alt"
-        />
-      )}
-    </div>
+    <UnderlineFilterGroup
+      aria-label={m.activity_inbox_filter_label()}
+      value={filter}
+      onChange={onFilterChange}
+      onItemIntent={onFilterIntent}
+      className="min-w-0 flex-1"
+      listClassName="gap-3"
+      items={FILTER_TABS.map((tab) => ({
+        id: tab.id,
+        label: tab.label(),
+        count: counts[tab.id],
+      }))}
+    />
   );
 }

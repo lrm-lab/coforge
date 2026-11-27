@@ -255,10 +255,10 @@ export function RecordsLayout({
                 placeholder={m.records_search_placeholder()}
               />
               <TabList aria-label={m.records_title()} type="underline" className="gap-4 px-1">
-                <Tab id="weekly" icon={FileText}>
+                <Tab id="weekly" icon={FileText} className="h-9 py-0 any-pointer-coarse:h-11">
                   {m.records_tab_weekly()}
                 </Tab>
-                <Tab id="notes" icon={Edit}>
+                <Tab id="notes" icon={Edit} className="h-9 py-0 any-pointer-coarse:h-11">
                   {m.records_tab_notes()}
                 </Tab>
               </TabList>

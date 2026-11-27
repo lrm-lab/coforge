@@ -3,8 +3,6 @@ import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, Grid01, Link03, List, Plus, SearchLg } from "@untitledui/icons";
 
-import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
-import { Badge } from "#src/components/base/badges/badges";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -14,6 +12,7 @@ import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { UnderlineFilterGroup } from "#src/components/ui/underline-filter-group";
 import { canManageApps } from "#src/features/workspaces/workspace-roles";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -176,165 +175,147 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
           </div>
         </header>
 
-        <Tabs
-          selectedKey={view}
-          onSelectionChange={(key) => {
-            const next = APPS_VIEWS.find((candidate) => candidate === key);
-            if (next) showList({ view: next });
-          }}
-        >
-          <div className="grid gap-4 rounded-xl border border-secondary p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="grid gap-1">
-                <h3 className="text-md font-semibold text-primary">{m.apps_card_title()}</h3>
-                <p className="text-sm text-tertiary">
-                  {canManage ? m.apps_card_description_manage() : m.apps_card_description_view()}
-                </p>
-                {!canManage && <p className="text-sm text-tertiary">{m.apps_admin_only_note()}</p>}
-              </div>
-              {loading && (
-                <p role="status" className="shrink-0 text-sm text-tertiary">
-                  {m.apps_loading()}
-                </p>
-              )}
-            </div>
-            <TabList
-              type="button-border"
-              size="sm"
-              aria-label={m.apps_views_label()}
-              className="w-max max-w-full"
-            >
-              {APPS_VIEWS.map((id) => (
-                <Tab key={id} id={id}>
-                  {TAB_LABELS[id]()}
-                  {(counts[id] ?? 0) > 0 && (
-                    <Badge size="sm" type="modern" color="gray" className="-my-px">
-                      {counts[id]}
-                    </Badge>
-                  )}
-                </Tab>
-              ))}
-            </TabList>
+        <div className="flex items-start justify-between gap-4 rounded-xl border border-secondary p-4">
+          <div className="grid gap-1">
+            <h3 className="text-md font-semibold text-primary">{m.apps_card_title()}</h3>
+            <p className="text-sm text-tertiary">
+              {canManage ? m.apps_card_description_manage() : m.apps_card_description_view()}
+            </p>
+            {!canManage && <p className="text-sm text-tertiary">{m.apps_admin_only_note()}</p>}
           </div>
+          {loading && (
+            <p role="status" className="shrink-0 text-sm text-tertiary">
+              {m.apps_loading()}
+            </p>
+          )}
+        </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem_auto]">
-            <Input
-              type="search"
-              aria-label={m.apps_search_label()}
-              placeholder={m.apps_search_placeholder()}
-              icon={SearchLg}
-              size="sm"
-              value={query}
-              onChange={setQuery}
+        <div className="min-w-0 border-b border-secondary">
+          <UnderlineFilterGroup
+            aria-label={m.apps_views_label()}
+            value={view}
+            onChange={(next) => showList({ view: next })}
+            items={APPS_VIEWS.map((id) => ({
+              id,
+              label: TAB_LABELS[id](),
+              count: counts[id],
+            }))}
+          />
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem_auto]">
+          <Input
+            type="search"
+            aria-label={m.apps_search_label()}
+            placeholder={m.apps_search_placeholder()}
+            icon={SearchLg}
+            size="sm"
+            value={query}
+            onChange={setQuery}
+          />
+          <Select
+            aria-label={m.apps_category_filter_label()}
+            size="sm"
+            value={category}
+            onChange={(key) => {
+              const next = APP_CATEGORIES.find((candidate) => candidate === key);
+              showList({ category: next ?? "all" });
+            }}
+          >
+            <SelectItem id="all" label={m.apps_category_all()} />
+            {APP_CATEGORIES.map((id) => (
+              <SelectItem key={id} id={id} label={APP_CATEGORY_LABELS[id]()} />
+            ))}
+          </Select>
+          <ButtonGroup
+            size="sm"
+            aria-label={m.apps_layout_label()}
+            selectionMode="single"
+            disallowEmptySelection
+            selectedKeys={[layout]}
+            onSelectionChange={(keys) => {
+              const [next] = [...keys];
+              if (next === "grid" || next === "list") setLayout(next);
+            }}
+          >
+            <Tooltip title={m.apps_layout_grid()}>
+              <ButtonGroupItem id="grid" aria-label={m.apps_layout_grid()} iconLeading={Grid01} />
+            </Tooltip>
+            <Tooltip title={m.apps_layout_list()}>
+              <ButtonGroupItem id="list" aria-label={m.apps_layout_list()} iconLeading={List} />
+            </Tooltip>
+          </ButtonGroup>
+        </div>
+
+        {loadFailed && (
+          <EmptyState
+            size="card"
+            role="alert"
+            picture={<EmptyIcon icon={AlertCircle} size="card" />}
+            title={m.apps_load_error()}
+            primaryAction={
+              <RetryButton size="card" isRetrying={loading} onPress={() => void refresh()} />
+            }
+          />
+        )}
+
+        {view === "marketplace" ? (
+          <div className="grid gap-3">
+            <MarketplacePanel
+              query={query}
+              category={category}
+              layout={layout}
+              canManage={canManage}
+              onInstalled={read}
+              onClearFilters={clearFilters}
             />
-            <Select
-              aria-label={m.apps_category_filter_label()}
-              size="sm"
-              value={category}
-              onChange={(key) => {
-                const next = APP_CATEGORIES.find((candidate) => candidate === key);
-                showList({ category: next ?? "all" });
-              }}
-            >
-              <SelectItem id="all" label={m.apps_category_all()} />
-              {APP_CATEGORIES.map((id) => (
-                <SelectItem key={id} id={id} label={APP_CATEGORY_LABELS[id]()} />
-              ))}
-            </Select>
-            <ButtonGroup
-              size="sm"
-              aria-label={m.apps_layout_label()}
-              selectionMode="single"
-              disallowEmptySelection
-              selectedKeys={[layout]}
-              onSelectionChange={(keys) => {
-                const [next] = [...keys];
-                if (next === "grid" || next === "list") setLayout(next);
-              }}
-            >
-              <Tooltip title={m.apps_layout_grid()}>
-                <ButtonGroupItem id="grid" aria-label={m.apps_layout_grid()} iconLeading={Grid01} />
-              </Tooltip>
-              <Tooltip title={m.apps_layout_list()}>
-                <ButtonGroupItem id="list" aria-label={m.apps_layout_list()} iconLeading={List} />
-              </Tooltip>
-            </ButtonGroup>
           </div>
-
-          {loadFailed && (
-            <div className="mt-4">
-              <EmptyState
-                size="card"
-                role="alert"
-                picture={<EmptyIcon icon={AlertCircle} size="card" />}
-                title={m.apps_load_error()}
-                primaryAction={
-                  <RetryButton size="card" isRetrying={loading} onPress={() => void refresh()} />
-                }
+        ) : (
+          <div className="grid gap-3">
+            {view === "mine" && (
+              <p className="text-sm text-tertiary">
+                {canManage ? m.apps_mine_intro_manage() : m.apps_mine_intro_view()}
+              </p>
+            )}
+            {!apps && loading && !loadFailed ? (
+              <div
+                role="status"
+                aria-busy="true"
+                aria-label={m.apps_loading()}
+                className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}
+              >
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </div>
+            ) : apps && shown.length === 0 ? (
+              <AppsEmpty
+                view={view}
+                filtered={list.length > 0}
+                query={query}
+                canManage={canManage}
+                onRegister={canManage ? openRegisterPage : undefined}
+                onClearFilters={clearFilters}
               />
-            </div>
-          )}
-
-          {APPS_VIEWS.map((id) =>
-            id === "marketplace" ? (
-              <TabPanel key={id} id={id} className="mt-4 grid gap-3 outline-hidden">
-                <MarketplacePanel
-                  query={query}
-                  category={category}
-                  layout={layout}
-                  canManage={canManage}
-                  onInstalled={read}
-                  onClearFilters={clearFilters}
-                />
-              </TabPanel>
             ) : (
-              <TabPanel key={id} id={id} className="mt-4 grid gap-3 outline-hidden">
-                {id === "mine" && (
-                  <p className="text-sm text-tertiary">
-                    {canManage ? m.apps_mine_intro_manage() : m.apps_mine_intro_view()}
-                  </p>
-                )}
-                {!apps && loading && !loadFailed ? (
-                  <div
-                    role="status"
-                    aria-busy="true"
-                    aria-label={m.apps_loading()}
-                    className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}
-                  >
-                    <Skeleton className="h-24 w-full rounded-xl" />
-                    <Skeleton className="h-24 w-full rounded-xl" />
-                  </div>
-                ) : apps && shown.length === 0 ? (
-                  <AppsEmpty
-                    view={id}
-                    filtered={list.length > 0}
-                    query={query}
-                    canManage={canManage}
-                    onRegister={canManage ? openRegisterPage : undefined}
-                    onClearFilters={clearFilters}
+              <ul className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}>
+                {shown.map((app) => (
+                  <AppCard
+                    key={app.key}
+                    app={app}
+                    view={view}
+                    layout={layout}
+                    onEdit={canManage && app.owned ? () => openEditPage(app) : undefined}
+                    onOpen={
+                      view === "installed"
+                        ? () => setDetail({ key: app.key, open: true })
+                        : undefined
+                    }
                   />
-                ) : (
-                  <ul className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}>
-                    {shown.map((app) => (
-                      <AppCard
-                        key={app.key}
-                        app={app}
-                        view={id}
-                        layout={layout}
-                        onEdit={canManage && app.owned ? () => openEditPage(app) : undefined}
-                        onOpen={
-                          id === "installed"
-                            ? () => setDetail({ key: app.key, open: true })
-                            : undefined
-                        }
-                      />
-                    ))}
-                  </ul>
-                )}
-              </TabPanel>
-            ),
-          )}
-        </Tabs>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </section>
 
       <AppDetail

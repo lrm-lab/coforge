@@ -43,7 +43,8 @@ const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox"
 const tabBar = `document.querySelector('nav[aria-label="Primary navigation"]')`;
 /** The tab the bar marks current, by its visible label. */
 const currentTab = `${tabBar}?.querySelector('a[aria-current="page"] span.truncate')?.textContent ?? null`;
-const filterTabs = `document.querySelectorAll('[data-activity-list] [role="tablist"] [role="tab"]')`;
+const filterGroup = `[data-activity-list] [role="group"]`;
+const filterTabs = `document.querySelectorAll('${filterGroup} button[aria-pressed]')`;
 const pageLoadError = `(() => { const text = document.body.innerText; return text.includes("Couldn't load this page") || text.includes("无法加载此页面"); })()`;
 
 test("on a phone a row opens its conversation in place of the Activity list", async () => {
@@ -114,12 +115,11 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser(
       "wait",
       "--fn",
-      `${seededRows}.length === 2 && ${pageHydrated} && document.querySelector('[role="tablist"]') !== null`,
+      `${seededRows}.length === 2 && ${pageHydrated} && document.querySelector('${filterGroup}') !== null`,
     );
-    // On a phone the tabs take their own row under the title.
     expect(
       await evaluate<boolean>(
-        `document.querySelector('[role="tablist"]').getBoundingClientRect().top >= document.querySelector("h1").getBoundingClientRect().bottom`,
+        `document.querySelector('[data-activity-list] [role="tablist"]') === null && document.querySelector('${filterGroup}').getBoundingClientRect().top >= document.querySelector("h1").getBoundingClientRect().bottom`,
       ),
     ).toBe(true);
     await settled();
@@ -278,14 +278,96 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `${seededRows}.length === 2 && ${filterTabs}.length === 5`);
     await settled();
     expect(await evaluate<boolean>(pageLoadError)).toBe(false);
+    const measureFilterBar = `(() => {
+      const list = document.querySelector("[data-activity-list]");
+      const group = document.querySelector('${filterGroup}');
+      const bar = group?.closest(".border-b");
+      const firstButton = group?.querySelector('button[aria-pressed]');
+      return {
+        barHeight: bar ? Math.round(bar.getBoundingClientRect().height) : -1,
+        buttonHeight: firstButton ? Math.round(firstButton.getBoundingClientRect().height) : -1,
+        listFits: list ? list.scrollWidth <= list.clientWidth : false,
+        hasMore: Boolean(bar?.querySelector('button[aria-label="More actions"]')),
+      };
+    })()`;
+    const allGeometry = await evaluate<{
+      barHeight: number;
+      buttonHeight: number;
+      listFits: boolean;
+      hasMore: boolean;
+    }>(measureFilterBar);
+    expect(allGeometry).toEqual({
+      barHeight: 36,
+      buttonHeight: 36,
+      listFits: true,
+      hasMore: true,
+    });
+    const mentionsTab = `[...${filterTabs}].find((tab) => tab.textContent?.trim().startsWith("Mentions"))`;
+    await browser(
+      "wait",
+      "--fn",
+      `${mentionsTab} !== undefined && ${hydratedElement(mentionsTab)}`,
+    );
+    await evaluate(`${mentionsTab}.click() ?? true`);
+    await browser(
+      "wait",
+      "--fn",
+      `location.search.includes("filter=mentions") && (${mentionsTab})?.getAttribute("aria-pressed") === "true" && ${seededRows}.length >= 1`,
+    );
+    expect(
+      await evaluate<{
+        barHeight: number;
+        buttonHeight: number;
+        listFits: boolean;
+        hasMore: boolean;
+      }>(measureFilterBar),
+    ).toEqual({
+      barHeight: 36,
+      buttonHeight: 36,
+      listFits: true,
+      hasMore: false,
+    });
     const unreadTab = `[...${filterTabs}].find((tab) => tab.textContent?.trim().startsWith("Unread"))`;
     await browser("wait", "--fn", `${unreadTab} !== undefined && ${hydratedElement(unreadTab)}`);
     await evaluate(`${unreadTab}.click() ?? true`);
     await browser(
       "wait",
       "--fn",
-      `location.search.includes("filter=unread") && (${unreadTab})?.getAttribute("aria-selected") === "true" && ${seededRows}.length >= 1`,
+      `location.search.includes("filter=unread") && (${unreadTab})?.getAttribute("aria-pressed") === "true"`,
     );
+    expect(
+      await evaluate<{
+        barHeight: number;
+        buttonHeight: number;
+        listFits: boolean;
+        hasMore: boolean;
+      }>(measureFilterBar),
+    ).toMatchObject({
+      barHeight: 36,
+      buttonHeight: 36,
+      listFits: true,
+    });
+    const allTab = `[...${filterTabs}].find((tab) => tab.textContent?.trim() === "All")`;
+    await browser("wait", "--fn", `${allTab} !== undefined && ${hydratedElement(allTab)}`);
+    await evaluate(`${allTab}.click() ?? true`);
+    await browser(
+      "wait",
+      "--fn",
+      `!location.search.includes("filter=") && (${allTab})?.getAttribute("aria-pressed") === "true" && ${seededRows}.length >= 2`,
+    );
+    expect(
+      await evaluate<{
+        barHeight: number;
+        buttonHeight: number;
+        listFits: boolean;
+        hasMore: boolean;
+      }>(measureFilterBar),
+    ).toEqual({
+      barHeight: 36,
+      buttonHeight: 36,
+      listFits: true,
+      hasMore: true,
+    });
     expect(await evaluate<boolean>(pageLoadError)).toBe(false);
   } finally {
     await browser("close").catch(() => undefined);

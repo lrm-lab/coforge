@@ -72,7 +72,7 @@ export function AgentProfileTabs({
       <div
         ref={fade.ref}
         style={edgeFadeStyle(fade, { end: TAB_BAR_END_FADE_WIDTH })}
-        className="scrollbar-hide flex h-9 items-center overflow-x-auto overflow-y-hidden px-3 scroll-ps-3 scroll-pe-14"
+        className="scrollbar-hide flex h-9 items-center overflow-x-auto overflow-y-hidden px-3 scroll-ps-3 scroll-pe-14 any-pointer-coarse:h-11"
       >
         <ReorderableTabStrip
           aria-label={m.agent_profile_panel_tabs()}

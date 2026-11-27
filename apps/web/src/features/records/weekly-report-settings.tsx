@@ -229,8 +229,12 @@ export function WeeklyReportSettings({
               type="underline"
               className="w-max shrink-0 gap-4 before:hidden"
             >
-              <Tab id="templates">{m.records_settings_tab_templates()}</Tab>
-              <Tab id="key_points">{m.records_settings_tab_key_points()}</Tab>
+              <Tab id="templates" className="h-9 py-0 any-pointer-coarse:h-11">
+                {m.records_settings_tab_templates()}
+              </Tab>
+              <Tab id="key_points" className="h-9 py-0 any-pointer-coarse:h-11">
+                {m.records_settings_tab_key_points()}
+              </Tab>
             </TabList>
           </div>
           {topTab === "templates" ? (
@@ -372,10 +376,14 @@ export function WeeklyReportSettings({
             <TabList
               aria-label={m.records_settings_tab_key_points()}
               type="underline"
-              className="shrink-0 gap-4 px-4 pt-3 sm:px-8"
+              className="shrink-0 gap-4 px-4 pt-1 sm:px-8"
             >
-              <Tab id="team">{m.records_key_points_slot_team()}</Tab>
-              <Tab id="personal">{m.records_key_points_slot_personal()}</Tab>
+              <Tab id="team" className="h-9 py-0 any-pointer-coarse:h-11">
+                {m.records_key_points_slot_team()}
+              </Tab>
+              <Tab id="personal" className="h-9 py-0 any-pointer-coarse:h-11">
+                {m.records_key_points_slot_personal()}
+              </Tab>
             </TabList>
             <TabPanel id={keyPointSlot} className="flex min-h-0 flex-1 flex-col">
               <KeyPointPromptEditor

@@ -90,24 +90,26 @@ export function ProjectDetail({
         className="flex min-h-0 flex-1 flex-col"
       >
         <div className="shrink-0 border-b border-secondary px-page">
-          <TabList
-            type="underline"
-            size="sm"
-            aria-label={m.project_sections()}
-            className="-mx-2 -mb-px gap-1 before:hidden"
-          >
-            <Tab id="tasks" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
-              {m.project_tasks()}
-            </Tab>
-            <Tab id="overview" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
-              {m.project_overview()}
-            </Tab>
-            {hasCode && (
-              <Tab id="code" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
-                {m.project_code()}
+          <div className="-mx-2 -mb-px flex min-w-0 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <TabList
+              type="underline"
+              size="sm"
+              aria-label={m.project_sections()}
+              className="gap-1 before:hidden"
+            >
+              <Tab id="tasks" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
+                {m.project_tasks()}
               </Tab>
-            )}
-          </TabList>
+              <Tab id="overview" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
+                {m.project_overview()}
+              </Tab>
+              {hasCode && (
+                <Tab id="code" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
+                  {m.project_code()}
+                </Tab>
+              )}
+            </TabList>
+          </div>
         </div>
         <TabPanel id="overview" className="min-h-0 flex-1 overflow-y-auto outline-hidden">
           <ProjectOverview project={project} />

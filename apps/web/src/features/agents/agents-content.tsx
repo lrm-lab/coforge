@@ -13,6 +13,10 @@ import { PageBackButton } from "#src/components/layout/page-back-button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
+import {
+  UNDERLINE_TAB_CLASS,
+  UnderlineStripFrame,
+} from "#src/components/ui/underline-filter-group";
 import { CountBadge } from "#src/components/ui/unread-marker";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 import type { MemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
@@ -212,27 +216,50 @@ export function AgentsContent({
         </p>
       </header>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2.5 px-page pt-4 pb-3">
-        <TabList
-          aria-label={m.member_type_filter()}
-          type="button-minimal"
-          size="sm"
-          className="shrink-0"
+      <div className="shrink-0 border-b border-secondary px-page">
+        <UnderlineStripFrame
+          activeKey={`${memberType}:${totalCount}:${summary.peopleCount}:${summary.agentCount}`}
+          observe='[role="tab"]'
         >
-          <Tab id="all" className="gap-1.5">
-            <span>{m.member_tab_all()}</span>
-            <CountBadge count={totalCount} size="sm" />
-          </Tab>
-          <Tab id="human" className="gap-1.5">
-            <span>{m.member_tab_humans()}</span>
-            <CountBadge count={summary.peopleCount} size="sm" />
-          </Tab>
-          <Tab id="agent" className="gap-1.5">
-            <span>{m.member_tab_agents()}</span>
-            <CountBadge count={summary.agentCount} size="sm" />
-          </Tab>
-        </TabList>
+          {(slidingVisible) => (
+            <TabList
+              aria-label={m.member_type_filter()}
+              type="underline"
+              size="sm"
+              className="gap-4 before:hidden"
+            >
+              {(
+                [
+                  { id: "all", label: m.member_tab_all(), count: totalCount },
+                  { id: "human", label: m.member_tab_humans(), count: summary.peopleCount },
+                  { id: "agent", label: m.member_tab_agents(), count: summary.agentCount },
+                ] as const
+              ).map((tab) => (
+                <Tab
+                  key={tab.id}
+                  id={tab.id}
+                  className={({ isSelected }) =>
+                    cn(
+                      UNDERLINE_TAB_CLASS,
+                      !slidingVisible && "aria-selected:after:border-fg-primary",
+                      isSelected ? "text-primary" : "text-tertiary",
+                    )
+                  }
+                >
+                  {() => (
+                    <>
+                      <span>{tab.label}</span>
+                      <CountBadge count={tab.count} size="sm" />
+                    </>
+                  )}
+                </Tab>
+              ))}
+            </TabList>
+          )}
+        </UnderlineStripFrame>
+      </div>
 
+      <div className="flex shrink-0 flex-wrap items-center gap-2.5 px-page pt-3 pb-3">
         <MembersSearchInput
           label={searchLabel}
           resetSignal={searchReset}

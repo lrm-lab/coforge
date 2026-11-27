@@ -171,7 +171,7 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
             className="mt-3 shrink-0 gap-6 px-4"
           >
             {groups.map((group) => (
-              <Tab key={group.id} id={group.id}>
+              <Tab key={group.id} id={group.id} className="h-9 py-0 any-pointer-coarse:h-11">
                 {group.label}
               </Tab>
             ))}

@@ -19,7 +19,9 @@ export function useActiveTabInView(
     if (!list || !scroller) return;
     let revealed = false;
     const reveal = () => {
-      const tab = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      const tab = list.querySelector<HTMLElement>(
+        '[role="tab"][aria-selected="true"], button[aria-pressed="true"]',
+      );
       if (!tab) return;
       const glide = revealed;
       revealed = true;
@@ -52,8 +54,6 @@ export function useActiveTabInView(
       event.preventDefault();
     };
     reveal();
-    // After a change, React Aria brings the focused tab just inside the edge in the same commit;
-    // revealing on the next frame moves it clear of the strip's padding instead of racing that.
     let frame = 0;
     const revealNextFrame = () => {
       cancelAnimationFrame(frame);
@@ -64,9 +64,8 @@ export function useActiveTabInView(
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["aria-selected"],
+      attributeFilter: ["aria-selected", "aria-pressed"],
     });
-    // A ResizeObserver reports once as it starts; that size is the one just revealed for.
     let measured = false;
     const resizes = new ResizeObserver(() => {
       if (measured) revealNextFrame();
