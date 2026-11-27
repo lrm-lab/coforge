@@ -215,6 +215,8 @@
   "settings_labels": "Labels",
   "experiments_team_memory": "Team memory",
   "experiments_team_memory_description": "Let Agents share and recall knowledge across this Workspace. Turning it off blocks shared memory access and keeps saved knowledge.",
+  "experiments_weekly_reports": "Weekly reports",
+  "experiments_weekly_reports_description": "Weekly report templates, team summaries, and the weekly report assistant. Turning it off hides Records and pauses scheduled sends while keeping saved data.",
   "settings_password": "Password",
   "settings_password_set": "Set a new password",
   "settings_password_code_goes_to": "Code goes to {destination}",

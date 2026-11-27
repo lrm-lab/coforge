@@ -16,6 +16,7 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 import { CREATED_AGENT_FACES, MEMBER_PAGE_MAX } from "#src/features/workspaces/member-directory";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { paginated } from "#src/server/db/pagination.server";
+import { weeklyReportsAgentFilter } from "#src/server/records/weekly-reports-gate.server";
 
 export type AgentOwnerFilter = "all" | "mine";
 
@@ -87,14 +88,19 @@ export class WorkspaceMembers {
   private async viewer(workspaceId: string, userId: string) {
     const membership = await this.db.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
-      select: { userId: true, role: true },
+      select: {
+        userId: true,
+        role: true,
+        workspace: { select: { experiments: true } },
+      },
     });
     if (!membership) throw new AppError("ACCESS_DENIED");
-    // The same seam every Agent list applies, built from the membership role fetched
-    // here — never a second role lookup.
     const visibility: AgentVisibilityViewer = { kind: "user", userId, role: membership.role };
-    const visibleAgents = this.visibleAgents(workspaceId, visibility);
-    // The Members page lists people's Agents; an app's bot is not one of them.
+    const visibleAgents = this.visibleAgents(
+      workspaceId,
+      visibility,
+      membership.workspace?.experiments,
+    );
     return {
       role: membership.role,
       visibleAgents,
@@ -102,8 +108,13 @@ export class WorkspaceMembers {
     };
   }
 
-  private visibleAgents(workspaceId: string, viewer: AgentVisibilityViewer) {
-    return { workspaceId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(viewer) };
+  private visibleAgents(workspaceId: string, viewer: AgentVisibilityViewer, experiments: unknown) {
+    return {
+      workspaceId,
+      ...ACTIVE_AGENT_WHERE,
+      ...visibleAgentWhere(viewer),
+      ...weeklyReportsAgentFilter(experiments),
+    };
   }
 
   /** Tab totals; unaffected by any filter or search. */

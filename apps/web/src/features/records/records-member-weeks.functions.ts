@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { weeklyReportsMiddleware } from "./weekly-reports-middleware";
 import {
   loadAllMemberWeeks,
   loadMemberWeek,
@@ -18,7 +18,7 @@ const weekOfYear = {
 
 /** The page of member weeks older than `before` (the catalog's `memberWeeksBefore`). */
 export const loadOlderMemberWeeks = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ before: z.object(weekOfYear) }))
   .handler(({ data, context: { user, db, workspaceId } }) =>
     loadMemberWeeksPage(db, { workspaceId, userId: user.id, before: data.before }),
@@ -26,7 +26,7 @@ export const loadOlderMemberWeeks = createServerFn({ method: "GET" })
 
 /** One member week, wherever it falls; no week when the viewer has none there. */
 export const loadMemberWeekAt = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object(weekOfYear))
   .handler(({ data, context: { user, db, workspaceId } }) =>
     loadMemberWeek(db, { workspaceId, userId: user.id, year: data.year, week: data.week }),
@@ -34,7 +34,7 @@ export const loadMemberWeekAt = createServerFn({ method: "GET" })
 
 /** Every member week matching `query`, by the sidebar's own filter, so a search reaches them all. */
 export const searchMemberWeeks = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   // Untrimmed, as the sidebar matches it: "2024 W5 " finds W5 and not W50.
   .validator(z.object({ query: z.string().min(1).max(200) }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {

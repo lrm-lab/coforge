@@ -4,6 +4,7 @@ import type { ForwardTarget } from "#src/features/conversations/message-forward"
 import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { humanLabel } from "#src/lib/human-label";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { WEEKLY_REPORTS_VISIBLE_AGENT_WHERE } from "#src/server/records/weekly-reports-gate.server";
 import { directMessageAgentWhere } from "#src/server/agents/agent-visibility.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
@@ -141,6 +142,7 @@ export async function searchForwardTargets(
     ...ACTIVE_AGENT_WHERE,
     AND: [
       ROSTER_AGENT_WHERE,
+      WEEKLY_REPORTS_VISIBLE_AGENT_WHERE,
       directMessageAgentWhere(userId),
       ...(named ? [{ OR: [{ name: named }, { displayName: named }] }] : []),
     ],

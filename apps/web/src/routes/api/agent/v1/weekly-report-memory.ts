@@ -5,6 +5,7 @@ import { AppError } from "#src/lib/app-error";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { agentRouteDomainErrorResponse } from "#src/server/agents/agent-http-routes.server";
 import { applyWeeklyReportMemoryWriteBack } from "#src/server/records/weekly-report-memory-settlement.server";
+import { weeklyReportsDisabledResponse } from "#src/server/records/weekly-reports-gate.server";
 
 export type WeeklyReportMemoryPrincipal = { workspaceId: string; agentId?: string };
 
@@ -59,10 +60,13 @@ export const Route = createFileRoute("/api/agent/v1/weekly-report-memory")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      POST: ({ request, context: { principal, db } }) =>
-        handleWeeklyReportMemoryPost(request, principal, (input) =>
+      POST: async ({ request, context: { principal, db } }) => {
+        const disabled = await weeklyReportsDisabledResponse(db, principal.workspaceId);
+        if (disabled) return disabled;
+        return handleWeeklyReportMemoryPost(request, principal, (input) =>
           applyWeeklyReportMemoryWriteBack(db, input),
-        ),
+        );
+      },
     },
   },
 });

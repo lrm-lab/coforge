@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { weeklyReportsMiddleware } from "./weekly-reports-middleware";
 import { submitCollectPlanInputSchema } from "./records-schemas";
 
 export const listWeeklyReportCollectorSlots = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     const { loadCollectPlanSlots } =
       await import("#src/server/records/weekly-report-collect-orchestrate.server");
@@ -13,7 +13,7 @@ export const listWeeklyReportCollectorSlots = createServerFn({ method: "GET" })
   });
 
 export const ensureWeeklyReportCollector = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ computerId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { ensureCollectPlanCollector } =
@@ -26,7 +26,7 @@ export const ensureWeeklyReportCollector = createServerFn({ method: "POST" })
   });
 
 export const submitWeeklyReportCollectPlan = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(submitCollectPlanInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { submitWeeklyReportCollectPlan: submit } =
@@ -47,7 +47,7 @@ export const submitWeeklyReportCollectPlan = createServerFn({ method: "POST" })
   });
 
 export const loadWeeklyReportCollectRun = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
+  .middleware([weeklyReportsMiddleware])
   .validator(z.object({ runId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { getCollectRunWithPacks } =

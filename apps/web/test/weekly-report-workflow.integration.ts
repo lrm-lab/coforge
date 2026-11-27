@@ -374,6 +374,7 @@ test("configured weekly schedule retries failed invitations without creating a s
     data: {
       slug: `weekly-schedule-${crypto.randomUUID()}`,
       name: "Schedule",
+      experiments: { weeklyReports: true },
       members: { create: { userId: user.id, role: "owner" } },
     },
   });

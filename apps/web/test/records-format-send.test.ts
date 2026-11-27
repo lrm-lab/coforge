@@ -61,6 +61,7 @@ test("dismissWeeklyFormatSend stamps the current ISO week so a stale cycle canno
           ownerId: "leader",
           sendTime: "15:00",
           sendWeekday: 4,
+          workspace: { experiments: { weeklyReports: true } },
         },
       ],
     },

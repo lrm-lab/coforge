@@ -120,7 +120,11 @@ describe("WorkspaceMembers", () => {
 
     expect(queries.membership).toEqual({
       where: { workspaceId_userId: { workspaceId: "workspace-1", userId: "viewer" } },
-      select: { userId: true, role: true },
+      select: {
+        userId: true,
+        role: true,
+        workspace: { select: { experiments: true } },
+      },
     });
     expect(queries.people).toMatchObject({
       where: { id: { in: ["other-user"] } },
@@ -300,6 +304,8 @@ describe("WorkspaceMembers", () => {
     expect(visible).toEqual({
       workspaceId: "workspace-1",
       deletedAt: null,
+      weeklyReportAssistant: null,
+      weeklyReportCollectorBinding: null,
       OR: [{ visibility: "public" }, { ownerId: "viewer" }],
       AND: [
         {
@@ -318,6 +324,46 @@ describe("WorkspaceMembers", () => {
     const db = withFakePagination({
       workspaceMembership: {
         findUnique: async () => ({ userId: "viewer", role: "admin" }),
+      },
+      user: { findMany: async () => [] },
+      agent: {
+        findMany: async (query: object) => {
+          agentQuery = query;
+          return [];
+        },
+      },
+    }) as unknown as PrismaClient;
+
+    await new WorkspaceMembers(db).agentPage("workspace-1", "viewer", {
+      owner: "all",
+      query: "",
+      limit: 24,
+    });
+
+    const [roster] = (agentQuery as { where: { AND: Array<{ AND: object[] }> } }).where.AND;
+    const [visible] = roster.AND;
+    expect(visible).toEqual({
+      workspaceId: "workspace-1",
+      deletedAt: null,
+      weeklyReportAssistant: null,
+      weeklyReportCollectorBinding: null,
+      OR: [
+        { systemKind: null },
+        { systemKind: { not: "workspace-assistant" } },
+        { ownerId: "viewer" },
+      ],
+    });
+  });
+
+  test("includes weekly-report assistants in the directory once the workspace enables weeklyReports", async () => {
+    let agentQuery: object | undefined;
+    const db = withFakePagination({
+      workspaceMembership: {
+        findUnique: async () => ({
+          userId: "viewer",
+          role: "admin",
+          workspace: { experiments: { weeklyReports: true } },
+        }),
       },
       user: { findMany: async () => [] },
       agent: {

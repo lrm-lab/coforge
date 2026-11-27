@@ -8,6 +8,7 @@ import {
 } from "#src/server/db/repositories/agent.repositories.server";
 import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { weeklyReportAssistantOwner } from "#src/server/records/weekly-report-assistant.server";
+import { weeklyReportsDisabledResponse } from "#src/server/records/weekly-reports-gate.server";
 import { executeAgentWeeklyReport } from "#src/server/agents/agent-weekly-report-http.server";
 
 export const Route = createFileRoute("/api/agent/v1/weekly-reports")({
@@ -16,6 +17,8 @@ export const Route = createFileRoute("/api/agent/v1/weekly-reports")({
     handlers: {
       POST: async ({ request, context: { principal, db } }) => {
         try {
+          const disabled = await weeklyReportsDisabledResponse(db, principal.workspaceId);
+          if (disabled) return disabled;
           const command = validateWeeklyReportRequest(await request.json());
           const authorization = new RepositoryAgentAuthorization(new PrismaAgentRepository(db));
           const assistantCatalog = recordAssistantCatalog(db);

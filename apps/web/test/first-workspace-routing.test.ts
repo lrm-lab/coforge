@@ -47,7 +47,10 @@ const workspaceReads = {
   "#src/features/workspaces/member-settings.functions": {
     loadMemberWorkspaceSettings: { tabOrders: {}, setupPending: false },
   },
-  "#src/features/records/records.functions": { loadRecordsNavAttention: { preview: false } },
+  "#src/features/records/records.functions": {
+    loadRecordsNavAttention: { preview: false },
+    loadWeeklyReportsOn: false,
+  },
 } as const;
 for (const [path, reads] of Object.entries(workspaceReads)) {
   const real = await import(path);

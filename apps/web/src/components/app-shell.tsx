@@ -91,6 +91,7 @@ function useNavItems(
   recordsPreview: boolean,
   workspaceId: string,
   aiWorkbench: boolean,
+  weeklyReports: boolean,
   activity: { hasUnread: boolean; unreadCount?: number },
 ): (NavItemType & {
   icon: FC<{ className?: string }>;
@@ -150,14 +151,18 @@ function useNavItems(
         sections: ["members", "agent"],
         icon: Users,
       },
-      {
-        label: m.navigation_records(),
-        bareHref: `${base}/records`,
-        href: localizeHref(`${base}${recordsHref}`),
-        sections: ["records"],
-        icon: FileText,
-        badge: recordsDot,
-      },
+      ...(weeklyReports
+        ? [
+            {
+              label: m.navigation_records(),
+              bareHref: `${base}/records`,
+              href: localizeHref(`${base}${recordsHref}`),
+              sections: ["records"],
+              icon: FileText,
+              badge: recordsDot,
+            },
+          ]
+        : []),
       {
         label: m.navigation_computers(),
         ...item("computers"),
@@ -165,7 +170,7 @@ function useNavItems(
         icon: Monitor,
       },
     ];
-  }, [base, recordsPreview, aiWorkbench, unreadCount, hasUnread, recordsHref]);
+  }, [base, recordsPreview, aiWorkbench, weeklyReports, unreadCount, hasUnread, recordsHref]);
 }
 
 const MemoSidebarExpanded = memo(SidebarExpanded);
@@ -178,6 +183,7 @@ const SEARCH_RAIL_BUTTON = <SearchRailButton />;
 
 type AppShellProps = {
   aiWorkbench?: boolean;
+  weeklyReports?: boolean;
   canSeeUsageLimits?: boolean;
   sidebarLayout?: SidebarLayoutCookie;
   user: AppUser;
@@ -230,6 +236,7 @@ function WorkspaceChrome({
   children,
   recordsPreview = false,
   aiWorkbench = false,
+  weeklyReports = false,
   sidebarLayout,
   standalone = false,
 }: AppShellProps & { standalone?: boolean }) {
@@ -249,6 +256,7 @@ function WorkspaceChrome({
   const base = workspacePath(currentWorkspace.slug);
   useEffect(() => {
     const remember = () => {
+      if (!weeklyReports) return;
       const { pathname, searchStr } = router.state.location;
       if (!pathname.startsWith(`${base}/records`)) return;
       const query = !searchStr ? "" : searchStr.startsWith("?") ? searchStr : `?${searchStr}`;
@@ -256,10 +264,17 @@ function WorkspaceChrome({
     };
     remember();
     return router.subscribe("onResolved", remember);
-  }, [router, workspaceId, base]);
+  }, [router, workspaceId, base, weeklyReports]);
   const activityAttention = useActivityAttention(user, workspaceId);
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
-  const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
+  const navItems = useNavItems(
+    base,
+    recordsPreview,
+    workspaceId,
+    aiWorkbench,
+    weeklyReports,
+    activityAttention,
+  );
   const defaultRail = CHAT_SECTIONS.includes(section);
   const [chatListOpen, setChatListOpen] = useState(false);
   const tabHome = tabHomeOf({ section, itemOpen, chatListOpen });

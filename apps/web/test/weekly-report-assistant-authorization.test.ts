@@ -171,7 +171,7 @@ test("send-prompt suggestions are prompts only and Agent weekly-report protocol 
   }
 });
 
-test("Members owned-agent listing includes the weekly-report assistant", async () => {
+test("Members owned-agent listing gates the weekly-report assistant on the workspace experiment", async () => {
   let where: Record<string, unknown> | undefined;
   const db = {
     agent: {
@@ -184,9 +184,19 @@ test("Members owned-agent listing includes the weekly-report assistant", async (
 
   await new PrismaAgentRepository(db).listOwnedInWorkspace("workspace-1", "user-1");
   expect(where).toEqual({
-    workspaceId: "workspace-1",
-    ownerId: "user-1",
-    deletedAt: null,
-    OR: [{ systemKind: null }, { systemKind: { not: "app-bot" } }],
+    AND: [
+      {
+        workspaceId: "workspace-1",
+        ownerId: "user-1",
+        deletedAt: null,
+      },
+      { OR: [{ systemKind: null }, { systemKind: { not: "app-bot" } }] },
+      {
+        OR: [
+          { weeklyReportAssistant: null, weeklyReportCollectorBinding: null },
+          { workspace: { experiments: { path: ["weeklyReports"], equals: true } } },
+        ],
+      },
+    ],
   });
 });

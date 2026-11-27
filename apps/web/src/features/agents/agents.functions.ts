@@ -45,10 +45,8 @@ import { PrismaAgentRuntimeCredentialRepository } from "#src/server/db/repositor
 import { readAgentRuntimeCredentialEncryptionKey } from "#src/server/agents/agent-runtime-credentials.server";
 import { ChangeAgentRuntimeCredential } from "#src/server/agents/change-agent-runtime-credential.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
-import {
-  ensureWeeklyReportAssistant,
-  userOwnsLiveComputer,
-} from "#src/server/records/weekly-report-assistant.server";
+import { userOwnsLiveComputer } from "#src/server/records/weekly-report-assistant.server";
+import { ensureWeeklyReportAssistantIfEnabled } from "#src/server/records/weekly-reports-gate.server";
 
 import { declareNoStore } from "#src/features/no-store-response.server";
 import {
@@ -98,11 +96,11 @@ export const listAgents = createServerFn({ method: "GET" })
 export const ensureWeeklyReportAssistantMember = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
-    const row = await ensureWeeklyReportAssistant(db, {
+    const row = await ensureWeeklyReportAssistantIfEnabled(db, {
       workspaceId,
       userId: user.id,
     });
-    return { agentId: row.agentId };
+    return { agentId: row?.agentId ?? null };
   });
 
 /** The configured model of every Agent the viewer may see in the Workspace, by Agent id, for the

@@ -15,6 +15,10 @@ import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime
 import { decodeWorkspaceFeaturesChangedEvent } from "#src/features/workspaces/workspace-realtime";
 import { m } from "#src/paraglide/messages";
 import { AI_WORKBENCH_QUERY_KEY } from "./ai-workbench";
+import {
+  invalidateWeeklyReportsDependents,
+  WEEKLY_REPORTS_QUERY_KEY,
+} from "#src/features/records/weekly-reports-gate";
 import { getExperiments, setExperiment } from "./experiments.functions";
 type Experiment = Awaited<ReturnType<typeof getExperiments>>["experiments"][number];
 const EXPERIMENT_TEXT: Record<
@@ -35,6 +39,10 @@ const EXPERIMENT_TEXT: Record<
   teamMemory: {
     name: () => m.experiments_team_memory(),
     description: () => m.experiments_team_memory_description(),
+  },
+  weeklyReports: {
+    name: () => m.experiments_weekly_reports(),
+    description: () => m.experiments_weekly_reports_description(),
   },
 };
 const EXPERIMENTS_QUERY_KEY = ["settings-experiments"];
@@ -61,6 +69,7 @@ export function ExperimentsSettings({
   experiments: UseQueryResult<ExperimentsData>;
 }) {
   const save = useServerFn(setExperiment);
+  const workspaceId = useCurrentWorkspaceId();
   const queryClient = useQueryClient();
   const router = useRouter();
   const [changed, setChanged] = useState<ReadonlySet<Experiment["key"]>>(new Set());
@@ -69,6 +78,11 @@ export function ExperimentsSettings({
     onSuccess: (saved) => {
       if (saved.key === "aiWorkbench") {
         queryClient.setQueryData(AI_WORKBENCH_QUERY_KEY, saved.enabled);
+        void router.invalidate();
+      }
+      if (saved.key === "weeklyReports") {
+        queryClient.setQueryData(WEEKLY_REPORTS_QUERY_KEY, saved.enabled);
+        invalidateWeeklyReportsDependents(queryClient, workspaceId);
         void router.invalidate();
       }
       setChanged((keys) => new Set(keys).add(saved.key));

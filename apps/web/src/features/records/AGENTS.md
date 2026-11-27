@@ -2,6 +2,18 @@
 
 These rules also cover `src/server/records/`.
 
+- Workspace Records (weekly reports) are gated by the Workspace-level
+  `weeklyReports` experiment (`defaultEnabled: false`, toggled in Settings →
+  Experiments). All gate logic is isolated in
+  `server/records/weekly-reports-gate.server.ts` (server checks, agent/DM
+  filters, and gated provisioning) and `features/records/weekly-reports-gate.ts`,
+  `weekly-reports-middleware.ts`, and `weekly-reports-off.tsx` (client state,
+  Server Function middleware, and disabled route view), so removing the flag
+  later is a single grep of those modules. While off, the sidebar hides Records,
+  `/records*` shows `WeeklyReportsOff`, Records server functions and Agent
+  weekly-report endpoints refuse access, scheduled weekly sends skip the
+  Workspace, assistant auto-provisioning is skipped, and existing weekly-report
+  assistants are hidden from Members and Chat DMs while preserving all data.
 - Workspace Records (weekly reports) belong to `features/records/` (list/detail,
   settings, stats, side comments, and Server Functions) and
   focused modules under `server/records/` (cycles, reports,

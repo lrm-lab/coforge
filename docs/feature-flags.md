@@ -146,7 +146,7 @@ An experiment either has a flag or has none. With a flag, the flag decides which
 offers it, and a feature that has shipped but that a Workspace may want to turn off is exactly that:
 every experiment in the registry today is one. The Workspace's own choice (`workspaces.experiments`, a sparse key → boolean map)
 decides whether it applies, and the entry's `defaultEnabled` is what applies until the choice is
-first made: off for `artifacts`, on for `drafts`. An explicit stored `false` stays off.
+first made: off for `weeklyReports`, on for `drafts`, `aiWorkbench`, and `teamMemory`. An explicit stored `false` stays off.
 
 `apps/web/src/server/experiments/` holds the registry (`EXPERIMENTS`: key, flag or `null`,
 `defaultEnabled`, and whether a change needs a reload) and `Experiments.enabled(key, workspace)`, the

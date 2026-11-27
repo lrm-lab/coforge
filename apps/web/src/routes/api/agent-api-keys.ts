@@ -33,6 +33,7 @@ import type { AgentLaunchApp } from "@lrm/coforge-sdk/internal/agent-launch-apps
 import { agentLaunchApps } from "#src/server/app-agent-access/app-agent-access-composition.server";
 import { artifactChecksEnabled } from "#src/server/artifacts/artifact-check-config.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
+import { isWeeklyReportAgentBlocked } from "#src/server/records/weekly-reports-gate.server";
 
 const createAgentApiKeyInputSchema = z.object({
   agentId: z.string().min(1),
@@ -182,7 +183,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             systemKind: true,
             weeklyReportAssistant: { select: { id: true } },
             weeklyReportCollectorBinding: { select: { id: true } },
-            workspace: { select: { slug: true, name: true } },
+            workspace: { select: { slug: true, name: true, experiments: true } },
             computer: {
               select: {
                 name: true,
@@ -194,7 +195,11 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             },
           },
         });
-        if (principal.workspaceId !== input.workspaceId || !agent) {
+        if (
+          principal.workspaceId !== input.workspaceId ||
+          !agent ||
+          isWeeklyReportAgentBlocked(agent, agent.workspace.experiments)
+        ) {
           observation.reason_code = "AGENT_LAUNCH_NOT_AUTHORIZED";
           return errorResponse(
             "AGENT_LAUNCH_NOT_AUTHORIZED",

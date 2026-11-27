@@ -10,6 +10,7 @@ import {
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { enableWeeklyReportsForTest } from "./helpers/weekly-reports-experiment";
 
 /**
  * A note past `MARKDOWN_CHUNK_THRESHOLD` opens (found in task #385's check of the shared editor):
@@ -26,6 +27,7 @@ test("a note past the chunk threshold opens with its text and saves nothing", as
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `note-large-${process.pid}`);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
+  const weeklyReports = await enableWeeklyReportsForTest(db, workspaceId);
   const notes = recordAssistantCatalog(db);
   const sections = Array.from(
     { length: 600 },
@@ -58,6 +60,7 @@ test("a note past the chunk threshold opens with its text and saves nothing", as
   } finally {
     await browser("close").catch(() => undefined);
     await db.recordNote.deleteMany({ where: { id } }).catch(() => undefined);
+    await weeklyReports.restore();
     await db.$disconnect();
   }
 }, 120_000);

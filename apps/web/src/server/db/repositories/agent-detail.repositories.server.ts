@@ -4,6 +4,7 @@ import {
   assertAgentVisible,
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
+import { isWeeklyReportAgentBlocked } from "#src/server/records/weekly-reports-gate.server";
 
 /**
  * The Agent profile's row, for a viewer who belongs to the Workspace. A deleted Agent is
@@ -62,6 +63,8 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
         wakeBlockedCount: true,
         wakeBlockedAt: true,
         weeklyReportAssistant: { select: { id: true } },
+        weeklyReportCollectorBinding: { select: { id: true } },
+        workspace: { select: { experiments: true } },
         owner: {
           select: {
             id: true,
@@ -86,10 +89,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
         },
       },
     });
-    if (!agent) return undefined;
-    // An existing-but-invisible Agent answers a stable "not visible" result, never its details —
-    // distinct from the plain absence above so the profile panel can render the specific
-    // "not visible" copy instead of a generic "not found".
+    if (!agent || isWeeklyReportAgentBlocked(agent, agent.workspace?.experiments)) return undefined;
     assertAgentVisible(this.viewer, {
       visibility: agent.visibility,
       ownerId: agent.owner.id,

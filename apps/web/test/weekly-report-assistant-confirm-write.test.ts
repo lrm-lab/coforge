@@ -188,7 +188,10 @@ test("only the member's weekly-report assistant writes a body-edit as it arrives
   const db = {
     user: { findUnique: async () => ({ id: "user-1" }) },
     weeklyReportAssistant: {
-      findUnique: async () => ({ agentId: "assistant-agent" }),
+      findUnique: async () => ({
+        agentId: "assistant-agent",
+        workspace: { experiments: { weeklyReports: true } },
+      }),
     },
     workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     weeklyReport: {
@@ -294,7 +297,10 @@ test("a body-edit written against a moved report answers conflict and writes not
   const db = {
     user: { findUnique: async () => ({ id: "user-1" }) },
     weeklyReportAssistant: {
-      findUnique: async () => ({ agentId: "assistant-agent" }),
+      findUnique: async () => ({
+        agentId: "assistant-agent",
+        workspace: { experiments: { weeklyReports: true } },
+      }),
     },
     workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     weeklyReport: {
@@ -352,7 +358,10 @@ test("a body-edit carrying the version it read writes", async () => {
   const db = {
     user: { findUnique: async () => ({ id: "user-1" }) },
     weeklyReportAssistant: {
-      findUnique: async () => ({ agentId: "assistant-agent" }),
+      findUnique: async () => ({
+        agentId: "assistant-agent",
+        workspace: { experiments: { weeklyReports: true } },
+      }),
     },
     workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     weeklyReport: {
@@ -417,7 +426,10 @@ test("re-applying the same assistant insert is not refused by its own version bu
   const db = {
     user: { findUnique: async () => ({ id: "user-1" }) },
     weeklyReportAssistant: {
-      findUnique: async () => ({ agentId: "assistant-agent" }),
+      findUnique: async () => ({
+        agentId: "assistant-agent",
+        workspace: { experiments: { weeklyReports: true } },
+      }),
     },
     workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     weeklyReport: {
