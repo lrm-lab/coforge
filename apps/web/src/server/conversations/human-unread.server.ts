@@ -320,36 +320,6 @@ export function markThreadDoneSql(
 }
 
 /**
- * Reads every conversation one person belongs to through the newest message its row stands for
- * (`ROW_MESSAGES_SQL`) posted at or before `before`, consuming mark-as-unread markers at or below that point. Touches only the
- * rows that move, and returns each one's conversation, whether it is a channel and whether it is a task's own
- * conversation (hidden: no badge to move).
- */
-export function markConversationsReadSql(workspaceId: string, userId: string, before: Date) {
-  return Prisma.sql`
-    UPDATE "conversation_members" cm
-    SET "readThroughSequence" = GREATEST(cm."readThroughSequence", latest."sequence"),
-        "unreadFromSequence" = CASE
-          WHEN cm."unreadFromSequence" <= latest."sequence" THEN NULL
-          ELSE cm."unreadFromSequence" END
-    FROM "conversations" c
-    CROSS JOIN LATERAL (
-      SELECT m."sequence" FROM "messages" m
-      WHERE m."conversationId" = c."id" AND ${ROW_MESSAGES_SQL} AND m."createdAt" <= ${before}
-      ORDER BY m."sequence" DESC LIMIT 1
-    ) latest
-    WHERE c."id" = cm."conversationId"
-      AND c."workspaceId" = ${workspaceId}::uuid
-      AND cm."userId" = ${userId}::uuid
-      AND cm."workspaceId" = ${workspaceId}::uuid
-      AND cm."leftAt" IS NULL
-      AND (cm."readThroughSequence" < latest."sequence"
-        OR cm."unreadFromSequence" <= latest."sequence")
-    RETURNING cm."conversationId" AS "conversationId", c."channelName" IS NOT NULL AS "channel",
-      c."kind" = 'task_thread' AS "task"`;
-}
-
-/**
  * Reads threads through their newest reply posted at or before `before`. `threads` selects
  * `"memberId"`, `"conversationId"` and `"rootMessageId"` rows for the person's own member rows.
  */
