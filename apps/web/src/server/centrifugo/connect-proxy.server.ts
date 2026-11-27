@@ -211,6 +211,7 @@ export async function authenticateCentrifugoConnect(
         meta: {
           workspace_id: principal.workspaceId,
           computer_id: principal.computerId,
+          daemon_api_key_hash: principal.apiKeyHash,
           ...(instanceId && { worker_instance_id: instanceId }),
           ...(sequence !== undefined && { installer_recovery_connection_sequence: sequence }),
         },
