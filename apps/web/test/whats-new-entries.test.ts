@@ -13,7 +13,6 @@ test("every entry has its own release minute, an id of its own and words and a p
     expect(time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/);
     expect(Number.isNaN(Date.parse(time))).toBe(false);
   }
-  // Two entries at one time would have no order between them.
   expect(new Set(times).size).toBe(times.length);
   const ids = WHATS_NEW_ENTRIES.map((entry) => entry.id);
   expect(new Set(ids).size).toBe(ids.length);
@@ -56,7 +55,6 @@ test("a dismissed entry is gone and the next shows", () => {
 test("an entry whose experiment is off is skipped, and shows once it is on", () => {
   const off = { ...viewer, experimentOn: () => false, dismissed: ["labels"] };
   expect(pendingWhatsNew(entries, off)).toEqual([]);
-  // Dismissing a later entry meanwhile does not count the skipped one as seen.
   expect(pendingWhatsNew(entries, { ...off, experimentOn: () => true })).toEqual(["needs-docs"]);
 });
 

@@ -7,18 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { WHATS_NEW_ENTRIES, pendingWhatsNew } from "#src/features/whats-new/whats-new-entries";
 import { animationsSettled, browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
-/**
- * "What's new" in the sidebar (tasks #493, #516) in a real browser: a dot while entries wait; the
- * row opens the dialog on them and "Got it" clears the dot, also for a second browser (another
- * device); with nothing waiting there is no row (task #585). Desktop, the collapsed rail and
- * phone. Entries that wait on an experiment are covered by `whats-new.integration.ts`.
- *
- * Opt-in like the other browser E2Es: real local Web and `agent-browser`. Entries show only from
- * their release time, so to run before it start the Web with `COFORGE_E2E_WHATS_NEW_NOW` (honoured
- * only with the dev sign-in bypass) and pass the same value here. Without it the test checks only
- * what the real time allows. The dev user's dismissals and join time are restored after the
- * run. Screenshots go under `.artifacts/e2e/whats-new/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/whats-new");
 const pinned = process.env.COFORGE_E2E_WHATS_NEW_NOW;
@@ -65,8 +53,6 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     "agent-usage": "Agent token usage in Profiles",
   };
 
-  // The sidebar, the rail and the Me page's row can all be in the page; the one meant is the one on
-  // screen.
   const entry = `[...document.querySelectorAll('button')].find((el) => (el.textContent === "What's new" || el.getAttribute("aria-label") === "What's new") && el.getBoundingClientRect().width > 0 && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }))`;
   const dot = `(${entry})?.querySelector("span.size-2.rounded-full") != null`;
   const dialog = `([...document.querySelectorAll('[role="dialog"]')].find((el) => el.getAttribute("aria-label") === "What's new") ?? null)`;
@@ -76,7 +62,6 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await settled(b);
     await b.browser("screenshot", join(artifacts, `${shot}.png`));
     await b.evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
-    // Colors ease between themes; let them land.
     await b.browser("wait", "400");
     await b.browser("screenshot", join(artifacts, `${shot}-dark.png`));
     await b.evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
@@ -85,10 +70,8 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
   const open = async (b: typeof first) => {
     await b.browser("open", page);
     await b.browser("wait", "--fn", `document.querySelector('[data-sidebar]') !== null`);
-    // The row comes once its read returns.
     await b.browser("wait", "1500");
   };
-  // A real click: React Aria's dialog keeps focus, so Escape and focus return work as for a person.
   const press = async (b: typeof first, target: string) => {
     await b.evaluate(`((${target}).setAttribute("data-e2e-press", ""), true)`);
     await b.browser("click", "[data-e2e-press]");
@@ -115,7 +98,6 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     expect(await first.evaluate(dot)).toBe(true);
     await shoot(first, "desktop-1-row");
 
-    // The row opens the waiting entries, oldest first; "Got it" on the last clears the dot.
     await press(first, entry);
     await first.browser("wait", "--fn", `${dialog} !== null`);
     expect(await first.evaluate(heading)).toBe(titles[pending[0]!]!);
@@ -126,15 +108,12 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     }
     await pressText(first, "Got it");
     await first.browser("wait", "--fn", `${dialog} === null`);
-    // With nothing left to see, the row goes.
     expect(await first.evaluate(`(${entry}) == null`)).toBe(true);
     await shoot(first, "desktop-4-seen");
 
-    // Another device keeps what was seen: no row there either.
     await open(second);
     expect(await second.evaluate(`(${entry}) == null`)).toBe(true);
 
-    // Closing on the first page counts only that page as seen.
     await setDismissed([]);
     await open(second);
     await press(second, entry);
@@ -147,7 +126,6 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
         .whatsNewDismissed,
     ).toEqual([pending[0]!]);
 
-    // The collapsed rail has the same entry as an icon with the dot.
     await setDismissed([]);
     await open(first);
     const visible = (label: string) =>
@@ -163,7 +141,6 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await shoot(first, "desktop-3-rail");
     await press(first, visible("Expand sidebar"));
 
-    // On a phone the row is on the Me tab's page; the dialog comes up from the bottom.
     await first.browser("set", "viewport", "390", "844");
     await open(first);
     expect(await first.evaluate(`(${entry}) == null`)).toBe(true);
