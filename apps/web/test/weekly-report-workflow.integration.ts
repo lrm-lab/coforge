@@ -73,6 +73,7 @@ test("template creation reports initialization failures and retries the complete
     data: {
       slug: `retry-${crypto.randomUUID()}`,
       name: "Creation retries",
+      experiments: { weeklyReports: true },
       members: { create: { userId: user.id, role: "owner" } },
     },
   });
