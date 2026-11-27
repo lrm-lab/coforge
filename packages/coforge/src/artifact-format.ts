@@ -9,17 +9,38 @@ import {
 
 /** What `coforge artifact` prints (task #385). The shapes are the server's answers. */
 
-type Card = { id: string; name: string; title: string; currentVersion: number };
+type ArtifactSettledInfo = {
+  at: string;
+  version: number;
+  by: { kind: string; name: string };
+};
 
-/** A row `artifact list` prints: the card, with when it last changed. */
+type ArtifactReopenedInfo = {
+  version: number;
+  was: ArtifactSettledInfo;
+};
+
+type Card = {
+  id: string;
+  name: string;
+  title: string;
+  currentVersion: number;
+  settled?: ArtifactSettledInfo | null;
+  reopened?: ArtifactReopenedInfo | null;
+};
+
 type ListRow = Card & { updatedAt: string };
 
-/** One file of a version, as the server lists it. */
 export type ArtifactFileEntry = { path: string; sha256: string; sizeBytes: number; kind?: string };
 
-/** The server's answer to `read`. */
 export type ArtifactReadAnswer = {
-  artifact: { id: string; title: string; currentVersion: number };
+  artifact: {
+    id: string;
+    title: string;
+    currentVersion: number;
+    settled?: ArtifactSettledInfo | null;
+    reopened?: ArtifactReopenedInfo | null;
+  };
   version: {
     number: number;
     note?: string | null;
@@ -50,6 +71,54 @@ export type ArtifactDeletedAnswer = {
   artifact: { id: string; title: string };
   deleted: true;
 };
+
+export type ArtifactSettledAnswer = TellingAnswer & {
+  artifact: {
+    id: string;
+    name: string;
+    title: string;
+    currentVersion: number;
+    settled?: ArtifactSettledInfo | null;
+    reopened?: ArtifactReopenedInfo | null;
+  };
+  changed: boolean;
+};
+
+function settledDay(at: string): string {
+  const date = new Date(at);
+  return Number.isNaN(date.getTime()) ? at : date.toISOString().slice(0, 10);
+}
+
+function settlementLine(artifact: {
+  settled?: ArtifactSettledInfo | null;
+  reopened?: ArtifactReopenedInfo | null;
+}): string | null {
+  if (artifact.settled) {
+    const { by, at, version } = artifact.settled;
+    return `Settled: @${foldUntrustedLine(by.name)} settled it on ${settledDay(at)} at v${version}. A new version takes it back to Working.`;
+  }
+  if (artifact.reopened) {
+    const { version, was } = artifact.reopened;
+    return `Working again: v${version} came after @${foldUntrustedLine(was.by.name)} settled v${was.version} on ${settledDay(was.at)}.`;
+  }
+  return null;
+}
+
+export function formatArtifactSettled(answer: ArtifactSettledAnswer, settling: boolean): string {
+  const { artifact, changed } = answer;
+  const title = foldUntrustedLine(artifact.title);
+  const settled = artifact.settled ?? null;
+  if (settling) {
+    const version = settled?.version ?? artifact.currentVersion;
+    const first = changed
+      ? `Settled "${title}" at v${version}.`
+      : `"${title}" was settled already${settled ? ` by @${foldUntrustedLine(settled.by.name)} on ${settledDay(settled.at)} at v${settled.version}` : ""}: nothing changed.`;
+    return [first, ...(changed ? formatTelling(artifact.id, answer) : [])].join("\n");
+  }
+  return changed
+    ? `"${title}" is Working again.`
+    : `"${title}" is Working already: nothing changed.`;
+}
 
 export type ArtifactSavedAnswer = TellingAnswer & {
   artifact: { id: string; title: string; entryPath?: string };
@@ -96,7 +165,8 @@ export function formatArtifactList(
   const cursor = Array.isArray(answer) ? undefined : answer.nextCursor;
   if (rows.length === 0) return "No artifacts here yet.";
   const lines = rows.map(
-    (row) => `${row.updatedAt}  "${row.title}" (id ${row.id}), version ${row.currentVersion}`,
+    (row) =>
+      `${row.updatedAt}  "${row.title}" (id ${row.id}), version ${row.currentVersion}${row.settled ? " [settled]" : ""}`,
   );
   lines.push(`Read one: ${readCommand("<id>")}`);
   if (cursor && nextPage) lines.push(`More: ${nextPage(cursor)}`);
@@ -125,6 +195,8 @@ export function formatArtifactRead(
     `Artifact "${artifact.title}" (id ${artifact.id}), version ${shown} of ${artifact.currentVersion}${version?.label ? `, labelled "${version.label}"` : ""}${publisher}${publishedAt}.`,
   ];
   if (read.url) lines.push(`Open: ${read.url}`);
+  const statusLine = settlementLine(artifact);
+  if (statusLine) lines.push(statusLine);
   if (read.home) lines.push(`Home: ${foldUntrustedLine(read.home)}`);
   if (read.origin)
     lines.push(

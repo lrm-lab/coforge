@@ -21,6 +21,7 @@ import type {
 } from "#src/artifact-directory-args";
 import type { ArtifactReadAnswer } from "#src/artifact-format";
 import { formatTelling, type TellingAnswer } from "#src/artifact-follow-format";
+import { enforceNotAPageHold } from "#src/artifact-not-a-page-hold";
 import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
 import { CliError, invalidArg, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
@@ -174,6 +175,7 @@ export async function runPush(
 
   if (!state) {
     const created = await createFromDirectory(
+      dir,
       draft,
       local,
       entry,
@@ -295,6 +297,7 @@ type Created = TellingAnswer & {
 };
 
 async function createFromDirectory(
+  dir: string,
   draft: Extract<ArtifactDirectoryDraft, { operation: "push" }>,
   local: Map<string, LocalFile>,
   entryOption: string | undefined,
@@ -327,6 +330,7 @@ async function createFromDirectory(
       `--entry is required: name the file the artifact opens at (${[...local.keys()].slice(0, 5).join(", ")})`,
     );
   if (!local.has(entry)) throw invalidArg(`--entry ${entry} is not a file in ${draft.dir}`);
+  await enforceNotAPageHold({ dir, target, files: local });
   const files = [...local.values()];
   const request: CreateRequest = {
     operation: "push",

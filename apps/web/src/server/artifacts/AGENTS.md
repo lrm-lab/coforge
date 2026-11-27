@@ -73,7 +73,10 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   authors or publishes: `Artifact.authorAgentId` and `ArtifactVersion.publisherAgentId` are the
   only writer columns. People read, comment, send, rename (managers only, a title-only change that makes no version) and delete.
 - A push over an older base merges by path only (`refuseOverlap`): a file or setting both sides
-  changed refuses the push with `artifact-base-moved`. Nothing merges inside a file. The entry
+  changed refuses the push with `artifact-base-moved`. Nothing merges inside a file. Pushing a new
+  version to a Settled artifact (`artifact-settlement.server.ts`) holds once per Agent
+  (`SettledArtifactHold`, recording `artifact_read_positions.seenSettledAt` outside the rolled-back
+  transaction); a second push proceeds and records `reopenedAtVersion`. The entry
   file is what the page shows whole, so a push or create whose entry exceeds
   `ARTIFACT_ENTRY_READ_LIMIT` (2 MiB) is refused (`artifact-entry-too-large`): a larger entry
   could only render blank.

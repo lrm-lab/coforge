@@ -29,6 +29,7 @@ import { refuseOverlap, refuseUnknownBase } from "./artifact-agent-base.server";
 import { createVersionedArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { recordingRefusal, requireNoUnseenChangesOnPush } from "./artifact-comment-gate.server";
+import { requireNotSettledOrSeen, type ArtifactSettlementRow } from "./artifact-settlement.server";
 import { lockComments } from "./artifact-comment-write.server";
 import { settleWrite } from "./artifact-activity-wake.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
@@ -219,14 +220,15 @@ export class Artifacts {
         this.db.$transaction(async (tx) => {
           await lockComments(tx, input.artifactId);
           const [locked] = await tx.$queryRaw<
-            {
+            ({
               id: string;
               currentVersion: number;
               entryPath: string;
               title: string;
               description: string;
-            }[]
-          >`SELECT "id", "currentVersion", "entryPath", "title", "description"
+            } & ArtifactSettlementRow)[]
+          >`SELECT "id", "currentVersion", "entryPath", "title", "description",
+                   "settledAt", "settledVersion", "settledByKind", "settledById", "reopenedAtVersion"
          FROM "artifacts"
          WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
            AND "deletedAt" IS NULL
@@ -364,6 +366,14 @@ export class Artifacts {
           }
           if (!filesChanged && !settingsChanged && !input.label)
             return { status: "nothing" } as const;
+          await requireNotSettledOrSeen(tx, {
+            workspaceId: input.workspaceId,
+            artifactId: locked.id,
+            agentId: input.publisher.agentId,
+            current,
+            title: locked.title,
+            settlement: locked,
+          });
           const gone = await this.blobs.use(tx, input.workspaceId, [
             ...new Set(added.map((file) => result.get(file.path)!.sha256)),
           ]);
@@ -382,6 +392,12 @@ export class Artifacts {
             idempotencyKey: input.idempotencyKey,
             files: result.values(),
           });
+          if (locked.settledAt !== null && locked.reopenedAtVersion === null) {
+            await tx.artifact.update({
+              where: { id: locked.id },
+              data: { reopenedAtVersion: current + 1 },
+            });
+          }
           return {
             status: "created",
             versionId: version.id,
