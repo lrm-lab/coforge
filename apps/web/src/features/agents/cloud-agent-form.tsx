@@ -221,7 +221,7 @@ function CloudComputerStatus({
           href={localizeHref(workspacePath(workspaceSlug, `/computer/${computer.computerId}`))}
           color="link-color"
           size="sm"
-          onClick={onLeave}
+          onPress={onLeave}
         >
           {m.cloud_agent_create_view_computer()}
         </Button>
