@@ -1,6 +1,7 @@
 import { Prisma } from "#src/generated/prisma/client";
 import { ROW_MESSAGES_SQL } from "#src/server/conversations/human-unread.server";
 import {
+  activityMentionsOnlySql,
   conversationItemListedSql,
   conversationItemsSql,
   conversationMentionLateral,
@@ -120,8 +121,8 @@ export function allConversationsTargetSql(workspaceId: string, userId: string, b
 }
 
 function activityBulkBoundarySql(channelName: Prisma.Sql, rowMessages: Prisma.Sql, before: Date) {
-  const relevantChannel = Prisma.sql`(${channelName} IS NOT NULL AND cm."notificationLevel" = 'relevant')`;
-  return Prisma.sql`SELECT CASE WHEN ${relevantChannel} THEN (
+  const mentionsOnly = activityMentionsOnlySql(channelName);
+  return Prisma.sql`SELECT CASE WHEN ${mentionsOnly} THEN (
       SELECT MAX(m."sequence") FROM "message_mentions" mm
       JOIN "messages" m ON m."id" = mm."messageId" AND m."conversationId" = mm."conversationId"
       WHERE mm."memberId" = cm."id"
@@ -148,8 +149,7 @@ export function markConversationsReadSql(workspaceId: string, userId: string, be
         AND cm."userId" = ${userId}::uuid
         AND cm."workspaceId" = ${workspaceId}::uuid
         AND cm."leftAt" IS NULL
-        AND (cm."notificationLevel" <> 'relevant' OR c."channelName" IS NULL
-          OR (c."archivedAt" IS NULL AND c."hiddenFromWorkspaceAt" IS NULL))
+        AND (c."channelName" IS NULL OR (c."archivedAt" IS NULL AND c."hiddenFromWorkspaceAt" IS NULL))
     )
     UPDATE "conversation_members" cm
     SET "readThroughSequence" = GREATEST(cm."readThroughSequence", target."sequence"),

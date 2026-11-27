@@ -293,6 +293,13 @@ test("a recipient who lost source access is skipped, and the inbox stops listing
       memberItems.items.filter(isConversation).every((candidate) => !candidate.attachmentComment),
     ).toBe(true);
 
+    const before = new Date();
+    await inbox.markAllRead(f.workspace.id, f.member.id, { before });
+    await inbox.markAllDone(f.workspace.id, f.member.id, { before });
+    expect(await pmaOf(f, reply.id)).toMatchObject([
+      { targetUserId: f.member.id, targetReadAt: null, dismissedAt: null },
+    ]);
+
     // The inbox surfaces the first comment's notification to its recipient while they can
     // still read the source.
     const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
@@ -317,6 +324,9 @@ test("a recipient who lost source access is skipped, and the inbox stops listing
       attachmentId: f.attachment.id,
       commentId: first.id,
     });
+    await inbox.markAllRead(f.workspace.id, f.owner.id, { before });
+    const readItems = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
+    expect(readItems.items.find((candidate) => candidate.key === item!.key)?.unreadCount).toBe(0);
     // Done clears it through the same row the channel-mention items use.
     await inbox.markDone(f.workspace.id, f.owner.id, {
       kind: "mention_action",

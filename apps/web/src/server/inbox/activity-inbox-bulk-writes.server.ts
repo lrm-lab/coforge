@@ -8,6 +8,7 @@ import {
   type ArtifactDoneRow,
 } from "#src/server/artifacts/artifact-activity.server";
 import { announceActivityAttention, announceReadMoved } from "./activity-attention.server";
+import { dismissActivityNoticesSql } from "./activity-inbox-mentions.server";
 import type { ActivityInboxRealtime } from "./activity-inbox-writes.server";
 import {
   allConversationsTargetSql,
@@ -62,21 +63,6 @@ function undoOf(
   };
 }
 
-function dismissMentions(
-  db: Pick<PrismaClient, "$queryRaw">,
-  workspaceId: string,
-  userId: string,
-  before: Date,
-  at: Date,
-) {
-  return db.$queryRaw<{ id: string }[]>`
-    UPDATE "pending_mention_actions" SET "dismissedAt" = ${at}
-    WHERE "workspaceId" = ${workspaceId}::uuid AND "targetUserId" = ${userId}::uuid
-      AND "notifiedAt" IS NOT NULL AND "notifiedAt" <= ${before}
-      AND "dismissedAt" IS NULL
-    RETURNING "id"`;
-}
-
 async function announceDone(
   db: PrismaClient,
   realtime: ActivityInboxRealtime | undefined,
@@ -110,7 +96,9 @@ export async function markActivityAllDone(
     const threads = await tx.$queryRaw<ThreadDoneRow[]>(
       threadsDoneSql(workspaceId, allThreadsTargetSql(workspaceId, userId, before)),
     );
-    const mentions = await dismissMentions(tx, workspaceId, userId, before, at);
+    const mentions = await tx.$queryRaw<{ id: string }[]>(
+      dismissActivityNoticesSql(workspaceId, userId, before, at),
+    );
     const artifacts = await tx.$queryRaw<ArtifactDoneRow[]>(
       doneArtifactsSql(workspaceId, userId, { through: before }),
     );
