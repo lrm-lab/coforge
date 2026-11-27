@@ -22,6 +22,7 @@ import {
   runtimeLoginChip,
 } from "./runtime-login-chip";
 import { useRuntimeAuthStatusRefresh } from "./use-runtime-auth-signals";
+import { useCodexCompatibleSupport } from "./use-codex-compatible-support";
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
   "max-w-full min-w-0 rounded-md outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
@@ -62,6 +63,12 @@ export function ComputerRuntimeList({
   useRuntimeAuthStatusRefresh(computer.id);
   const canSignIn = computer.ownedByCurrentUser || computer.canManageAgents;
   const computerName = computerLabel(computer);
+  const codexCompatibleSupported = useCodexCompatibleSupport(
+    computer.id,
+    computer.runtimes.some(
+      (runtime) => runtime.provider === RUNTIME_PROVIDER.CODEX && !runtime.unavailableCode,
+    ),
+  );
   const setRuntimePublic = async (runtimeId: string, isPublic: boolean) => {
     const without = (ids: ReadonlySet<string>) =>
       new Set([...ids].filter((id) => id !== runtimeId));
@@ -171,6 +178,9 @@ export function ComputerRuntimeList({
                   !unusableReason && (visibility || unavailable) && [visibility, unavailable]
                 }
                 accountAction={unusableReason ? undefined : accountAction}
+                codexCompatibleSupported={
+                  provider === RUNTIME_PROVIDER.CODEX ? codexCompatibleSupported : undefined
+                }
               />
             </li>
           );
@@ -182,6 +192,9 @@ export function ComputerRuntimeList({
           computerName={computerName}
           provider={authDialog.provider}
           runtimeName={authDialog.name}
+          codexCompatibleSupported={
+            authDialog.provider === RUNTIME_PROVIDER.CODEX ? codexCompatibleSupported : undefined
+          }
           onClose={() => setAuthDialog(undefined)}
         />
       )}

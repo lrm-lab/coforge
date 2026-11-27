@@ -4,6 +4,7 @@ import {
   type RuntimeAuthProvider,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
 import {
   isRuntimeLoginStateProvider,
@@ -21,7 +22,12 @@ export type RuntimeSignInComputer = {
 export function runtimeSignInNotice(
   computer: RuntimeSignInComputer,
   provider: RuntimeProvider,
-): { signInProvider?: RuntimeAuthProvider } | undefined {
+  options?: {
+    modelProvider?: string;
+    codexCompatibleSupported?: boolean;
+  },
+): { signInProvider?: RuntimeAuthProvider; canUseCodexCompatible?: boolean } | undefined {
+  if (selectsCodexCompatible(provider, options?.modelProvider)) return undefined;
   if (!isRuntimeLoginStateProvider(provider)) return undefined;
   if (computer.runtimeAuth?.[provider as RuntimeAuthProvider]?.state !== "logged_out")
     return undefined;
@@ -29,5 +35,11 @@ export function runtimeSignInNotice(
     isSignableRuntimeProvider(provider) &&
     (computer.ownedByCurrentUser || computer.canManageAgents) &&
     !(provider === RUNTIME_PROVIDER.KIRO && computer.platform === "win32");
-  return signable ? { signInProvider: provider } : {};
+  const canUseCodexCompatible =
+    provider === RUNTIME_PROVIDER.CODEX && options?.codexCompatibleSupported === true;
+  if (!signable && !canUseCodexCompatible) return {};
+  return {
+    ...(signable ? { signInProvider: provider } : {}),
+    ...(canUseCodexCompatible ? { canUseCodexCompatible: true } : {}),
+  };
 }

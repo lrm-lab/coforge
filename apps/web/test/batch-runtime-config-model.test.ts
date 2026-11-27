@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { CODEX_COMPATIBLE_MODEL_PROVIDER } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import {
   buildInitialBatchRuntimeSelection,
   hasHeterogeneousBatchRuntime,
@@ -162,5 +163,79 @@ describe("batch-runtime-config-model", () => {
     expect(hasHeterogeneousBatchRuntime(mixed, buildInitialBatchRuntimeSelection(mixed))).toBe(
       true,
     );
+  });
+
+  test("preserves codex-compatible baseUrl and key across same-origin batch edits, and requires key on origin change", () => {
+    const codexAgent = (id: string, baseUrl: string) =>
+      previewAgent({
+        id,
+        hasApiKey: true,
+        provider: RUNTIME_PROVIDER.CODEX,
+        runtimeConfig: {
+          model: "gpt-5.4",
+          modelProvider: CODEX_COMPATIBLE_MODEL_PROVIDER,
+          reasoning: "medium",
+          fastMode: false,
+          provider: {
+            kind: "codex-compatible",
+            baseUrl,
+            hasKey: true,
+          },
+        },
+      });
+    const pair = [
+      codexAgent("c1", "https://relay.example.com/v1"),
+      codexAgent("c2", "https://relay.example.com/v1"),
+    ];
+    const initial = buildInitialBatchRuntimeSelection(pair);
+    expect(initial).toEqual({
+      provider: RUNTIME_PROVIDER.CODEX,
+      modelProvider: CODEX_COMPATIBLE_MODEL_PROVIDER,
+      model: "gpt-5.4",
+      reasoning: "medium",
+      fastMode: false,
+      baseUrl: "https://relay.example.com/v1",
+      hasCodexCompatibleKey: true,
+    });
+    expect(hasHeterogeneousBatchRuntime(pair, initial)).toBe(false);
+
+    const sameOriginPlan = planBatchRuntimePreview({
+      agents: pair,
+      computerOnline: true,
+      keepRuntime: false,
+      selection: { ...initial, baseUrl: "https://relay.example.com/v2" },
+      apiKey: "",
+      envPatch: { set: {}, remove: [] },
+      envKeysByAgent: {},
+    });
+    expect(sameOriginPlan.needsApiKey).toBe(true);
+    expect(sameOriginPlan.missingApiKey).toBe(false);
+    expect(sameOriginPlan.changedCount).toBe(2);
+    expect(sameOriginPlan.willRestartCount).toBe(2);
+    expect(sameOriginPlan.rows.every((row) => row.providerChanged)).toBe(true);
+
+    const modelOnlyPlan = planBatchRuntimePreview({
+      agents: pair,
+      computerOnline: true,
+      keepRuntime: false,
+      selection: { ...initial, model: "gpt-5.4-mini" },
+      apiKey: "",
+      envPatch: { set: {}, remove: [] },
+      envKeysByAgent: {},
+    });
+    expect(modelOnlyPlan.whenIdleCount).toBe(2);
+    expect(modelOnlyPlan.willRestartCount).toBe(0);
+
+    const changedOriginPlan = planBatchRuntimePreview({
+      agents: pair,
+      computerOnline: true,
+      keepRuntime: false,
+      selection: { ...initial, baseUrl: "https://other.example.com/v1" },
+      apiKey: "",
+      envPatch: { set: {}, remove: [] },
+      envKeysByAgent: {},
+    });
+    expect(changedOriginPlan.needsApiKey).toBe(true);
+    expect(changedOriginPlan.missingApiKey).toBe(true);
   });
 });

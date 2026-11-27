@@ -18,8 +18,9 @@ import { runtimeRequiresModel } from "./agent-runtime-fields-state";
 export function agentCreateModelError(
   provider: RuntimeProvider,
   model: string,
+  modelProvider?: string,
 ): string | undefined {
-  return runtimeRequiresModel(provider) && model.trim() === ""
+  return runtimeRequiresModel(provider, modelProvider) && model.trim() === ""
     ? m.agent_form_model_required()
     : undefined;
 }
@@ -30,6 +31,7 @@ export function updateAgentInputFromForm(
 ): UpdateAgentInput {
   const computerId = String(form.get("computerId") ?? fallback.computerId ?? "").trim();
   const apiKey = String(form.get("apiKey") ?? "").trim();
+  const baseUrl = String(form.get("baseUrl") ?? "").trim();
   const displayName = String(form.get("displayName") ?? fallback.displayName ?? "").trim();
   const description = form.has("description")
     ? String(form.get("description") ?? "")
@@ -44,6 +46,7 @@ export function updateAgentInputFromForm(
     fastMode: form.get("fastMode") === "true",
     ...sizesFromForm(form),
     ...(apiKey ? { apiKey } : {}),
+    ...(baseUrl ? { baseUrl } : {}),
     ...(displayName ? { displayName } : {}),
     ...(computerId ? { computerId } : {}),
   };
@@ -88,6 +91,8 @@ const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
   ["agent-model-provider-required", m.agent_form_model_provider_required],
   ["antigravity-model-effort-suffix", m.agent_form_model_effort_suffix],
   ["agent-credential-unavailable", m.agent_form_credential_unavailable],
+  ["agent-codex-compatible-endpoint-required", m.agent_form_codex_compatible_endpoint_required],
+  ["agent-codex-compatible-key-required", m.agent_form_codex_compatible_key_required],
   ...Object.entries(AGENT_ENVIRONMENT_ERROR_MESSAGES).map(
     ([violation, message]) => [`agent-environment-${violation}`, message] as const,
   ),

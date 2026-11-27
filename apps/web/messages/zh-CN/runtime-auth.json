@@ -57,5 +57,6 @@
   "runtime_auth_kiro_region": "AWS 区域",
   "runtime_auth_kiro_invalid_target": "请输入 HTTPS Start URL 和有效的 AWS 区域。",
   "runtime_auth_kiro_device_disabled": "组织已禁用设备码登录，请在电脑上完成登录。",
-  "runtime_auth_kiro_external_idp": "此外部身份提供商不支持设备码登录，请在电脑上完成登录。"
+  "runtime_auth_kiro_external_idp": "此外部身份提供商不支持设备码登录，请在电脑上完成登录。",
+  "runtime_auth_codex_api_key_note": "如果使用自定义 API Key（含兼容代理地址），无需在此登录，请在创建或编辑 Agent 的运行时配置中选择「自定义 API Key（OpenAI 兼容）」。"
 }

@@ -64,6 +64,10 @@ export type ComputerDetailView = ComputerIdentity & {
       fastMode?: boolean;
       contextWindow?: number;
       maxOutputTokens?: number;
+      provider?:
+        | { kind: "default" }
+        | { kind: "coforge"; providerId: string }
+        | { kind: "codex-compatible"; baseUrl: string; hasKey?: true };
     };
     runtimeConfigInvalid?: boolean;
     display?: AgentDisplaySnapshot;

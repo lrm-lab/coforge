@@ -2,6 +2,11 @@ import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { UpdateAgentInput } from "#src/features/agents/agent.schemas";
 import type { RuntimeSelection } from "#src/features/agents/agent-runtime-fields";
 
+export type RuntimeProviderView =
+  | { kind: "default" }
+  | { kind: "coforge"; providerId: string }
+  | { kind: "codex-compatible"; baseUrl: string; hasKey?: true };
+
 export type RuntimeProfile = {
   id: string;
   displayName: string;
@@ -14,6 +19,7 @@ export type RuntimeProfile = {
         model: string;
         reasoning: string;
         fastMode?: boolean;
+        provider?: RuntimeProviderView;
       }
     | undefined;
 };
@@ -24,6 +30,7 @@ export function profileUpdateInput(
 ): UpdateAgentInput {
   if (!profile.runtimeConfig)
     throw new Error("this Agent's stored configuration could not be read");
+  const provider = profile.runtimeConfig.provider;
   return {
     agentId: profile.id,
     displayName: overrides.displayName ?? profile.displayName,
@@ -33,6 +40,7 @@ export function profileUpdateInput(
     model: profile.runtimeConfig.model,
     reasoning: profile.runtimeConfig.reasoning,
     fastMode: profile.runtimeConfig.fastMode === true,
+    ...(provider?.kind === "codex-compatible" ? { baseUrl: provider.baseUrl } : {}),
     ...(profile.computerId ? { computerId: profile.computerId } : {}),
   };
 }
@@ -46,6 +54,12 @@ export function profileRuntimeSelection(
     model: profile.model,
     reasoning: profile.reasoning,
     fastMode: profile.fastMode === true,
+    ...(profile.provider?.kind === "codex-compatible"
+      ? {
+          baseUrl: profile.provider.baseUrl,
+          hasCodexCompatibleKey: Boolean(profile.provider.hasKey),
+        }
+      : {}),
   };
 }
 

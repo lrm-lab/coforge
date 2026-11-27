@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { AppError } from "#src/lib/app-error";
@@ -44,6 +45,7 @@ class PartialBatchFailureError extends Error {
 function selectionFromForm(form: FormData): { selection: RuntimeSelection; apiKey: string } {
   const provider = parseRuntimeProvider(form.get("provider")) ?? RUNTIME_PROVIDER.COFORGE;
   const apiKey = String(form.get("apiKey") ?? "").trim();
+  const baseUrl = String(form.get("baseUrl") ?? "").trim();
   return {
     selection: {
       provider,
@@ -51,6 +53,7 @@ function selectionFromForm(form: FormData): { selection: RuntimeSelection; apiKe
       model: String(form.get("model") ?? "").trim(),
       reasoning: String(form.get("reasoning") ?? "").trim(),
       fastMode: form.get("fastMode") === "true",
+      ...(baseUrl ? { baseUrl } : {}),
       ...sizesFromForm(form),
     },
     apiKey,
@@ -204,6 +207,7 @@ export function BatchAgentRuntimeConfigDialog({
                   ? {}
                   : { maxOutputTokens: draft.selection.maxOutputTokens }),
                 ...(draft.apiKey ? { apiKey: draft.apiKey } : {}),
+                ...(draft.selection.baseUrl ? { baseUrl: draft.selection.baseUrl } : {}),
               },
             }
           : {}),
@@ -235,7 +239,14 @@ export function BatchAgentRuntimeConfigDialog({
   };
 
   const descriptionText = (() => {
-    if (previewPlan.missingApiKey) return m.agent_form_api_key_required();
+    if (previewPlan.missingApiKey) {
+      return selectsCodexCompatible(
+        draft?.selection?.provider ?? "",
+        draft?.selection?.modelProvider,
+      )
+        ? m.agent_form_codex_compatible_key_required()
+        : m.agent_form_api_key_required();
+    }
     if (previewPlan.changedCount === 0) return m.agent_batch_runtime_unchanged_notice();
     if (!computerOnline) return m.agent_batch_runtime_notice_offline();
     if (previewPlan.willRestartCount > 0) {

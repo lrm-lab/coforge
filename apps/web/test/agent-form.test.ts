@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
+import { CODEX_COMPATIBLE_MODEL_PROVIDER } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { AppError, isAppError } from "#src/lib/app-error";
 import {
   agentCreateModelError,
@@ -7,6 +8,7 @@ import {
   agentUpdateErrorMessage,
   agentEnvironmentRowsChanged,
   parseAgentEnvironmentFromForm,
+  updateAgentInputFromForm,
 } from "#src/features/agents/agent-form";
 import { runtimeRequiresModel } from "#src/features/agents/agent-runtime-fields";
 import { m } from "#src/paraglide/messages";
@@ -177,4 +179,39 @@ test("agentCreateModelError blocks empty Antigravity model and leaves other runt
     expect(agentCreateModelError(provider, "")).toBeUndefined();
     expect(agentCreateModelError(provider, "   ")).toBeUndefined();
   }
+});
+
+test("codex-compatible requires a model and maps endpoint/key errors and baseUrl form values", () => {
+  expect(runtimeRequiresModel(RUNTIME_PROVIDER.CODEX, CODEX_COMPATIBLE_MODEL_PROVIDER)).toBe(true);
+  expect(agentCreateModelError(RUNTIME_PROVIDER.CODEX, "", CODEX_COMPATIBLE_MODEL_PROVIDER)).toBe(
+    m.agent_form_model_required(),
+  );
+  expect(
+    agentCreateModelError(RUNTIME_PROVIDER.CODEX, "gpt-5.4", CODEX_COMPATIBLE_MODEL_PROVIDER),
+  ).toBeUndefined();
+
+  expect(
+    agentUpdateErrorMessage(
+      new AppError("INVALID_INPUT", { errorId: "agent-codex-compatible-endpoint-required" }),
+    ),
+  ).toBe(m.agent_form_codex_compatible_endpoint_required());
+  expect(
+    agentUpdateErrorMessage(
+      new AppError("INVALID_INPUT", { errorId: "agent-codex-compatible-key-required" }),
+    ),
+  ).toBe(m.agent_form_codex_compatible_key_required());
+
+  const withBaseUrl = new FormData();
+  withBaseUrl.set("provider", RUNTIME_PROVIDER.CODEX);
+  withBaseUrl.set("modelProvider", CODEX_COMPATIBLE_MODEL_PROVIDER);
+  withBaseUrl.set("model", "gpt-5.4");
+  withBaseUrl.set("baseUrl", "  https://relay.example.com/v1 ");
+  expect(updateAgentInputFromForm(withBaseUrl, { agentId: "a1", computerId: "c1" })).toMatchObject({
+    agentId: "a1",
+    computerId: "c1",
+    provider: RUNTIME_PROVIDER.CODEX,
+    modelProvider: CODEX_COMPATIBLE_MODEL_PROVIDER,
+    model: "gpt-5.4",
+    baseUrl: "https://relay.example.com/v1",
+  });
 });

@@ -221,7 +221,10 @@ export const listComputers = createServerFn({ method: "GET" })
               avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
               ownedByCurrentUser: agent.ownerId === user.id,
               stopped: agent.stoppedAt !== null,
-              hasApiKey: config?.provider.kind === "coforge" && Boolean(config.provider.apiKey),
+              hasApiKey:
+                (config?.provider.kind === "coforge" && Boolean(config.provider.apiKey)) ||
+                (config?.provider.kind === "codex-compatible" &&
+                  Boolean(config.provider.environment)),
               provider: config?.runtime,
               runtimeAuthSource,
               runtimeConfig: config ? publicAgentRuntimeConfig(config) : undefined,

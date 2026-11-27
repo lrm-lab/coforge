@@ -46,6 +46,7 @@ export function OnboardingAssistantStep({
     async (computerId: string) => ({
       ...runtimeOptionsFromRuntimes(computer.runtimes),
       catalogs: await loadCatalog({ data: { computerId } }),
+      codexCompatible: false,
     }),
     [computer.runtimes, loadCatalog],
   );

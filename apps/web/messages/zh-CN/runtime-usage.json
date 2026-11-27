@@ -81,5 +81,7 @@
   "computer_runtime_detection_rescanning": "暂时显示上次结果。",
   "computer_runtime_detection_empty": "正在检测运行时…",
   "computer_runtimes": "运行时",
-  "computer_runtime_visibility_error": "无法更改运行时可见性，请重试。"
+  "computer_runtime_visibility_error": "无法更改运行时可见性，请重试。",
+  "computer_usage_provider_api_key": "由配置的 API 服务商计费，请在服务商处查看用量。",
+  "computer_runtime_codex_sign_in_hint": "登录后可共享使用 {runtime} 账号并读取用量；也可不登录，在创建或编辑 Agent 时改用自定义 API Key。"
 }

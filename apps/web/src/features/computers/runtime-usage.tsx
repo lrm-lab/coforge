@@ -92,6 +92,7 @@ export function RuntimeUsage({
   account,
   accountAction,
   notice,
+  codexCompatibleSupported,
 }: {
   computerId: string;
   agentUsage?: AgentUsageQueryScope;
@@ -109,6 +110,7 @@ export function RuntimeUsage({
   account?: AccountState;
   accountAction?: (shown: AccountState | undefined) => ReactNode;
   notice?: ReactNode;
+  codexCompatibleSupported?: boolean;
 }) {
   const [resetCreditDialog, setResetCreditDialog] = useState<
     | {
@@ -147,7 +149,10 @@ export function RuntimeUsage({
 
   const snapshot = usageRead?.result?.snapshot;
   const resetPrompt =
-    supportsUsage && canResetCredit && shown !== "logged_out"
+    supportsUsage &&
+    usage.data?.billing !== "provider-api-key" &&
+    canResetCredit &&
+    shown !== "logged_out"
       ? resetCreditPrompt(snapshot)
       : undefined;
   const openResetCredit = resetPrompt
@@ -216,6 +221,8 @@ export function RuntimeUsage({
                 resetPrompt={resetPrompt}
                 onResetCredit={openResetCredit}
                 notice={notice}
+                billing={usage.data?.billing}
+                codexCompatibleSupported={codexCompatibleSupported}
               />
             )}
           </Dialog>

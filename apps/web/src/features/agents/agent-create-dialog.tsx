@@ -3,6 +3,10 @@ import { Plus } from "@untitledui/icons";
 import { useRouter } from "@tanstack/react-router";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import {
+  codexCompatibleBaseUrl,
+  selectsCodexCompatible,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
@@ -145,14 +149,27 @@ export function LocalAgentForm({
     const description = String(form.get("description") ?? "").trim();
     const provider = parseRuntimeProvider(form.get("provider")) ?? RUNTIME_PROVIDER.COFORGE;
     const model = String(form.get("model") ?? "").trim();
+    const modelProvider = String(form.get("modelProvider") ?? "").trim();
+    const baseUrl = String(form.get("baseUrl") ?? "").trim();
+    const apiKey = String(form.get("apiKey") ?? "").trim();
     if (!name) {
       setError(m.agent_form_username_required());
       return;
     }
-    const nextModelError = agentCreateModelError(provider, model);
+    const nextModelError = agentCreateModelError(provider, model, modelProvider);
     if (nextModelError) {
       setModelError(nextModelError);
       return;
+    }
+    if (selectsCodexCompatible(provider, modelProvider)) {
+      if (!codexCompatibleBaseUrl(baseUrl)) {
+        setError(m.agent_form_codex_compatible_endpoint_required());
+        return;
+      }
+      if (apiKey.length < 8) {
+        setError(m.agent_form_codex_compatible_key_required());
+        return;
+      }
     }
     await guard(async () => {
       try {
@@ -161,11 +178,12 @@ export function LocalAgentForm({
           description,
           provider,
           model: model || undefined,
-          modelProvider: String(form.get("modelProvider") ?? "").trim() || undefined,
+          modelProvider: modelProvider || undefined,
           reasoning: String(form.get("reasoning") ?? "").trim(),
           fastMode: form.get("fastMode") === "true",
           ...sizesFromForm(form),
-          apiKey: String(form.get("apiKey") ?? "").trim() || undefined,
+          apiKey: apiKey || undefined,
+          baseUrl: baseUrl || undefined,
           computerId: computerLocked ? computerId : String(form.get("computerId") ?? ""),
           actionCardMessageId,
           visibility: isPrivate ? AGENT_VISIBILITY.PRIVATE : AGENT_VISIBILITY.PUBLIC,
@@ -297,12 +315,20 @@ export function LocalAgentForm({
             modelError={modelError}
             onModelErrorClear={() => setModelError("")}
             onDirtyChange={setRuntimeChanged}
-            providerNotice={(provider) =>
+            providerNotice={({
+              provider,
+              modelProvider,
+              codexCompatibleSupported,
+              onUseCodexCompatible,
+            }) =>
               computer &&
               !signedIn.has(`${computerId}:${provider}`) && (
                 <AgentRuntimeSignInNotice
                   computer={computer}
                   provider={provider}
+                  modelProvider={modelProvider}
+                  codexCompatibleSupported={codexCompatibleSupported}
+                  onUseCodexCompatible={onUseCodexCompatible}
                   onSignIn={setSigningIn}
                 />
               )

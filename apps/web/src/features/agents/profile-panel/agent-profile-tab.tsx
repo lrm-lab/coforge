@@ -23,6 +23,7 @@ import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/ag
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { AgentContextSection } from "#src/features/agents/agent-context-section";
 import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
+import { AgentCodexCompatibleFact } from "./agent-codex-compatible-fact";
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
 import { AppBotProfile } from "./app-bot-profile";
@@ -363,6 +364,7 @@ function AgentProfileTabBody({
                     )}
                   </FactBadge>
                 </FactRow>
+                <AgentCodexCompatibleFact provider={runtimeConfig!.provider} />
                 <FactRow label={m.agent_form_model()}>
                   <span className={runtimeConfig!.model ? "break-words" : ""}>
                     {runtimeConfig!.model ? modelLabel : m.agent_form_provider_default()}

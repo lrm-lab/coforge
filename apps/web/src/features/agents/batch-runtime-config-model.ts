@@ -3,7 +3,8 @@ import {
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import type { RuntimeSelection } from "./agent-runtime-fields-state";
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
+import { codexCompatibleCanKeepKey, type RuntimeSelection } from "./agent-runtime-fields-state";
 import { isPiBuiltinModelProvider, KEYED_MODEL_PROVIDERS } from "./agent.schemas";
 import { modelSizesApply } from "./agent-model-sizes";
 
@@ -21,6 +22,10 @@ export type BatchRuntimePreviewAgent = {
     fastMode?: boolean;
     contextWindow?: number;
     maxOutputTokens?: number;
+    provider?:
+      | { kind: "default" }
+      | { kind: "coforge"; providerId: string }
+      | { kind: "codex-compatible"; baseUrl: string; hasKey?: true };
   };
   runtimeConfigInvalid?: boolean;
 };
@@ -103,12 +108,29 @@ export function buildInitialBatchRuntimeSelection(
       (agent) => Boolean(agent.runtimeConfig?.fastMode) === Boolean(first.runtimeConfig?.fastMode),
     );
 
+  const firstProvider = first.runtimeConfig?.provider;
+  const sameCodexCompatibleBaseUrl =
+    sameModelProvider &&
+    selectsCodexCompatible(first.provider, first.runtimeConfig?.modelProvider) &&
+    firstProvider?.kind === "codex-compatible" &&
+    editable.every(
+      (agent) =>
+        agent.runtimeConfig?.provider?.kind === "codex-compatible" &&
+        agent.runtimeConfig.provider.baseUrl === firstProvider.baseUrl,
+    );
+
   return {
     provider: first.provider,
     modelProvider: sameModelProvider ? (first.runtimeConfig?.modelProvider ?? "") : "",
     model: sameModel ? (first.runtimeConfig?.model ?? "") : "",
     reasoning: sameReasoning ? (first.runtimeConfig?.reasoning ?? "") : "",
     fastMode: sameFastMode ? Boolean(first.runtimeConfig?.fastMode) : false,
+    ...(sameCodexCompatibleBaseUrl && firstProvider?.kind === "codex-compatible"
+      ? {
+          baseUrl: firstProvider.baseUrl,
+          hasCodexCompatibleKey: editable.every((agent) => agent.hasApiKey),
+        }
+      : {}),
     ...(sameModel && first.runtimeConfig?.contextWindow !== undefined
       ? { contextWindow: first.runtimeConfig.contextWindow }
       : {}),
@@ -156,6 +178,7 @@ export function hasHeterogeneousBatchRuntime(
 
 function selectionRequiresKey(selection: RuntimeSelection | undefined): boolean {
   if (!selection) return false;
+  if (selectsCodexCompatible(selection.provider, selection.modelProvider)) return true;
   if (RUNTIME_PROVIDER_USES_EXTERNAL_CLI[selection.provider]) return false;
   if (selection.provider === RUNTIME_PROVIDER.PI) {
     return isPiBuiltinModelProvider(selection.modelProvider ?? "");
@@ -173,6 +196,11 @@ function runtimeSelectionDiffers(
   if (agent.provider !== selection.provider) return true;
   const current = agent.runtimeConfig;
   if ((current?.modelProvider ?? "") !== (selection.modelProvider ?? "")) return true;
+  if (selectsCodexCompatible(selection.provider, selection.modelProvider)) {
+    const currentBaseUrl =
+      current?.provider?.kind === "codex-compatible" ? current.provider.baseUrl : "";
+    if (currentBaseUrl !== (selection.baseUrl?.trim() ?? "")) return true;
+  }
   if ((current?.model ?? "") !== (selection.model ?? "")) return true;
   if ((current?.reasoning ?? "") !== (selection.reasoning ?? "")) return true;
   if (Boolean(current?.fastMode) !== Boolean(selection.fastMode)) return true;
@@ -209,8 +237,22 @@ export function planBatchRuntimePreview({
   const rows: BatchAgentPreviewRow[] = editableAgents.map((agent) => {
     const runtimeChanged =
       !keepRuntime && selection !== undefined && runtimeSelectionDiffers(agent, selection, apiKey);
+    const compatibleSelected =
+      selection !== undefined &&
+      selectsCodexCompatible(selection.provider, selection.modelProvider);
+    const compatibleCurrent = agent.runtimeConfig?.provider?.kind === "codex-compatible";
+    const currentBaseUrl =
+      agent.runtimeConfig?.provider?.kind === "codex-compatible"
+        ? agent.runtimeConfig.provider.baseUrl
+        : "";
     const providerChanged =
-      !keepRuntime && selection !== undefined && agent.provider !== selection.provider;
+      !keepRuntime &&
+      selection !== undefined &&
+      (agent.provider !== selection.provider ||
+        ((compatibleCurrent || compatibleSelected) &&
+          (compatibleCurrent !== compatibleSelected ||
+            currentBaseUrl !== (selection.baseUrl?.trim() ?? "") ||
+            apiKey.trim().length > 0)));
 
     const existingKeys = envKeysByAgent?.[agent.id];
     const knownKeys = existingKeys ? new Set(existingKeys) : undefined;
@@ -248,12 +290,31 @@ export function planBatchRuntimePreview({
   const missingApiKey =
     needsApiKey &&
     apiKey.trim().length === 0 &&
-    editableAgents.some(
-      (agent) =>
+    editableAgents.some((agent) => {
+      const current = agent.runtimeConfig;
+      if (selection && selectsCodexCompatible(selection.provider, selection.modelProvider)) {
+        return !codexCompatibleCanKeepKey(
+          {
+            provider: agent.provider ?? RUNTIME_PROVIDER.COFORGE,
+            modelProvider: current?.modelProvider ?? "",
+            model: current?.model ?? "",
+            reasoning: current?.reasoning ?? "",
+            ...(current?.provider?.kind === "codex-compatible"
+              ? {
+                  baseUrl: current.provider.baseUrl,
+                  hasCodexCompatibleKey: agent.hasApiKey,
+                }
+              : {}),
+          },
+          selection.baseUrl ?? "",
+        );
+      }
+      return (
         !agent.hasApiKey ||
         agent.provider !== selection?.provider ||
-        (agent.runtimeConfig?.modelProvider ?? "") !== (selection?.modelProvider ?? ""),
-    );
+        (current?.modelProvider ?? "") !== (selection?.modelProvider ?? "")
+      );
+    });
 
   let unchangedCount = 0;
   let whenIdleCount = 0;

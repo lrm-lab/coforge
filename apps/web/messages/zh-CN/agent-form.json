@@ -50,5 +50,18 @@
   "agent_form_context_window_help": "留空则用模型自己的值。",
   "agent_form_max_output": "最大输出",
   "agent_form_max_output_help": "留空则用模型自己的上限。",
-  "agent_form_model_size_error": "请输入整数 token 数。"
+  "agent_form_model_size_error": "请输入整数 token 数。",
+  "agent_form_codex_provider_account": "ChatGPT 账号（本机登录）",
+  "agent_form_codex_provider_compatible": "自定义 API Key（OpenAI 兼容）",
+  "agent_form_codex_model_placeholder": "例如 gpt-5.4",
+  "agent_form_codex_base_url": "接口地址（Base URL）",
+  "agent_form_codex_base_url_placeholder": "https://api.openai.com/v1",
+  "agent_form_codex_base_url_help": "支持官方 OpenAI 或兼容代理地址（如 https://.../v1）。",
+  "agent_form_codex_base_url_invalid": "请输入以 http:// 或 https:// 开头的有效接口地址，不含查询参数或凭据。",
+  "agent_form_codex_api_key": "API Key",
+  "agent_form_codex_api_key_placeholder": "填写服务商提供的 API Key",
+  "agent_form_codex_api_key_help": "密钥加密保存并仅用于此 Agent，与电脑上的 ChatGPT 登录隔离。",
+  "agent_form_codex_api_key_origin_changed_help": "修改接口域名、协议或端口后必须重新输入 API Key，不会沿用旧地址密钥。",
+  "agent_form_codex_compatible_endpoint_required": "请填写有效的接口地址和模型名称。",
+  "agent_form_codex_compatible_key_required": "请填写 API Key；修改接口域名、协议或端口后需要重新输入。"
 }

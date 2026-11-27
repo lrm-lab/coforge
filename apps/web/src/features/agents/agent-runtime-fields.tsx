@@ -3,13 +3,18 @@ import {
   parseRuntimeProvider,
   RUNTIME_PROVIDER,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
-  type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import {
+  CODEX_COMPATIBLE_MODEL_PROVIDER,
+  selectsCodexCompatible,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
+import { useCodexCompatibleSupport } from "#src/features/computers/use-codex-compatible-support";
 import { m } from "#src/paraglide/messages";
+import { AgentCodexCompatibleFields } from "./agent-codex-compatible-fields";
 import {
   AgentRuntimeApiKeyField,
   RuntimeCatalogLoadFailure,
@@ -31,6 +36,8 @@ import {
   piBuiltinModels,
   piConfiguredModelLabel,
   piConfiguredModels,
+  codexCompatibleCanKeepKey,
+  codexCompatibleOriginChanged,
   piExtraProviderOption,
   piInitialProviderChoice,
   reasoningFieldState,
@@ -39,6 +46,7 @@ import {
   splitCustomModel,
   submittedRuntimeModel,
   type RuntimeOptions,
+  type RuntimeProviderNoticeContext,
   type RuntimeSelection,
 } from "./agent-runtime-fields-state";
 import { AgentRuntimeProviderSelect } from "./agent-runtime-provider-select";
@@ -75,9 +83,13 @@ export function AgentRuntimeFields({
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
   initialOptions?: RuntimeOptions;
   onDirtyChange?: (dirty: boolean) => void;
-  providerNotice?: (provider: RuntimeProvider) => ReactNode;
+  providerNotice?: (context: RuntimeProviderNoticeContext) => ReactNode;
 }) {
   const controlSize = useDialogControlSize();
+  const initialCodexCompatible = selectsCodexCompatible(
+    initial?.provider ?? "",
+    initial?.modelProvider,
+  );
   const [provider, setProvider] = useState(initial?.provider ?? RUNTIME_PROVIDER.COFORGE);
   const [modelProvider, setModelProvider] = useState(initial?.modelProvider ?? "");
   const [piProviderChoice, setPiProviderChoice] = useState(() =>
@@ -90,6 +102,10 @@ export function AgentRuntimeFields({
   const [modelKey, setModelKey] = useState(initialModelKey);
   const [customModelActive, setCustomModelActive] = useState(false);
   const [customModelText, setCustomModelText] = useState("");
+  const [codexModel, setCodexModel] = useState(
+    initialCodexCompatible ? (initial?.model ?? "") : "",
+  );
+  const [baseUrl, setBaseUrl] = useState(initialCodexCompatible ? (initial?.baseUrl ?? "") : "");
   const [reasoning, setReasoning] = useState(initial?.reasoning ?? "");
   const [fastMode, setFastMode] = useState(initial?.fastMode ?? false);
   const [sizes, setSizes] = useState(() => initialModelSizes(initial));
@@ -115,6 +131,17 @@ export function AgentRuntimeFields({
   const piConfigured = isPi && piProviderChoice === "";
   const piBuiltin = isPi && !piConfigured;
   const sizesApply = modelSizesApply(provider, piBuiltin ? piProviderChoice : "");
+  const queriedCodexCompatible = useCodexCompatibleSupport(
+    computerId,
+    open && provider === RUNTIME_PROVIDER.CODEX && options?.codexCompatible === undefined,
+  );
+  const codexCompatibleSupported = options?.codexCompatible ?? queriedCodexCompatible;
+  const showCodexCompatibleSection =
+    provider === RUNTIME_PROVIDER.CODEX &&
+    !failed &&
+    (codexCompatibleSupported || initialCodexCompatible);
+  const isCodexCompatible =
+    showCodexCompatibleSection && selectsCodexCompatible(provider, modelProvider);
 
   useEffect(() => {
     if (!open) setApiKey("");
@@ -204,13 +231,15 @@ export function AgentRuntimeFields({
     selectedModel,
     modelKey,
     initialModelKey,
+    codexModel,
     initial,
   });
   const matchingConfiguredCredential =
     credentialConfigured &&
     initial?.provider === provider &&
     initial.modelProvider === submittedModelProvider;
-  const modelRequired = enforceRequiredModel && runtimeRequiresModel(provider);
+  const modelRequired =
+    enforceRequiredModel && runtimeRequiresModel(provider, submittedModelProvider);
   const pinnedModelChoices = modelRequired ? EMPTY_PINNED_MODEL_CHOICES : PINNED_MODEL_CHOICES;
   const visibleModels = catalogModels.filter((model) => {
     if (provider === RUNTIME_PROVIDER.COFORGE) return model.modelProvider === modelProvider;
@@ -264,6 +293,7 @@ export function AgentRuntimeFields({
     submittedFastMode,
     sizes,
     sizesApply,
+    baseUrl: isCodexCompatible ? baseUrl : "",
     initial,
   });
 
@@ -275,6 +305,8 @@ export function AgentRuntimeFields({
     setModelKey("");
     setCustomModelActive(false);
     setCustomModelText("");
+    setCodexModel("");
+    setBaseUrl("");
     setReasoning("");
     setFastMode(false);
     setSizes(initialModelSizes());
@@ -297,7 +329,16 @@ export function AgentRuntimeFields({
           onModelErrorClear?.();
         }}
       />
-      {providerNotice?.(provider)}
+      {providerNotice?.({
+        provider,
+        modelProvider: submittedModelProvider,
+        codexCompatibleSupported,
+        onUseCodexCompatible: () => {
+          setModelProvider(CODEX_COMPATIBLE_MODEL_PROVIDER);
+          resetModelFields();
+          onModelErrorClear?.();
+        },
+      })}
       {failed ? (
         <Input
           label={m.agent_form_model_provider()}
@@ -349,6 +390,30 @@ export function AgentRuntimeFields({
           )}
         </Select>
       )}
+      {showCodexCompatibleSection && (
+        <AgentCodexCompatibleFields
+          controlSize={controlSize}
+          showModeSelect={codexCompatibleSupported}
+          modelProvider={modelProvider}
+          model={codexModel}
+          modelError={modelError}
+          baseUrl={baseUrl}
+          apiKey={apiKey}
+          canKeepKey={codexCompatibleCanKeepKey(initial, baseUrl)}
+          originChanged={codexCompatibleOriginChanged(initial, baseUrl)}
+          onModeChange={(next) => {
+            setModelProvider(next);
+            resetModelFields();
+            onModelErrorClear?.();
+          }}
+          onModelChange={(value) => {
+            setCodexModel(value);
+            onModelErrorClear?.();
+          }}
+          onBaseUrlChange={setBaseUrl}
+          onApiKeyChange={setApiKey}
+        />
+      )}
       {failed ? (
         <Input
           label={m.agent_form_model()}
@@ -366,7 +431,7 @@ export function AgentRuntimeFields({
             onModelErrorClear?.();
           }}
         />
-      ) : (
+      ) : !isCodexCompatible ? (
         <>
           <input type="hidden" name="model" value={modelValue} />
           <div className="relative min-w-0">
@@ -413,7 +478,7 @@ export function AgentRuntimeFields({
             <RuntimeRefreshOutcome note={catalogRefresh.note} runtime={provider} />
           )}
         </>
-      )}
+      ) : null}
       {piConfigured && customModelActive && (
         <Input
           label={m.agent_form_model_custom_id()}

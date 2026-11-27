@@ -5,6 +5,11 @@ import {
   type RuntimeProvider,
   type RuntimeUnavailableCode,
 } from "@lrm/coforge-sdk/internal";
+import {
+  CODEX_COMPATIBLE_MODEL_PROVIDER,
+  codexCompatibleBaseUrl,
+  selectsCodexCompatible,
+} from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { isPiBuiltinModelProvider } from "./agent.schemas";
 import { modelSizesDirty, type ModelSizes } from "./agent-model-sizes";
 import { modelProviderDisplayName } from "./model-provider-display";
@@ -22,6 +27,7 @@ export type RuntimeOptions = {
     diagnostic?: string | null;
   }[];
   catalogs: RuntimeCatalog[];
+  codexCompatible?: boolean;
 };
 
 export type RuntimeSelection = {
@@ -32,6 +38,15 @@ export type RuntimeSelection = {
   contextWindow?: number;
   maxOutputTokens?: number;
   fastMode?: boolean;
+  baseUrl?: string;
+  hasCodexCompatibleKey?: boolean;
+};
+
+export type RuntimeProviderNoticeContext = {
+  provider: RuntimeProvider;
+  modelProvider: string;
+  codexCompatibleSupported: boolean;
+  onUseCodexCompatible: () => void;
 };
 
 export function reasoningFieldState(
@@ -42,8 +57,37 @@ export function reasoningFieldState(
   return { visible: efforts.length > 0, submitted: efforts.includes(reasoning) ? reasoning : "" };
 }
 
-export function runtimeRequiresModel(provider: RuntimeProvider): boolean {
-  return provider === RUNTIME_PROVIDER.ANTIGRAVITY;
+export function codexCompatibleOrigin(value: string): string | undefined {
+  const parsed = codexCompatibleBaseUrl(value);
+  return parsed ? new URL(parsed).origin : undefined;
+}
+
+export function codexCompatibleCanKeepKey(
+  initial: RuntimeSelection | undefined,
+  baseUrl: string,
+): boolean {
+  if (!initial?.hasCodexCompatibleKey) return false;
+  if (!selectsCodexCompatible(initial.provider, initial.modelProvider)) return false;
+  const previousOrigin = codexCompatibleOrigin(initial.baseUrl ?? "");
+  const nextOrigin = codexCompatibleOrigin(baseUrl);
+  return Boolean(previousOrigin && nextOrigin && previousOrigin === nextOrigin);
+}
+
+export function codexCompatibleOriginChanged(
+  initial: RuntimeSelection | undefined,
+  baseUrl: string,
+): boolean {
+  if (!initial?.hasCodexCompatibleKey) return false;
+  if (!selectsCodexCompatible(initial.provider, initial.modelProvider)) return false;
+  const previousOrigin = codexCompatibleOrigin(initial.baseUrl ?? "");
+  const nextOrigin = codexCompatibleOrigin(baseUrl);
+  return Boolean(previousOrigin && nextOrigin && previousOrigin !== nextOrigin);
+}
+
+export function runtimeRequiresModel(provider: RuntimeProvider, modelProvider?: string): boolean {
+  return (
+    provider === RUNTIME_PROVIDER.ANTIGRAVITY || selectsCodexCompatible(provider, modelProvider)
+  );
 }
 
 export function fastModeFieldState(
@@ -64,12 +108,14 @@ export function isRuntimeDirty(params: {
   submittedFastMode: boolean;
   sizes: ModelSizes;
   sizesApply: boolean;
+  baseUrl?: string;
   initial?: RuntimeSelection;
 }): boolean {
   return (
     params.manualDirty ||
     (params.sizesApply && modelSizesDirty(params.sizes, params.initial)) ||
     params.apiKey.trim() !== "" ||
+    (params.baseUrl?.trim() ?? "") !== (params.initial?.baseUrl ?? "") ||
     params.provider !== (params.initial?.provider ?? RUNTIME_PROVIDER.COFORGE) ||
     params.submittedModelProvider !== (params.initial?.modelProvider ?? "") ||
     params.modelValue !== (params.initial?.model ?? "") ||
@@ -148,8 +194,15 @@ export function submittedRuntimeModel(params: {
   selectedModel?: { modelProvider?: string; id: string };
   modelKey: string;
   initialModelKey: string;
+  codexModel?: string;
   initial?: RuntimeSelection;
 }): { modelProvider: string; model: string } {
+  if (selectsCodexCompatible(params.provider, params.modelProvider)) {
+    return {
+      modelProvider: CODEX_COMPATIBLE_MODEL_PROVIDER,
+      model: (params.codexModel ?? "").trim(),
+    };
+  }
   const sameRuntime = params.provider === params.initial?.provider;
   return {
     modelProvider: params.piBuiltin

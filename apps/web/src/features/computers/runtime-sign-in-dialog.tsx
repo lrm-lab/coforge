@@ -48,6 +48,7 @@ import {
 import { AntigravitySignIn } from "#src/features/computers/antigravity-sign-in";
 import { KiroEnterpriseSignIn } from "./kiro-enterprise-sign-in";
 import { CodeForm, DeviceCode } from "./runtime-sign-in-code";
+import { useCodexCompatibleSupport } from "./use-codex-compatible-support";
 import { useRuntimeAuthSignals } from "./use-runtime-auth-signals";
 
 type Target = {
@@ -55,6 +56,7 @@ type Target = {
   computerName: string;
   provider: RuntimeAuthProvider;
   runtimeName: string;
+  codexCompatibleSupported?: boolean;
 };
 
 const EARLY_VIEW_LIMIT = 16;
@@ -158,6 +160,7 @@ function SignInAttempt({
   computerName,
   provider,
   runtimeName,
+  codexCompatibleSupported,
   kiro,
   antigravityMethodId,
   closeAction,
@@ -171,6 +174,14 @@ function SignInAttempt({
   onClose: () => void;
 }) {
   const [state, dispatch] = useReducer(loginReducer, initialLoginState);
+  const queriedCodexCompatible = useCodexCompatibleSupport(
+    computerId,
+    provider === RUNTIME_PROVIDER.CODEX && codexCompatibleSupported === undefined,
+  );
+  const showCodexApiKeyNote =
+    provider === RUNTIME_PROVIDER.CODEX &&
+    (codexCompatibleSupported ?? queriedCodexCompatible) &&
+    state.phase !== "signed_in";
   const start = useServerFn(startRuntimeAuthLogin);
   const read = useServerFn(readRuntimeAuthLogin);
   const cancel = useServerFn(cancelRuntimeAuthLogin);
@@ -315,6 +326,11 @@ function SignInAttempt({
           runtimeName={runtimeName}
           dispatch={dispatch}
         />
+        {showCodexApiKeyNote && (
+          <p className="rounded-lg bg-secondary px-3 py-2 text-xs text-tertiary">
+            {m.runtime_auth_codex_api_key_note()}
+          </p>
+        )}
       </div>
       <DialogActions className="px-6 pt-6 pb-6">
         {state.phase === "signed_in" ? (
