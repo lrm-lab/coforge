@@ -270,14 +270,14 @@ test("a push to main starts no deployment or publication", async () => {
   }
 });
 
-test("release callers select separate tracks and the Web image waits for main CI or the main-only gates", async () => {
+test("release callers select separate tracks and Web staging waits for candidate CI or the dispatch commit's gates", async () => {
   expect(deploy.jobs.gates.with.track).toBe("web");
   expect(Object.keys(deploy.on)).toEqual(["workflow_dispatch"]);
   expect(deploy.jobs["ci-status"].if).toBe("github.ref == 'refs/heads/main'");
   expect(deploy.jobs["ci-status"].permissions).toEqual({ contents: "read", actions: "read" });
   expect(deploy.jobs.gates.needs).toBe("ci-status");
   expect(deploy.jobs.gates.if).toBe(
-    "github.ref == 'refs/heads/main' && needs.ci-status.outputs.passed != 'true'",
+    "github.ref == 'refs/heads/main' && inputs.candidate_ref == '' && needs.ci-status.outputs.passed != 'true'",
   );
   expect(deploy.concurrency.queue).toBeUndefined();
   expect(deploy.concurrency["cancel-in-progress"]).toBe(false);

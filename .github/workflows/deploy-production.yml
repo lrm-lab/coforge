@@ -65,10 +65,10 @@ jobs:
             --status success --limit 50 --json databaseId --jq '.[].databaseId'); do
             dir="$records/$run"
             gh run download "$run" --repo "$GITHUB_REPOSITORY" --name deployment-records --dir "$dir" >/dev/null 2>&1 || continue
-            if jq -e --arg image "$IMAGE" \
-              'select(.artifact_identity == $image and .outcome == "healthy")' \
-              "$dir/deployment-records.jsonl" >/dev/null 2>&1; then
-              sha="$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)"
+            if sha="$(jq -ers --arg image "$IMAGE" '
+              first(.[] | select(.artifact_identity == $image and .outcome == "healthy") |
+                .source_commit | strings | select(length == 40 and test("^[0-9a-f]{40}$"))) // empty
+              ' "$dir/deployment-records.jsonl" 2>/dev/null)"; then
               echo "staging_sha=$sha" >> "$GITHUB_OUTPUT"
               echo "healthy in staging ($sha): ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/$run" | tee -a "$GITHUB_STEP_SUMMARY"
               exit 0

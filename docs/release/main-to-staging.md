@@ -2,18 +2,28 @@
 
 ## Cloud application
 
-The cloud path runs only when an operator dispatches **Deploy Web (staging)**
-from `main` (`gh workflow run deploy-staging.yml --repo lrm-lab/coforge`); a
-merge to `main` does not deploy:
+An operator dispatches **Deploy Web (staging)** from `main`. To select an earlier
+green candidate, set `CANDIDATE_REF` to its full SHA or a branch or tag that points to it.
 
-1. Verify that **CI** already succeeded on `main` for the exact dispatched
-   commit; otherwise run the complete Web-track test, check, and build gates
-   for that commit.
-2. Build and push the service image once, tagged with the full commit SHA.
+```sh
+gh workflow run deploy-staging.yml --repo lrm-lab/coforge --ref main -f "candidate_ref=$CANDIDATE_REF"
+```
+
+The workflow resolves an explicit `candidate_ref` once and requires a completed,
+successful `CI` push or manual run for that exact SHA on the repository's `main`.
+An unresolved ref or missing CI success stops the workflow before it builds an
+image. Omit `candidate_ref` to deploy the dispatch commit.
+
+1. Resolve the deployment source and verify its CI. The dispatch commit can
+   run the complete Web-track gates when `candidate_ref` is omitted and there
+   is no prior successful CI.
+2. Build and push the service image once, tagged with the full source SHA.
+   The optional Artifact Checker build uses the same SHA.
    The build fixes file timestamps instead of using a build cache, so an
    unchanged migration toolchain layer keeps its digest and hosts do not pull it
    again ([Reading GitHub Actions](github-actions.md)).
-3. Capture the pushed image digest as a workflow output and deployment record.
+3. Capture the pushed image digest as a workflow output. Record it with the
+   selected source SHA and use the assets from that commit for deployment.
 4. Enter the `staging` GitHub Environment and its environment-specific
    concurrency group.
 5. Validate the Compose configuration, including the Centrifugo configuration

@@ -5,6 +5,9 @@ name: Deploy Web (staging)
 on:
   workflow_dispatch:
     inputs:
+      candidate_ref:
+        description: "Commit SHA, branch, or tag with passing CI on main (blank uses the dispatch commit)"
+        type: string
       enable_artifact_checker:
         description: "Deploy the isolated Artifact publish checker"
         type: boolean
@@ -23,7 +26,7 @@ env:
 
 jobs:
   ci-status:
-    name: Check main CI
+    name: Resolve source and check main CI
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -31,23 +34,27 @@ jobs:
       contents: read
       actions: read
     outputs:
+      sha: ${{ steps.check.outputs.sha }}
       passed: ${{ steps.check.outputs.passed }}
     steps:
-      - name: Check whether main CI already passed for this commit
+      - name: Check out the dispatch workflow source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve the candidate and check CI for its exact commit
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          passed="$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?branch=main&head_sha=$SHA&status=completed&per_page=20" \
-            --jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .conclusion == "success")] | length > 0')"
-          echo "passed=$passed" >> "$GITHUB_OUTPUT"
+          DISPATCH_SHA: ${{ github.sha }}
+          CANDIDATE_REF: ${{ inputs.candidate_ref }}
+        run: bash scripts/deploy/resolve-staging-source.sh
 
   gates:
     name: Validate
     needs: ci-status
-    if: github.ref == 'refs/heads/main' && needs.ci-status.outputs.passed != 'true'
+    if: github.ref == 'refs/heads/main' && inputs.candidate_ref == '' && needs.ci-status.outputs.passed != 'true'
     permissions:
       contents: read
       actions: read
@@ -65,12 +72,16 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      SOURCE_COMMIT: ${{ needs.ci-status.outputs.sha }}
     outputs:
       image: ${{ steps.identity.outputs.image }}
       deployment_id: ${{ steps.validate.outputs.deployment_id }}
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.ci-status.outputs.sha }}
 
       - name: Set up mise
         uses: ./.github/actions/setup-verified-mise
@@ -97,7 +108,7 @@ jobs:
           file: apps/web/Dockerfile
           push: true
           build-args: |
-            COFORGE_BUILD_ID=${{ github.sha }}
+            COFORGE_BUILD_ID=${{ env.SOURCE_COMMIT }}
           outputs: type=image,name=ghcr.io/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,rewrite-timestamp=true
         # Constant mtime preserves unchanged layer digests without a build cache.
         env:
@@ -111,7 +122,7 @@ jobs:
       - name: Tag image with source commit
         run: |
           docker buildx imagetools create \
-            -t "ghcr.io/${{ env.IMAGE_REPOSITORY }}:sha-${{ github.sha }}" \
+            -t "ghcr.io/${{ env.IMAGE_REPOSITORY }}:sha-$SOURCE_COMMIT" \
             "ghcr.io/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}"
 
       - name: Validate image reference
@@ -128,10 +139,12 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/artifact-checker-image.yml
+    with:
+      source_sha: ${{ needs.ci-status.outputs.sha }}
 
   deploy:
     name: Deploy and verify Web
-    needs: [image, checker-image]
+    needs: [ci-status, image, checker-image]
     if: always() && !cancelled() && needs.image.result == 'success' && (!inputs.enable_artifact_checker || needs.checker-image.result == 'success')
     runs-on: ubuntu-latest
     environment: staging
@@ -140,12 +153,15 @@ jobs:
       contents: read
       packages: read
     env:
+      SOURCE_COMMIT: ${{ needs.ci-status.outputs.sha }}
       DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
       DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
       REMOTE_ASSETS: ${{ github.workspace }}/assets.tgz
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.ci-status.outputs.sha }}
 
       - name: Set up mise
         uses: ./.github/actions/setup-verified-mise
@@ -407,7 +423,7 @@ jobs:
           bun scripts/deploy/deployment.ts record \
             --records-file deployment-records.jsonl \
             --deployment-id "${{ needs.image.outputs.deployment_id }}" \
-            --source-commit "${{ github.sha }}" \
+            --source-commit "$SOURCE_COMMIT" \
             --artifact-identity "${{ needs.image.outputs.image }}" \
             --environment staging \
             --workflow-run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \

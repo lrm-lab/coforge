@@ -15,8 +15,8 @@
 | **Post-deploy performance check** | After each successful Web deploy   | Wait 30min → compare Server Function p95 and 5xx rates across the image boundary |
 | **Cargo advisories / infra rerun** | Daily at 04:41 UTC; after each watched run completes; or manually | Advisory checks file an issue on failure; infra rerun retries a failed run's jobs once when only download, login, or install steps failed |
 
-Every staging workflow is manual. A Web deployment validates, builds, and
-deploys the selected `main` commit whatever it changed. Computer publication's
+Every staging workflow is manual. Web staging accepts `candidate_ref` for an
+earlier CI-green main commit and defaults to the dispatch commit. Computer publication's
 run title includes the version. Its build, upload, integrity checks, and
 selector update stay together in one publication transaction; expand that step
 to see each platform and object.
@@ -62,9 +62,9 @@ with three scopes selected by `scripts/ci/selection.ts`:
   PowerShell installer changes run both PowerShell parsers and lint. Both
   installers are embedded in the Web image, so changing either also validates Web.
 - A dispatched Web deployment reuses a completed passing `CI` run on `main` for
-  its exact selected commit when one exists; otherwise it runs the complete Web
-  track (Web, protocol, CI-policy, and deploy-script gates), then builds and
-  deploys the image.
+  its exact selected commit. When `candidate_ref` is omitted, it can run the
+  complete Web track (Web, protocol, CI-policy, and deploy-script gates) if the
+  dispatch commit has no passing CI. See [Main to staging](main-to-staging.md).
 - Manual local publication always runs the complete local track for its exact
   selected main commit: protocol, Agent, CLI, Computer, Daemon, release scripts,
   native macOS/Windows checks, and Windows installer checks. It does not run

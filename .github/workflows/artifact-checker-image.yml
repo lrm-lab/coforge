@@ -3,6 +3,11 @@ name: Build Artifact Checker image
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      source_sha:
+        description: "Exact staging source commit"
+        required: false
+        type: string
     outputs:
       image:
         description: "Immutable digest reference for coforge-artifact-checker"
@@ -32,6 +37,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
           filter: blob:none
 
@@ -94,7 +100,7 @@ jobs:
           CHECKER_SHA: ${{ steps.existing.outputs.checker_sha }}
           HIT: ${{ steps.existing.outputs.hit }}
           DIGEST: ${{ steps.identity.outputs.digest }}
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         run: |
           repo="ghcr.io/${IMAGE_REPOSITORY}"
           if [ "$HIT" != "true" ] && [ -n "$CHECKER_SHA" ]; then

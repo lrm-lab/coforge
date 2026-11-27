@@ -13,7 +13,8 @@ for exception approvals.
    previous healthy production digest, change summary, risks, migration
    compatibility, and production configuration revision.
 2. Dispatch the production workflow with that digest. The workflow verifies
-   the exact digest is recorded healthy in staging. The `production` GitHub
+   the exact digest is recorded healthy in staging and uses that record's source
+   commit to identify the optional Artifact Checker image. The `production` GitHub
    Environment restricts the run to `main` and has no required reviewer.
 3. Deploy the same digest with the production Compose project, using the
    bounded pulls documented in [Main to staging](main-to-staging.md#cloud-application).

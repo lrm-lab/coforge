@@ -6,9 +6,10 @@ test("the Web image carries one build id from build stage through runtime", asyn
   expect(dockerfile).toContain("ENV COFORGE_BUILD_ID=$COFORGE_BUILD_ID");
 });
 
-test("staging passes the source SHA as the image build id", async () => {
+test("staging passes the resolved deployment source SHA as the image build id", async () => {
   const workflow = await Bun.file(
     new URL("../../../.github/workflows/deploy-staging.yml", import.meta.url),
   ).text();
-  expect(workflow).toContain("COFORGE_BUILD_ID=${{ github.sha }}");
+  expect(workflow).toContain("SOURCE_COMMIT: ${{ needs.ci-status.outputs.sha }}");
+  expect(workflow).toContain("COFORGE_BUILD_ID=${{ env.SOURCE_COMMIT }}");
 });
