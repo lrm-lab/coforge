@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { recordMembershipNotices } from "#src/server/conversations/channel-membership-notice.server";
 import { ChatSections } from "#src/server/conversations/chat-sections.server";
 import { deleteAttachmentRows } from "#src/server/db/repositories/attachment-deletion.repositories.server";
@@ -135,9 +135,9 @@ test("mergeLabels batches duplicate drops, single-group clash removals, history 
   const t4 = "0196ed00-0000-7000-8000-000000000504";
   const t5 = "0196ed00-0000-7000-8000-000000000505";
 
-  let deleteManyCalls = 0;
+  const duplicateDeletes: Prisma.TaskLabelDeleteManyArgs[] = [];
   let updateManyCalls = 0;
-  let clashBatchDeletes = 0;
+  const clashBatchDeletes: Array<[taskIds: string[], labelIds: string[]]> = [];
   let historyGroupByCalls = 0;
   let historyCreateManyRows: Array<{ taskId: string; seq: number }> = [];
 
@@ -145,7 +145,7 @@ test("mergeLabels batches duplicate drops, single-group clash removals, history 
     taskLabel: {
       findMany: async (args: { where?: { labelId?: unknown } }) => {
         if (args.where?.labelId === fromId) {
-          return [{ taskId: t1 }, { taskId: t2 }, { taskId: t3 }, { taskId: t4 }, { taskId: t5 }];
+          return [{ taskId: t1 }, { taskId: t2 }, { taskId: t4 }, { taskId: t3 }, { taskId: t5 }];
         }
         if (args.where?.labelId === intoId) {
           return [{ taskId: t1 }, { taskId: t2 }];
@@ -155,8 +155,8 @@ test("mergeLabels batches duplicate drops, single-group clash removals, history 
           { taskId: t4, label: { id: clashLabelB, name: "P2", color: "blue" } },
         ];
       },
-      deleteMany: async () => {
-        deleteManyCalls += 1;
+      deleteMany: async (args: Prisma.TaskLabelDeleteManyArgs) => {
+        duplicateDeletes.push(args);
         return { count: 2 };
       },
       updateMany: async () => {
@@ -189,10 +189,10 @@ test("mergeLabels batches duplicate drops, single-group clash removals, history 
     label: {
       delete: async () => ({ id: fromId }),
     },
-    $executeRaw: async (arg: unknown) => {
+    $executeRaw: async (arg: unknown, taskIds: string[], labelIds: string[]) => {
       const sql = sqlText(arg);
       if (sql.includes("DELETE FROM") && sql.includes("task_labels") && sql.includes("unnest")) {
-        clashBatchDeletes += 1;
+        clashBatchDeletes.push([taskIds, labelIds]);
       }
       return 2;
     },
@@ -222,8 +222,13 @@ test("mergeLabels batches duplicate drops, single-group clash removals, history 
     intoId,
   );
   expect(result).toEqual({ moved: 3, dropped: 4 });
-  expect(deleteManyCalls).toBe(1);
-  expect(clashBatchDeletes).toBe(1);
+  expect(duplicateDeletes).toEqual([{ where: { labelId: fromId, taskId: { in: [t1, t2] } } }]);
+  expect(clashBatchDeletes).toEqual([
+    [
+      [t3, t4],
+      [clashLabelA, clashLabelB],
+    ],
+  ]);
   expect(historyGroupByCalls).toBe(1);
   expect(updateManyCalls).toBe(1);
   expect(historyCreateManyRows.map((row) => ({ taskId: row.taskId, seq: row.seq }))).toEqual([

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppBotInbox } from "#src/server/app-bots/app-bot-inbox.server";
 import { dismissAgentInbox } from "#src/server/agents/agent-inbox-actions.server";
 import { drainAgentEvents } from "#src/server/db/repositories/agent-event-drain.repositories.server";
@@ -307,16 +307,14 @@ test("dismissDueAgentReminders batches one-shot and repeating reminder updates i
 test("linkMessageAttachments batches multi-attachment linking into one unnest SQL statement and deduplicates IDs", async () => {
   const { linkMessageAttachments } =
     await import("#src/server/db/repositories/attachment-link.repositories.server");
-  let singleUpdates = 0;
-  let lastSinglePosition: number | undefined;
+  const singleUpdates: Prisma.AttachmentUpdateArgs[] = [];
   let batchUpdates = 0;
   let lastBatchIds: string[] = [];
   let lastBatchPositions: number[] = [];
   const tx = {
     attachment: {
-      update: async (args: { data: { position: number } }) => {
-        singleUpdates += 1;
-        lastSinglePosition = args.data.position;
+      update: async (args: Prisma.AttachmentUpdateArgs) => {
+        singleUpdates.push(args);
       },
     },
     $executeRaw: async (arg: unknown, _messageId: string, ids: string[], positions: number[]) => {
@@ -331,20 +329,26 @@ test("linkMessageAttachments batches multi-attachment linking into one unnest SQ
   };
 
   await linkMessageAttachments(tx as never, "0196ed00-0000-7000-8000-000000000900", []);
-  expect([singleUpdates, batchUpdates]).toEqual([0, 0]);
+  expect([singleUpdates.length, batchUpdates]).toEqual([0, 0]);
 
   await linkMessageAttachments(tx as never, "0196ed00-0000-7000-8000-000000000900", [
     "0196ed00-0000-7000-8000-000000000901",
     "0196ed00-0000-7000-8000-000000000901",
   ]);
-  expect([singleUpdates, batchUpdates, lastSinglePosition]).toEqual([1, 0, 1]);
+  expect(batchUpdates).toBe(0);
+  expect(singleUpdates).toEqual([
+    {
+      where: { id: "0196ed00-0000-7000-8000-000000000901" },
+      data: { messageId: "0196ed00-0000-7000-8000-000000000900", position: 1 },
+    },
+  ]);
 
   await linkMessageAttachments(tx as never, "0196ed00-0000-7000-8000-000000000900", [
     "0196ed00-0000-7000-8000-000000000903",
     "0196ed00-0000-7000-8000-000000000901",
     "0196ed00-0000-7000-8000-000000000903",
   ]);
-  expect([singleUpdates, batchUpdates]).toEqual([1, 1]);
+  expect([singleUpdates.length, batchUpdates]).toEqual([1, 1]);
   expect(lastBatchIds).toEqual([
     "0196ed00-0000-7000-8000-000000000901",
     "0196ed00-0000-7000-8000-000000000903",
