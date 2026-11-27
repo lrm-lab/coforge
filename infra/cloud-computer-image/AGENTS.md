@@ -24,3 +24,8 @@ image. Complements [container host](../../docs/computer/container-host.md) and
   Agent screens remain on-demand. Do not reintroduce idle shutdown of the
   shared desktop without an explicit product decision (`VNC_IDLE_SECONDS=0`
   is the default).
+- Bake image Python packages with `/usr/bin/python3` (Debian 3.11). PATH
+  prefers the sandbox `/usr/local/bin/python3` (3.12); the runtime venv in
+  `persist-user-data.sh` uses `--system-site-packages` on 3.11 and cannot see
+  packages installed with plain `pip3`/`python3`. Keep `libatomic1` for the
+  Playwright driver.

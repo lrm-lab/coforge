@@ -54,6 +54,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   python3-venv \
   python3-xlib \
   gir1.2-gtk-3.0 \
+  libatomic1 \
   chromium
 
 mkdir -p /etc/apt/keyrings
