@@ -106,8 +106,6 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    // A clean device, Chat's list set to its own width: the Activity list beside an open
-    // conversation starts at 380px (23.75rem).
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser(
       "eval",
@@ -131,9 +129,15 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     await waitForWidth(288);
     expect(Number(await stored("coforge-list-column-width"))).toBeCloseTo(18, 1);
 
-    const half = await evaluate<number>(
-      `Math.round(document.querySelector('${LIST}').closest('[data-group]').getBoundingClientRect().width / 2)`,
+    const panelsSharedWidthExcludingSeparator = await evaluate<number>(
+      `(() => {
+        const group = document.querySelector('${LIST}').closest('[data-group]');
+        return Array.from(group.children)
+          .filter((child) => child.hasAttribute("data-panel"))
+          .reduce((sum, child) => sum + child.getBoundingClientRect().width, 0);
+      })()`,
     );
+    const half = panelsSharedWidthExcludingSeparator / 2;
     expect(half).toBeLessThan(640);
     await dragListTo(900);
     await waitForWidth(half);
@@ -154,7 +158,6 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     await browser("press", "Home");
     await waitForWidth(288);
 
-    // A reload keeps the width, and the first paint already has it.
     await browser("reload");
     await waitFor(`document.querySelector('${HANDLE}') !== null && ${pageHydrated}`);
     await waitForWidth(288);
