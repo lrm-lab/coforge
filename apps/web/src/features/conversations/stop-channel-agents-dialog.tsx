@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useStore } from "@tanstack/react-form";
 import { useServerFn } from "@tanstack/react-start";
 import { Text } from "react-aria-components";
 
@@ -10,14 +11,15 @@ import {
   DialogCancel,
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
-import { TextArea } from "#src/components/base/textarea/textarea";
 import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
+import { useAppForm } from "#src/components/ui/form";
 import {
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
 import { isAppError } from "#src/lib/app-error";
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { resumeChannelAgents, stopChannelAgents } from "./channel-lifecycle.functions";
 
@@ -49,12 +51,6 @@ function refusal(cause: unknown, copy: RefusalCopy) {
         : copy.error();
 }
 
-/**
- * "Stop all Agents" for one channel: a confirmation, then what the stop did and, once every Agent
- * is stopped, a place to give them new guidance and resume them all with it. Stopping is not
- * permanent, so no button here is red. Mount it only while it is open, so each opening starts at
- * the confirmation.
- */
 export function StopChannelAgentsDialog({
   channelId,
   channelName,
@@ -67,35 +63,52 @@ export function StopChannelAgentsDialog({
   const controlSize = useDialogControlSize();
   const stop = useServerFn(stopChannelAgents);
   const resume = useServerFn(resumeChannelAgents);
-  const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState("");
   const [step, setStep] = useState<Step>({ kind: "confirm" });
-  const [guidance, setGuidance] = useState("");
+
+  const allStopped = step.kind === "stopped" && step.failed === 0;
 
   async function run(write: () => Promise<void>, copy: RefusalCopy) {
-    setBusy(true);
     setError("");
     try {
       await write();
     } catch (cause) {
       setError(refusal(cause, copy));
-    } finally {
-      setBusy(false);
     }
   }
-  const stopAll = () =>
-    run(async () => {
-      const { stopped, failed } = await stop({ data: { channelId } });
-      setStep({ kind: "stopped", stopped, failed });
-    }, STOP_REFUSALS);
-  const resumeAll = () =>
-    run(async () => {
-      const { resumed, failed, offline } = await resume({ data: { channelId, guidance } });
-      if (failed === 0 && offline === 0) onClose();
-      else setStep({ kind: "resumed", failed, offline, total: resumed + failed + offline });
-    }, RESUME_REFUSALS);
 
-  const allStopped = step.kind === "stopped" && step.failed === 0;
+  const form = useAppForm({
+    defaultValues: { guidance: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      if (step.kind === "confirm") {
+        await run(async () => {
+          const { stopped, failed } = await stop({ data: { channelId } });
+          setStep({ kind: "stopped", stopped, failed });
+        }, STOP_REFUSALS);
+      } else if (allStopped) {
+        await run(async () => {
+          const { resumed, failed, offline } = await resume({
+            data: { channelId, guidance: value.guidance },
+          });
+          if (failed === 0 && offline === 0) onClose();
+          else setStep({ kind: "resumed", failed, offline, total: resumed + failed + offline });
+        }, RESUME_REFUSALS);
+      } else if (step.kind === "stopped") {
+        await run(async () => {
+          const { stopped, failed } = await stop({ data: { channelId } });
+          setStep({ kind: "stopped", stopped, failed });
+        }, STOP_REFUSALS);
+      }
+    },
+  });
+
+  const { guidance, busy } = useStore(form.store, (state) => ({
+    guidance: state.values.guidance,
+    busy: state.isSubmitting,
+  }));
+
   const guard = useUnsavedChangesGuard({
     overlayOpen: true,
     dirty: allStopped && guidance.trim() !== "",
@@ -142,95 +155,102 @@ export function StopChannelAgentsDialog({
         <Modal className="w-[calc(100vw-2rem)] max-w-md">
           <Dialog className="text-left">
             {() => (
-              <form
-                className="contents"
-                onKeyDown={submitOnModEnter}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (step.kind === "confirm") void stopAll();
-                  else if (allStopped) void resumeAll();
-                  else if (step.kind === "stopped") void stopAll();
-                }}
-              >
-                <DialogHeader title={title} onClose={busy ? undefined : guard.requestClose} />
-                <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-                  {description}
-                </Text>
-                {allStopped && (
-                  <div className="mx-6 mt-4 flex flex-col gap-2">
-                    <p className="text-sm text-secondary">
-                      {m.channel_resume_agents_guidance_hint()}
-                    </p>
-                    <TextArea
-                      size={controlSize}
-                      aria-label={m.channel_resume_agents_guidance_hint()}
-                      placeholder={m.channel_resume_agents_guidance_placeholder()}
-                      value={guidance}
-                      onChange={setGuidance}
-                      maxLength={CHANNEL_AGENT_GUIDANCE_MAX_LENGTH}
-                      autoFocus
-                      isDisabled={busy}
-                      rows={4}
-                    />
-                  </div>
-                )}
-                {error && (
-                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                    {error}
-                  </p>
-                )}
-                <DialogActions className="mt-6 px-6 pb-6">
-                  {step.kind === "confirm" ? (
-                    <>
-                      <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
-                        {m.channel_settings_cancel()}
-                      </DialogCancel>
-                      <DialogAction
-                        type="submit"
-                        autoFocus
-                        isDisabled={busy}
-                        isLoading={busy}
-                        showTextWhileLoading
+              <form.AppForm>
+                <form
+                  ref={formRef}
+                  noValidate
+                  className="contents"
+                  onKeyDown={submitOnModEnter}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void form.handleSubmit();
+                  }}
+                >
+                  <DialogHeader title={title} onClose={busy ? undefined : guard.requestClose} />
+                  <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
+                    {description}
+                  </Text>
+                  {allStopped && (
+                    <div className="mx-6 mt-4 flex flex-col gap-2">
+                      <p className="text-sm text-secondary">
+                        {m.channel_resume_agents_guidance_hint()}
+                      </p>
+                      <form.AppField
+                        name="guidance"
+                        validators={{
+                          onSubmit: ({ value }) =>
+                            value.trim() ? undefined : m.channel_resume_agents_guidance_hint(),
+                        }}
                       >
-                        {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_action()}
-                      </DialogAction>
-                    </>
-                  ) : allStopped ? (
-                    <>
-                      <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
-                        {m.channel_stop_agents_keep_stopped()}
-                      </DialogCancel>
-                      <DialogAction
-                        type="submit"
-                        isDisabled={busy || !guidance.trim()}
-                        isLoading={busy}
-                        showTextWhileLoading
-                      >
-                        {busy
-                          ? m.channel_resume_agents_resuming()
-                          : m.channel_resume_agents_action()}
-                      </DialogAction>
-                    </>
-                  ) : step.kind === "stopped" ? (
-                    <>
-                      <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
-                        {m.controls_close()}
-                      </DialogCancel>
-                      <DialogAction
-                        type="submit"
-                        autoFocus
-                        isDisabled={busy}
-                        isLoading={busy}
-                        showTextWhileLoading
-                      >
-                        {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_retry()}
-                      </DialogAction>
-                    </>
-                  ) : (
-                    <DialogCancel onPress={guard.requestClose}>{m.controls_close()}</DialogCancel>
+                        {(field) => (
+                          <field.TextArea
+                            size={controlSize}
+                            aria-label={m.channel_resume_agents_guidance_hint()}
+                            placeholder={m.channel_resume_agents_guidance_placeholder()}
+                            maxLength={CHANNEL_AGENT_GUIDANCE_MAX_LENGTH}
+                            autoFocus
+                            isDisabled={busy}
+                            rows={4}
+                            onChange={() => setError("")}
+                          />
+                        )}
+                      </form.AppField>
+                    </div>
                   )}
-                </DialogActions>
-              </form>
+                  <form.Alert error={error} className="px-6 pt-4 text-sm text-error-primary" />
+                  <DialogActions className="mt-6 px-6 pb-6">
+                    {step.kind === "confirm" ? (
+                      <>
+                        <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
+                          {m.channel_settings_cancel()}
+                        </DialogCancel>
+                        <DialogAction
+                          type="submit"
+                          autoFocus
+                          isDisabled={busy}
+                          isLoading={busy}
+                          showTextWhileLoading
+                        >
+                          {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_action()}
+                        </DialogAction>
+                      </>
+                    ) : allStopped ? (
+                      <>
+                        <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
+                          {m.channel_stop_agents_keep_stopped()}
+                        </DialogCancel>
+                        <DialogAction
+                          type="submit"
+                          isDisabled={busy || !guidance.trim()}
+                          isLoading={busy}
+                          showTextWhileLoading
+                        >
+                          {busy
+                            ? m.channel_resume_agents_resuming()
+                            : m.channel_resume_agents_action()}
+                        </DialogAction>
+                      </>
+                    ) : step.kind === "stopped" ? (
+                      <>
+                        <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
+                          {m.controls_close()}
+                        </DialogCancel>
+                        <DialogAction
+                          type="submit"
+                          autoFocus
+                          isDisabled={busy}
+                          isLoading={busy}
+                          showTextWhileLoading
+                        >
+                          {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_retry()}
+                        </DialogAction>
+                      </>
+                    ) : (
+                      <DialogCancel onPress={guard.requestClose}>{m.controls_close()}</DialogCancel>
+                    )}
+                  </DialogActions>
+                </form>
+              </form.AppForm>
             )}
           </Dialog>
         </Modal>

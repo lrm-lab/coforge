@@ -12,6 +12,7 @@ These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith
 - Do not apply marketing-page defaults from `design-taste-frontend` to the product workspace.
 - Keep supplemental explanations behind accessible, on-demand help when appropriate; keep essential constraints, errors, and risks visible. Help must work for keyboard and touch users.
 - Loading placeholders and local load errors belong to the feature whose content they represent (for example `features/agents/agents-pending.tsx`); routes select them, and `components/ui/skeleton.tsx` supplies decorative styling only.
+- Build new forms with `useAppForm` (`src/components/ui/form/`, backed by `@tanstack/react-form` and pre-bound Untitled UI controls): field validation and field-scoped server errors stay inline directly under their owning field, clear on edit, and scroll/focus the first invalid field on submit failure (`docs/design/toast-vs-inline.md`).
 - Derive a slug from a display name with `src/lib/slug.ts`, as Project and Workspace creation do.
 
 ## TanStack Start boundaries

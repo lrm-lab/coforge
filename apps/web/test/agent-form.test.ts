@@ -3,9 +3,11 @@ import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/inte
 import { CODEX_COMPATIBLE_MODEL_PROVIDER } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { AppError, isAppError } from "#src/lib/app-error";
 import {
+  agentCreateErrorTarget,
   agentCreateModelError,
   agentEnvironmentNameError,
   agentUpdateErrorMessage,
+  agentUpdateErrorTarget,
   agentEnvironmentRowsChanged,
   parseAgentEnvironmentFromForm,
   updateAgentInputFromForm,
@@ -213,5 +215,84 @@ test("codex-compatible requires a model and maps endpoint/key errors and baseUrl
     modelProvider: CODEX_COMPATIBLE_MODEL_PROVIDER,
     model: "gpt-5.4",
     baseUrl: "https://relay.example.com/v1",
+  });
+});
+
+test("agentCreateErrorTarget and agentUpdateErrorTarget map field errors to their owning field", () => {
+  expect(agentCreateErrorTarget(new AppError("CONFLICT", { errorId: "agent-name-taken" }))).toEqual(
+    { field: "name", message: m.agent_form_name_taken() },
+  );
+  expect(
+    agentCreateErrorTarget(new AppError("INVALID_INPUT", { errorId: "agent-name-required" })),
+  ).toEqual({ field: "name", message: m.agent_form_name_required() });
+  expect(
+    agentCreateErrorTarget(new AppError("INVALID_INPUT", { errorId: "agent-computer-required" })),
+  ).toEqual({ field: "computerId", message: m.agent_form_computer_required() });
+  expect(
+    agentUpdateErrorTarget(new AppError("INVALID_INPUT", { errorId: "agent-computer-locked" })),
+  ).toEqual({ field: "computerId", message: m.agent_form_computer_locked() });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", { errorId: "agent-provider-unsupported" }),
+    ),
+  ).toEqual({ field: "provider", message: m.agent_form_provider_unsupported() });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", { errorId: "agent-model-provider-required" }),
+    ),
+  ).toEqual({ field: "modelProvider", message: m.agent_form_model_provider_required() });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", { errorId: "antigravity-model-effort-suffix" }),
+    ),
+  ).toEqual({ field: "model", message: m.agent_form_model_effort_suffix() });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", { errorId: "agent-codex-compatible-endpoint-required" }),
+    ),
+  ).toEqual({
+    field: "baseUrl",
+    message: m.agent_form_codex_compatible_endpoint_required(),
+  });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", { errorId: "agent-codex-compatible-key-required" }),
+    ),
+  ).toEqual({
+    field: "apiKey",
+    message: m.agent_form_codex_compatible_key_required(),
+  });
+  expect(
+    agentUpdateErrorTarget(new AppError("INVALID_INPUT", { errorId: "agent-api-key-required" })),
+  ).toEqual({ field: "apiKey", message: m.agent_form_api_key_required() });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", {
+        errorId: "agent-runtime-unavailable",
+        details: { reason: "model_missing" },
+      }),
+    ),
+  ).toEqual({ field: "model", message: m.agent_form_runtime_unavailable_model_missing() });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", {
+        errorId: "agent-runtime-unavailable",
+        details: { reason: "not_connected" },
+      }),
+    ),
+  ).toEqual({ field: "computerId", message: m.agent_form_runtime_unavailable_not_connected() });
+  expect(
+    agentCreateErrorTarget(
+      new AppError("INVALID_INPUT", {
+        errorId: "agent-runtime-unavailable",
+        details: { reason: "runtime_missing" },
+      }),
+    ),
+  ).toEqual({ field: "provider", message: m.agent_form_runtime_unavailable_missing() });
+  expect(
+    agentCreateErrorTarget(new AppError("ACCESS_DENIED", { errorId: "agent-not-authorized" })),
+  ).toEqual({ message: m.agent_form_not_authorized() });
+  expect(agentCreateErrorTarget(new Error("boom"))).toEqual({
+    message: m.agent_form_server_error(),
   });
 });

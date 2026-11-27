@@ -7,13 +7,12 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import { Label } from "#src/components/base/input/label";
-import { Select } from "#src/components/base/select/select";
 import { SelectItem } from "#src/components/base/select/select-item";
-import { TextArea } from "#src/components/base/textarea/textarea";
+import { visibleFieldError, withForm } from "#src/components/ui/form";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { APP_CATEGORIES, type AppCategory } from "./app-category";
-import { refusedRedirectRows, type AppDraft } from "./app-draft";
+import { APP_CATEGORIES } from "./app-category";
+import { EMPTY_APP_DRAFT, refusedRedirectRows, type AppDraft } from "./app-draft";
 import { APP_SCOPE_DESCRIPTIONS } from "./app-form";
 import { APP_CATEGORY_LABELS } from "./app-list";
 import { isAgentInboundScope } from "./app-agent-events";
@@ -29,7 +28,6 @@ import {
 
 export type FieldErrors = Partial<Record<AppInputField, string>>;
 
-/** What the editor's sections are given: the draft, its change, and the problems to show. */
 export type FieldsProps = {
   draft: AppDraft;
   change: <Field extends keyof AppDraft>(field: Field, value: AppDraft[Field]) => void;
@@ -37,7 +35,6 @@ export type FieldsProps = {
   editing: boolean;
 };
 
-/** One section of the editor: its title, a status badge, what it is for, then its fields. */
 export function EditorSection({
   id,
   title,
@@ -50,7 +47,6 @@ export function EditorSection({
   title: string;
   status: string;
   description: string;
-  /** A second badge after the status, such as "Experimental". */
   badge?: string;
   children: ReactNode;
 }) {
@@ -77,261 +73,302 @@ export function EditorSection({
   );
 }
 
-/** How many characters of when-to-use an Agent would be shown, counted as the rule counts them. */
 export const whenToUseLength = (draft: AppDraft) => [...draft.whenToUse.trim()].length;
 
-/** Profile: the app's logo (`AppLogoField`, given as `logo`), name, homepage, category,
- * description, client ID and the line Agents are shown. */
-export function ProfileFields({
-  draft,
-  change,
-  errors,
-  editing,
-  logo,
-}: FieldsProps & { logo: ReactNode }) {
-  const length = whenToUseLength(draft);
-  const tooLong = length > APP_WHEN_TO_USE_MAX_LENGTH;
-  const counterId = useId();
-  return (
-    <>
-      {logo}
-      <Input
-        label={m.apps_field_name()}
-        placeholder={m.apps_field_name_placeholder()}
-        hint={errors.name}
-        isRequired
-        isInvalid={Boolean(errors.name)}
-        value={draft.name}
-        onChange={(value) => change("name", value)}
-      />
-      <div className="grid gap-5 md:grid-cols-2">
-        <Input
-          label={m.apps_field_homepage()}
-          hint={errors.homepageUrl}
-          isInvalid={Boolean(errors.homepageUrl)}
-          type="url"
-          inputMode="url"
-          placeholder="https://example.com/"
-          value={draft.homepageUrl}
-          onChange={(value) => change("homepageUrl", value)}
-        />
-        <Select
-          label={m.apps_field_category()}
-          hint={errors.category}
-          value={draft.category}
-          onChange={(key) => {
-            const category = APP_CATEGORIES.find((candidate) => candidate === key);
-            if (category) change("category", category satisfies AppCategory);
-          }}
-        >
-          {APP_CATEGORIES.map((category) => (
-            <SelectItem key={category} id={category} label={APP_CATEGORY_LABELS[category]()} />
-          ))}
-        </Select>
-      </div>
-      <TextArea
-        label={m.apps_field_description()}
-        placeholder={m.apps_field_description_placeholder()}
-        hint={errors.description}
-        isInvalid={Boolean(errors.description)}
-        rows={3}
-        value={draft.description}
-        onChange={(value) => change("description", value)}
-      />
-      <Input
-        label={m.apps_field_key()}
-        hint={errors.key ?? (editing ? m.apps_field_key_fixed_hint() : m.apps_field_key_hint())}
-        isDisabled={editing}
-        isInvalid={Boolean(errors.key)}
-        inputClassName="font-mono"
-        autoComplete="off"
-        spellCheck="false"
-        maxLength={APP_KEY_MAX_LENGTH}
-        value={draft.key}
-        onChange={(value) => change("key", value)}
-      />
-      <div className="grid gap-1.5">
-        <Input
-          label={m.apps_field_when_to_use()}
-          placeholder={m.apps_field_when_to_use_placeholder()}
-          hint={
-            tooLong || errors.whenToUse
-              ? m.apps_error_when_to_use()
-              : m.apps_field_when_to_use_hint()
-          }
-          isInvalid={tooLong || Boolean(errors.whenToUse)}
-          aria-describedby={counterId}
-          value={draft.whenToUse}
-          onChange={(value) => change("whenToUse", value)}
-        />
-        <p
-          id={counterId}
-          className={cn(
-            "text-right text-sm tabular-nums",
-            tooLong ? "text-error-primary" : "text-tertiary",
+export const ProfileFields = withForm({
+  defaultValues: EMPTY_APP_DRAFT,
+  props: {
+    editing: false,
+    logo: null as ReactNode,
+  },
+  render: function ProfileFieldsRender({ form, editing, logo }) {
+    const counterId = useId();
+    return (
+      <>
+        {logo}
+        <form.AppField name="name">
+          {(field) => (
+            <field.Input
+              label={m.apps_field_name()}
+              placeholder={m.apps_field_name_placeholder()}
+              isRequired
+            />
           )}
-        >
-          {m.apps_when_to_use_count({ count: length, max: APP_WHEN_TO_USE_MAX_LENGTH })}
-        </p>
-      </div>
-    </>
-  );
-}
-
-/** Login with CoForge: the exact URIs people return to, the Agent manifest URL, and the scopes the
- * app may ask for. */
-export function LoginFields({
-  draft,
-  change,
-  errors,
-  agentEvents,
-}: FieldsProps & { agentEvents: boolean }) {
-  const redirectLabelId = useId();
-  const redirectHintId = useId();
-  const scopesLabelId = useId();
-  const rows = draft.redirectUris;
-  const refusedRows = errors.redirectUris ? refusedRedirectRows(rows) : new Set<number>();
-  const email = appLoginScopes(draft.allowedScopes).includes("email");
-  return (
-    <>
-      <div role="group" aria-labelledby={redirectLabelId} className="grid gap-1.5">
-        <Label id={redirectLabelId} isInvalid={Boolean(errors.redirectUris)}>
-          {m.apps_field_redirect_uris()}
-        </Label>
-        <ul className="grid gap-2">
-          {rows.map((uri, index) => (
-            <li key={index} className="flex items-center gap-1">
-              <Input
-                aria-label={m.apps_redirect_uri_label({ number: index + 1 })}
-                className="min-w-0 flex-1"
-                isInvalid={refusedRows.has(index)}
-                aria-describedby={refusedRows.has(index) ? redirectHintId : undefined}
+        </form.AppField>
+        <div className="grid gap-5 md:grid-cols-2">
+          <form.AppField name="homepageUrl">
+            {(field) => (
+              <field.Input
+                label={m.apps_field_homepage()}
                 type="url"
                 inputMode="url"
-                placeholder="https://example.com/login/callback"
-                value={uri}
-                onChange={(value) =>
-                  change(
-                    "redirectUris",
-                    rows.map((row, at) => (at === index ? value : row)),
-                  )
-                }
+                placeholder="https://example.com/"
               />
-              {rows.length > 1 && (
-                <ButtonUtility
-                  icon={XClose}
-                  size="sm"
-                  color="tertiary"
-                  tooltip={m.apps_remove_redirect_uri({ number: index + 1 })}
-                  aria-label={m.apps_remove_redirect_uri({ number: index + 1 })}
-                  onClick={() =>
-                    change(
-                      "redirectUris",
-                      rows.filter((_, at) => at !== index),
-                    )
-                  }
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-        {/* Plain text, not `HintText`: outside one field it would fill the Dialog's description
-            slot (or, invalid, an error slot that is not there). */}
-        <p
-          id={redirectHintId}
-          role={errors.redirectUris ? "alert" : undefined}
-          className={cn("text-sm", errors.redirectUris ? "text-error-primary" : "text-tertiary")}
-        >
-          {errors.redirectUris ?? m.apps_field_redirect_uris_hint()}
-        </p>
-        {rows.length < MAX_REDIRECT_URIS && (
-          <div>
-            <Button
-              type="button"
-              size="sm"
-              color="link-gray"
-              iconLeading={Plus}
-              onPress={() => change("redirectUris", [...rows, ""])}
-            >
-              {m.apps_add_redirect_uri()}
-            </Button>
-          </div>
-        )}
-      </div>
-      <Input
-        label={m.apps_field_agent_manifest()}
-        hint={errors.agentManifestUrl ?? m.apps_field_agent_manifest_hint()}
-        isInvalid={Boolean(errors.agentManifestUrl)}
-        type="url"
-        inputMode="url"
-        autoComplete="off"
-        spellCheck="false"
-        placeholder="https://example.com/.well-known/coforge-agent-manifest.json"
-        value={draft.agentManifestUrl}
-        onChange={(value) => change("agentManifestUrl", value)}
-      />
-      <div role="group" aria-labelledby={scopesLabelId} className="grid gap-1.5">
-        <Label id={scopesLabelId}>{m.apps_field_scopes()}</Label>
-        <div className="grid gap-3 rounded-xl border border-secondary p-4">
-          <p className="text-sm font-medium text-secondary">{m.apps_scope_group_identity()}</p>
-          {APP_FIXED_SCOPES.map((scope) => (
-            <Checkbox
-              key={scope}
-              isSelected
-              isDisabled
-              label={<span className="font-mono">{scope}</span>}
-              hint={`${APP_SCOPE_DESCRIPTIONS[scope]()} · ${m.apps_scope_fixed()}`}
-            />
-          ))}
-          <Checkbox
-            isSelected={email}
-            label={<span className="font-mono">email</span>}
-            hint={APP_SCOPE_DESCRIPTIONS.email()}
-            onChange={(selected) =>
-              change(
-                "allowedScopes",
-                selected
-                  ? [...draft.allowedScopes, "email"]
-                  : draft.allowedScopes.filter((scope) => scope !== "email"),
-              )
-            }
-          />
-          {(agentEvents || draft.allowedScopes.some((scope) => isAgentInboundScope(scope))) && (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-secondary">
-                  {m.apps_scope_group_agent_inbound()}
-                </p>
-                <Badge size="sm" color="brand">
-                  {m.agent_app_events_experimental()}
-                </Badge>
-              </div>
-              <p className="text-sm text-tertiary">{m.apps_scope_group_agent_inbound_hint()}</p>
-              {APP_AGENT_INBOUND_SCOPES.map((scope) => (
-                <Checkbox
-                  key={scope}
-                  isSelected={draft.allowedScopes.includes(scope)}
-                  label={<span className="font-mono">{scope}</span>}
-                  hint={APP_SCOPE_DESCRIPTIONS[scope]()}
-                  onChange={(selected) =>
-                    change(
-                      "allowedScopes",
-                      selected
-                        ? [...draft.allowedScopes, scope]
-                        : draft.allowedScopes.filter((held) => held !== scope),
-                    )
-                  }
-                />
-              ))}
-            </>
-          )}
-          {errors.allowedScopes && (
-            <p role="alert" className="text-sm text-error-primary">
-              {errors.allowedScopes}
-            </p>
-          )}
+            )}
+          </form.AppField>
+          <form.AppField name="category">
+            {(field) => (
+              <field.Select label={m.apps_field_category()}>
+                {APP_CATEGORIES.map((category) => (
+                  <SelectItem
+                    key={category}
+                    id={category}
+                    label={APP_CATEGORY_LABELS[category]()}
+                  />
+                ))}
+              </field.Select>
+            )}
+          </form.AppField>
         </div>
-      </div>
-    </>
-  );
-}
+        <form.AppField name="description">
+          {(field) => (
+            <field.TextArea
+              label={m.apps_field_description()}
+              placeholder={m.apps_field_description_placeholder()}
+              rows={3}
+            />
+          )}
+        </form.AppField>
+        <form.AppField name="key">
+          {(field) => (
+            <field.Input
+              label={m.apps_field_key()}
+              hint={editing ? m.apps_field_key_fixed_hint() : m.apps_field_key_hint()}
+              isDisabled={editing}
+              inputClassName="font-mono"
+              autoComplete="off"
+              spellCheck="false"
+              maxLength={APP_KEY_MAX_LENGTH}
+            />
+          )}
+        </form.AppField>
+        <form.AppField
+          name="whenToUse"
+          validators={{
+            onChange: ({ value }) =>
+              [...value.trim()].length > APP_WHEN_TO_USE_MAX_LENGTH
+                ? m.apps_error_when_to_use()
+                : undefined,
+          }}
+        >
+          {(field) => {
+            const length = [...field.state.value.trim()].length;
+            const tooLong = length > APP_WHEN_TO_USE_MAX_LENGTH;
+            return (
+              <div className="grid gap-1.5">
+                <field.Input
+                  label={m.apps_field_when_to_use()}
+                  placeholder={m.apps_field_when_to_use_placeholder()}
+                  hint={m.apps_field_when_to_use_hint()}
+                  aria-describedby={counterId}
+                />
+                <p
+                  id={counterId}
+                  className={cn(
+                    "text-right text-sm tabular-nums",
+                    tooLong ? "text-error-primary" : "text-tertiary",
+                  )}
+                >
+                  {m.apps_when_to_use_count({ count: length, max: APP_WHEN_TO_USE_MAX_LENGTH })}
+                </p>
+              </div>
+            );
+          }}
+        </form.AppField>
+      </>
+    );
+  },
+});
+
+export const LoginFields = withForm({
+  defaultValues: EMPTY_APP_DRAFT,
+  props: {
+    agentEvents: false,
+  },
+  render: function LoginFieldsRender({ form, agentEvents }) {
+    const redirectLabelId = useId();
+    const redirectHintId = useId();
+    const scopesLabelId = useId();
+    return (
+      <>
+        <form.AppField name="redirectUris">
+          {(field) => {
+            const rows = field.state.value;
+            const error = visibleFieldError(field.state.meta, field.form.state.submissionAttempts);
+            const refusedRows = error ? refusedRedirectRows(rows) : new Set<number>();
+            const updateRows = (next: string[]) => {
+              if (field.state.meta.errorMap.onSubmit) {
+                field.setMeta((prev) => ({
+                  ...prev,
+                  errorMap: { ...prev.errorMap, onSubmit: undefined },
+                }));
+              }
+              field.handleChange(next);
+            };
+            return (
+              <div
+                data-field="redirectUris"
+                role="group"
+                aria-labelledby={redirectLabelId}
+                className="grid gap-1.5"
+              >
+                <Label id={redirectLabelId} isInvalid={Boolean(error)}>
+                  {m.apps_field_redirect_uris()}
+                </Label>
+                <ul className="grid gap-2">
+                  {rows.map((uri, index) => (
+                    <li key={index} className="flex items-center gap-1">
+                      <Input
+                        aria-label={m.apps_redirect_uri_label({ number: index + 1 })}
+                        className="min-w-0 flex-1"
+                        isInvalid={refusedRows.has(index)}
+                        aria-describedby={refusedRows.has(index) ? redirectHintId : undefined}
+                        type="url"
+                        inputMode="url"
+                        placeholder="https://example.com/login/callback"
+                        value={uri}
+                        onChange={(value) =>
+                          updateRows(rows.map((row, at) => (at === index ? value : row)))
+                        }
+                      />
+                      {rows.length > 1 && (
+                        <ButtonUtility
+                          icon={XClose}
+                          size="sm"
+                          color="tertiary"
+                          tooltip={m.apps_remove_redirect_uri({ number: index + 1 })}
+                          aria-label={m.apps_remove_redirect_uri({ number: index + 1 })}
+                          onClick={() => updateRows(rows.filter((_, at) => at !== index))}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p
+                  id={redirectHintId}
+                  role={error ? "alert" : undefined}
+                  className={cn("text-sm", error ? "text-error-primary" : "text-tertiary")}
+                >
+                  {error ?? m.apps_field_redirect_uris_hint()}
+                </p>
+                {rows.length < MAX_REDIRECT_URIS && (
+                  <div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      color="link-gray"
+                      iconLeading={Plus}
+                      onPress={() => updateRows([...rows, ""])}
+                    >
+                      {m.apps_add_redirect_uri()}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          }}
+        </form.AppField>
+        <form.AppField name="agentManifestUrl">
+          {(field) => (
+            <field.Input
+              label={m.apps_field_agent_manifest()}
+              hint={m.apps_field_agent_manifest_hint()}
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck="false"
+              placeholder="https://example.com/.well-known/coforge-agent-manifest.json"
+            />
+          )}
+        </form.AppField>
+        <form.AppField name="allowedScopes">
+          {(field) => {
+            const scopes = field.state.value;
+            const error = visibleFieldError(field.state.meta, field.form.state.submissionAttempts);
+            const email = appLoginScopes(scopes).includes("email");
+            const updateScopes = (next: string[]) => {
+              if (field.state.meta.errorMap.onSubmit) {
+                field.setMeta((prev) => ({
+                  ...prev,
+                  errorMap: { ...prev.errorMap, onSubmit: undefined },
+                }));
+              }
+              field.handleChange(next);
+            };
+            return (
+              <div
+                data-field="allowedScopes"
+                role="group"
+                aria-labelledby={scopesLabelId}
+                className="grid gap-1.5"
+              >
+                <Label id={scopesLabelId}>{m.apps_field_scopes()}</Label>
+                <div className="grid gap-3 rounded-xl border border-secondary p-4">
+                  <p className="text-sm font-medium text-secondary">
+                    {m.apps_scope_group_identity()}
+                  </p>
+                  {APP_FIXED_SCOPES.map((scope) => (
+                    <Checkbox
+                      key={scope}
+                      isSelected
+                      isDisabled
+                      label={<span className="font-mono">{scope}</span>}
+                      hint={`${APP_SCOPE_DESCRIPTIONS[scope]()} · ${m.apps_scope_fixed()}`}
+                    />
+                  ))}
+                  <Checkbox
+                    isSelected={email}
+                    label={<span className="font-mono">email</span>}
+                    hint={APP_SCOPE_DESCRIPTIONS.email()}
+                    onChange={(selected) =>
+                      updateScopes(
+                        selected
+                          ? [...scopes, "email"]
+                          : scopes.filter((scope) => scope !== "email"),
+                      )
+                    }
+                  />
+                  {(agentEvents || scopes.some((scope) => isAgentInboundScope(scope))) && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-secondary">
+                          {m.apps_scope_group_agent_inbound()}
+                        </p>
+                        <Badge size="sm" color="brand">
+                          {m.agent_app_events_experimental()}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-tertiary">
+                        {m.apps_scope_group_agent_inbound_hint()}
+                      </p>
+                      {APP_AGENT_INBOUND_SCOPES.map((scope) => (
+                        <Checkbox
+                          key={scope}
+                          isSelected={scopes.includes(scope)}
+                          label={<span className="font-mono">{scope}</span>}
+                          hint={APP_SCOPE_DESCRIPTIONS[scope]()}
+                          onChange={(selected) =>
+                            updateScopes(
+                              selected
+                                ? [...scopes, scope]
+                                : scopes.filter((held) => held !== scope),
+                            )
+                          }
+                        />
+                      ))}
+                    </>
+                  )}
+                  {error && (
+                    <p role="alert" className="text-sm text-error-primary">
+                      {error}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          }}
+        </form.AppField>
+      </>
+    );
+  },
+});

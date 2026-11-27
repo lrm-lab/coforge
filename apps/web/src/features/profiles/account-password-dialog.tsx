@@ -1,11 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { XClose as X } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Input } from "#src/components/base/input/input";
+import { setFieldServerError, useAppForm, visibleFieldError } from "#src/components/ui/form";
 import { OptionCard, OptionCardGroup } from "#src/components/ui/option-card";
 import {
   DialogAction,
@@ -23,13 +23,21 @@ import {
   requestAccountPasswordCode,
   setAccountPasswordFn,
 } from "#src/features/auth/account-password.functions";
+import { isNewPassword } from "#src/features/auth/new-password";
 import { CodeInput, SendCodeRow } from "#src/features/auth/send-code-row";
-import { useCodeSending } from "#src/features/auth/use-code-sending";
+import { isSignInCode } from "#src/features/auth/code-destination";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 
-import { BindForm, ProblemLine } from "./account-password-bind-form";
 import {
+  BindForm,
+  CodeSendingBridge,
+  ProblemLine,
+  ReportFormState,
+} from "./account-password-bind-form";
+import {
+  accountPasswordProblemText,
   canSavePassword,
   defaultContact,
   githubBindPath,
@@ -184,98 +192,189 @@ function PasswordForm({
   forceClose: () => void;
 }) {
   const size = useDialogControlSize();
+  const formRef = useRef<HTMLFormElement>(null);
   const requestCode = useServerFn(requestAccountPasswordCode);
   const setPassword = useServerFn(setAccountPasswordFn);
   const toast = useAppToast();
-  const [contact, setContact] = useState(() => defaultContact(contacts));
-  const [code, setCode] = useState("");
-  const [password, setPasswordValue] = useState("");
-  const [problem, setProblem] = useState<AccountPasswordProblem | null>(null);
+  const [formProblem, setFormProblem] = useState<AccountPasswordProblem | null>(null);
   const [saving, guard] = useSubmitGuard();
-  const destination = (contact === "email" ? contacts.email : contacts.phone) ?? "";
-  const codeSending = useCodeSending<AccountPasswordProblem>({
-    destination,
-    request: () => requestCode({ data: { contact } }),
-    setProblem,
+
+  const form = useAppForm({
+    defaultValues: {
+      contact: defaultContact(contacts),
+      code: "",
+      password: "",
+    },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      if (!canSavePassword(value.code, value.password)) return;
+      await guard(async () => {
+        setFormProblem(null);
+        try {
+          const result = await setPassword({
+            data: { contact: value.contact, code: value.code.trim(), password: value.password },
+          });
+          if (!result.ok) {
+            reportProblem(result.problem);
+            return;
+          }
+          if (result.verified) toast.success(m.settings_password_updated());
+          else toast.success(m.settings_password_updated_unverified());
+          forceClose();
+        } catch {
+          setFormProblem("failed");
+        }
+      });
+    },
   });
 
-  useEffect(() => {
-    onStateChange({ busy: saving, dirty: code.trim() !== "" || password !== "" });
-  }, [saving, code, password, onStateChange]);
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canSavePassword(code, password)) return;
-    await guard(async () => {
-      setProblem(null);
-      try {
-        const result = await setPassword({ data: { contact, code: code.trim(), password } });
-        if (!result.ok) return setProblem(result.problem);
-        if (result.verified) toast.success(m.settings_password_updated());
-        else toast.success(m.settings_password_updated_unverified());
-        forceClose();
-      } catch {
-        setProblem("failed");
-      }
-    });
+  function reportProblem(next: AccountPasswordProblem | null) {
+    if (!next) {
+      setFormProblem(null);
+      return;
+    }
+    if (next === "invalid_code" || next === "invalid_input" || next === "refused") {
+      setFormProblem(null);
+      setFieldServerError(form, "code", accountPasswordProblemText(next), formRef.current);
+      return;
+    }
+    if (next === "password_refused") {
+      setFormProblem(null);
+      setFieldServerError(form, "password", accountPasswordProblemText(next), formRef.current);
+      return;
+    }
+    setFormProblem(next);
   }
 
   return (
-    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5 px-6 pt-5 pb-6">
-      {contacts.email && contacts.phone ? (
-        <OptionCardGroup
-          aria-label={m.login_code_label()}
-          value={contact}
-          onChange={(value) => setContact(value === "phone" ? "phone" : "email")}
-          isDisabled={saving}
-        >
-          <OptionCard value="email" label={m.settings_email()} description={contacts.email} />
-          <OptionCard value="phone" label={m.settings_phone()} description={contacts.phone} />
-        </OptionCardGroup>
-      ) : (
-        <p className="min-w-0 text-md wrap-anywhere text-secondary">
-          {m.settings_password_code_goes_to({ destination })}
-        </p>
-      )}
-      <SendCodeRow codeSending={codeSending}>
-        <CodeInput
-          size={size}
-          value={code}
-          onChange={(value) => {
-            setCode(value);
-            setProblem(null);
-          }}
-          isInvalid={problem === "invalid_code" || problem === "invalid_input"}
-        />
-      </SendCodeRow>
-      <Input
-        size={size}
-        label={m.settings_password_new()}
-        placeholder={m.login_reset_password_placeholder()}
-        name="password"
-        type="password"
-        autoComplete="new-password"
-        value={password}
-        onChange={(value) => {
-          setPasswordValue(value);
-          setProblem(null);
+    <form.AppForm>
+      <form
+        ref={formRef}
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
         }}
-        isInvalid={problem === "password_refused"}
-      />
-      {problem ? <ProblemLine problem={problem} /> : null}
-      <DialogActions>
-        <DialogCancel isDisabled={saving} onPress={requestClose}>
-          {m.controls_cancel()}
-        </DialogCancel>
-        <DialogAction
-          type="submit"
-          isDisabled={!canSavePassword(code, password) || saving}
-          isLoading={saving}
-          showTextWhileLoading
+        className="flex flex-col gap-5 px-6 pt-5 pb-6"
+      >
+        <form.Subscribe
+          selector={(state) => state.values.code.trim() !== "" || state.values.password !== ""}
         >
-          {m.settings_password_save()}
-        </DialogAction>
-      </DialogActions>
-    </form>
+          {(dirty) => <ReportFormState busy={saving} dirty={dirty} onStateChange={onStateChange} />}
+        </form.Subscribe>
+        <form.AppField name="contact">
+          {(field) => {
+            const destination =
+              (field.state.value === "email" ? contacts.email : contacts.phone) ?? "";
+            return contacts.email && contacts.phone ? (
+              <OptionCardGroup
+                aria-label={m.login_code_label()}
+                value={field.state.value}
+                onChange={(value) => field.handleChange(value === "phone" ? "phone" : "email")}
+                isDisabled={saving}
+              >
+                <OptionCard value="email" label={m.settings_email()} description={contacts.email} />
+                <OptionCard value="phone" label={m.settings_phone()} description={contacts.phone} />
+              </OptionCardGroup>
+            ) : (
+              <p className="min-w-0 text-md wrap-anywhere text-secondary">
+                {m.settings_password_code_goes_to({ destination })}
+              </p>
+            );
+          }}
+        </form.AppField>
+        <form.Subscribe selector={(state) => state.values.contact}>
+          {(contact) => {
+            const destination = (contact === "email" ? contacts.email : contacts.phone) ?? "";
+            return (
+              <CodeSendingBridge
+                destination={destination}
+                request={() => requestCode({ data: { contact } })}
+                setProblem={reportProblem}
+                renderField={(codeSending) => (
+                  <form.AppField
+                    name="code"
+                    validators={{
+                      onSubmit: ({ value }) =>
+                        isSignInCode(value.trim())
+                          ? undefined
+                          : accountPasswordProblemText("invalid_code"),
+                    }}
+                  >
+                    {(field) => {
+                      const codeError = visibleFieldError(
+                        field.state.meta,
+                        field.form.state.submissionAttempts,
+                      );
+                      return (
+                        <SendCodeRow
+                          codeSending={codeSending}
+                          error={codeError}
+                          errorClassName="text-sm"
+                        >
+                          <CodeInput
+                            size={size}
+                            value={field.state.value}
+                            onChange={(next) => {
+                              if (field.state.meta.errorMap.onSubmit) {
+                                field.setMeta((prev) => ({
+                                  ...prev,
+                                  errorMap: { ...prev.errorMap, onSubmit: undefined },
+                                }));
+                              }
+                              field.handleChange(next);
+                              setFormProblem(null);
+                            }}
+                            isInvalid={Boolean(codeError)}
+                          />
+                        </SendCodeRow>
+                      );
+                    }}
+                  </form.AppField>
+                )}
+              />
+            );
+          }}
+        </form.Subscribe>
+        <form.AppField
+          name="password"
+          validators={{
+            onSubmit: ({ value }) =>
+              isNewPassword(value) ? undefined : m.login_password_invalid(),
+          }}
+        >
+          {(field) => (
+            <field.Input
+              size={size}
+              label={m.settings_password_new()}
+              placeholder={m.login_reset_password_placeholder()}
+              type="password"
+              autoComplete="new-password"
+              onChange={() => setFormProblem(null)}
+            />
+          )}
+        </form.AppField>
+        {formProblem ? <ProblemLine problem={formProblem} /> : null}
+        <DialogActions>
+          <DialogCancel isDisabled={saving} onPress={requestClose}>
+            {m.controls_cancel()}
+          </DialogCancel>
+          <form.Subscribe
+            selector={(state) => canSavePassword(state.values.code, state.values.password)}
+          >
+            {(canSave) => (
+              <DialogAction
+                type="submit"
+                isDisabled={!canSave || saving}
+                isLoading={saving}
+                showTextWhileLoading
+              >
+                {m.settings_password_save()}
+              </DialogAction>
+            )}
+          </form.Subscribe>
+        </DialogActions>
+      </form>
+    </form.AppForm>
   );
 }

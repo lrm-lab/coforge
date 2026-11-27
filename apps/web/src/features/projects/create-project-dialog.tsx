@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType, type SVGProps } from "react";
+import { useStore } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -11,15 +12,15 @@ import {
 } from "#src/components/ui/unsaved-changes-dialog";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
-import { ComboBox } from "#src/components/base/select/combobox";
 import { SelectItem } from "#src/components/base/select/select-item";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import {
   getGitHubConnection,
   listAccessibleGitHubRepositories,
 } from "#src/features/integrations/github.functions";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { nameToSlug } from "#src/lib/slug";
 import { m } from "#src/paraglide/messages";
 import { parseGitHubRepositoryInput } from "./github-repository-input";
@@ -50,12 +51,8 @@ export function CreateProjectDialog({
   const create = useServerFn(createProject);
   const [step, setStep] = useState<"choose" | "form">("choose");
   const [source, setSource] = useState<Source>("scratch");
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [repositoryQuery, setRepositoryQuery] = useState("");
   const [repositoryId, setRepositoryId] = useState(0);
   const [submitError, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const slugTouched = useRef(false);
   const nameTouched = useRef(false);
@@ -76,6 +73,71 @@ export function CreateProjectDialog({
     retry: false,
   });
   const items = repositoriesQuery.data ?? [];
+  const needsRepository = source === "github";
+
+  const form = useAppForm({
+    defaultValues: { name: "", slug: "", repository: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const repo = items.find((item) => item.id === repositoryId);
+      const parsed = parseGitHubRepositoryInput(value.repository);
+      const publicName = parsed?.fullName;
+      if (needsRepository && !repo && !publicName) {
+        setFieldServerError(
+          form,
+          "repository",
+          connection && !githubConnected
+            ? m.project_repository_not_connected()
+            : m.project_create_error(),
+          formRef.current,
+        );
+        return;
+      }
+      setError("");
+      try {
+        await create({
+          data: repo
+            ? {
+                name: value.name,
+                slug: value.slug,
+                installationId: repo.installationId,
+                repositoryId: repo.id,
+                fullName: repo.fullName,
+              }
+            : publicName
+              ? { name: value.name, slug: value.slug, fullName: publicName }
+              : { name: value.name, slug: value.slug },
+        });
+        await onCreated({ slug: value.slug });
+        onOpenChange(false);
+      } catch (cause) {
+        if (isAppErrorCode(cause, "CONFLICT")) {
+          setFieldServerError(form, "slug", m.project_slug_taken(), formRef.current);
+        } else if (isAppErrorCode(cause, "ACCESS_DENIED") && needsRepository) {
+          setFieldServerError(
+            form,
+            "repository",
+            m.project_repository_needs_access(),
+            formRef.current,
+          );
+        } else {
+          setError(
+            isAppErrorCode(cause, "ACCESS_DENIED")
+              ? m.project_repository_needs_access()
+              : m.project_create_error(),
+          );
+        }
+      }
+    },
+  });
+
+  const { name, slug, repositoryQuery, busy } = useStore(form.store, (state) => ({
+    name: state.values.name,
+    slug: state.values.slug,
+    repositoryQuery: state.values.repository,
+    busy: state.isSubmitting,
+  }));
+
   const error =
     submitError ||
     (githubFormActive && (connectionQuery.isError || repositoriesQuery.isError)
@@ -83,7 +145,6 @@ export function CreateProjectDialog({
       : "");
 
   const slugError = slug.length > 0 && !isValidProjectSlug(slug) ? m.project_slug_invalid() : "";
-  const needsRepository = source === "github";
   const selectedRepository = items.find((item) => item.id === repositoryId);
   const parsedRepository = parseGitHubRepositoryInput(repositoryQuery);
   const canSubmit =
@@ -97,20 +158,23 @@ export function CreateProjectDialog({
     setStep("choose");
     setSource("scratch");
     setError("");
-    setName("");
-    setSlug("");
-    setRepositoryQuery("");
+    form.reset({ name: "", slug: "", repository: "" });
     setRepositoryId(0);
-    setBusy(false);
     nameTouched.current = false;
     slugTouched.current = false;
-  }, [open]);
+  }, [form, open]);
+
+  function clearFieldSubmitError(field: "slug" | "repository") {
+    form.setFieldMeta(field, (prev) =>
+      prev.errorMap.onSubmit
+        ? { ...prev, errorMap: { ...prev.errorMap, onSubmit: undefined } }
+        : prev,
+    );
+  }
 
   function resetForm() {
     setError("");
-    setName("");
-    setSlug("");
-    setRepositoryQuery("");
+    form.reset({ name: "", slug: "", repository: "" });
     setRepositoryId(0);
     nameTouched.current = false;
     slugTouched.current = false;
@@ -123,30 +187,36 @@ export function CreateProjectDialog({
   }
 
   function changeName(value: string) {
-    setName(value);
+    setError("");
     nameTouched.current = true;
-    if (!slugTouched.current) setSlug(nameToSlug(value, PROJECT_SLUG_MAX_LENGTH));
+    if (!slugTouched.current) {
+      form.setFieldValue("slug", nameToSlug(value, PROJECT_SLUG_MAX_LENGTH));
+      clearFieldSubmitError("slug");
+    }
   }
 
   function changeSlug(value: string) {
+    setError("");
     if (value.length === 0) {
       slugTouched.current = false;
-      setSlug(nameToSlug(name, PROJECT_SLUG_MAX_LENGTH));
+      form.setFieldValue("slug", nameToSlug(form.getFieldValue("name"), PROJECT_SLUG_MAX_LENGTH));
       return;
     }
     slugTouched.current = true;
-    setSlug(value);
   }
 
   function applyRepositoryName(fullName: string) {
     if (nameTouched.current) return;
     const shortName = fullName.split("/").pop() || fullName;
-    setName(shortName);
-    if (!slugTouched.current) setSlug(nameToSlug(shortName, PROJECT_SLUG_MAX_LENGTH));
+    form.setFieldValue("name", shortName);
+    if (!slugTouched.current) {
+      form.setFieldValue("slug", nameToSlug(shortName, PROJECT_SLUG_MAX_LENGTH));
+      clearFieldSubmitError("slug");
+    }
   }
 
   function applyRepositoryQuery(value: string) {
-    setRepositoryQuery(value);
+    setError("");
     const parsed = parseGitHubRepositoryInput(value);
     const match = parsed
       ? items.find((item) => item.fullName.toLowerCase() === parsed.fullName.toLowerCase())
@@ -156,60 +226,16 @@ export function CreateProjectDialog({
   }
 
   function selectRepository(id: number) {
+    setError("");
+    clearFieldSubmitError("repository");
     const repo = items.find((item) => item.id === id);
     if (!repo) {
       setRepositoryId(0);
       return;
     }
     setRepositoryId(repo.id);
-    setRepositoryQuery(repo.fullName);
+    form.setFieldValue("repository", repo.fullName);
     applyRepositoryName(repo.fullName);
-  }
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!canSubmit) {
-      if (needsRepository && !selectedRepository && !parsedRepository) {
-        setError(
-          connection && !githubConnected
-            ? m.project_repository_not_connected()
-            : m.project_create_error(),
-        );
-      }
-      return;
-    }
-    const repo = selectedRepository;
-    const publicName = parsedRepository?.fullName;
-    if (needsRepository && !repo && !publicName) return;
-    setBusy(true);
-    setError("");
-    try {
-      await create({
-        data: repo
-          ? {
-              name,
-              slug,
-              installationId: repo.installationId,
-              repositoryId: repo.id,
-              fullName: repo.fullName,
-            }
-          : publicName
-            ? { name, slug, fullName: publicName }
-            : { name, slug },
-      });
-      await onCreated({ slug });
-      onOpenChange(false);
-    } catch (cause) {
-      setError(
-        isAppErrorCode(cause, "CONFLICT")
-          ? m.project_slug_taken()
-          : isAppErrorCode(cause, "ACCESS_DENIED")
-            ? m.project_repository_needs_access()
-            : m.project_create_error(),
-      );
-    } finally {
-      setBusy(false);
-    }
   }
 
   const repositoryHint =
@@ -284,113 +310,149 @@ export function CreateProjectDialog({
                     </DialogActions>
                   </>
                 ) : (
-                  <form ref={formRef} onSubmit={submit}>
-                    <div className="grid gap-4 px-6 py-6 max-sm:px-4 max-sm:pt-2">
-                      <Input
-                        size={controlSize}
-                        label={m.project_name()}
-                        isRequired
-                        maxLength={100}
-                        value={name}
-                        onChange={changeName}
-                      />
-                      <div className="grid gap-1.5">
-                        <Input
-                          size={controlSize}
-                          label={m.project_slug()}
-                          isRequired
-                          pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                          maxLength={PROJECT_SLUG_MAX_LENGTH}
-                          value={slug}
-                          onChange={changeSlug}
-                          isInvalid={Boolean(slugError)}
-                        />
-                        {slugError && (
-                          <p role="alert" className="text-sm text-error-primary">
-                            {slugError}
-                          </p>
+                  <form.AppForm>
+                    <form
+                      ref={formRef}
+                      noValidate
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void form.handleSubmit();
+                      }}
+                    >
+                      <div className="grid gap-4 px-6 py-6 max-sm:px-4 max-sm:pt-2">
+                        <form.AppField
+                          name="name"
+                          validators={{
+                            onSubmit: ({ value }) =>
+                              value.trim().length > 0 ? undefined : m.project_create_error(),
+                          }}
+                        >
+                          {(field) => (
+                            <field.Input
+                              size={controlSize}
+                              label={m.project_name()}
+                              isRequired
+                              maxLength={100}
+                              onChange={changeName}
+                            />
+                          )}
+                        </form.AppField>
+                        <form.AppField
+                          name="slug"
+                          validators={{
+                            onChange: ({ value }) =>
+                              value.length > 0 && !isValidProjectSlug(value)
+                                ? m.project_slug_invalid()
+                                : undefined,
+                            onSubmit: ({ value }) =>
+                              value.trim().length > 0 && isValidProjectSlug(value)
+                                ? undefined
+                                : m.project_slug_invalid(),
+                          }}
+                        >
+                          {(field) => (
+                            <field.Input
+                              size={controlSize}
+                              label={m.project_slug()}
+                              isRequired
+                              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                              maxLength={PROJECT_SLUG_MAX_LENGTH}
+                              onChange={changeSlug}
+                            />
+                          )}
+                        </form.AppField>
+                        {needsRepository && (
+                          <>
+                            <form.AppField
+                              name="repository"
+                              validators={{
+                                onSubmit: ({ value }) => {
+                                  const repo = items.find((item) => item.id === repositoryId);
+                                  const parsed = parseGitHubRepositoryInput(value);
+                                  if (repo || parsed) return undefined;
+                                  return connection && !githubConnected
+                                    ? m.project_repository_not_connected()
+                                    : m.project_create_error();
+                                },
+                              }}
+                            >
+                              {(field) => (
+                                <field.ComboBox
+                                  size={controlSize}
+                                  label={m.project_repository()}
+                                  placeholder={m.project_repository_url_placeholder()}
+                                  shortcut={false}
+                                  allowsCustomValue
+                                  items={items.map((item) => ({
+                                    id: String(item.id),
+                                    label: item.fullName,
+                                  }))}
+                                  selectedKey={repositoryId ? String(repositoryId) : null}
+                                  onInputChange={applyRepositoryQuery}
+                                  onSelectionChange={(key) => {
+                                    if (key) selectRepository(Number(key));
+                                  }}
+                                >
+                                  {(item) => <SelectItem id={item.id} label={item.label} />}
+                                </field.ComboBox>
+                              )}
+                            </form.AppField>
+                            <p className="text-sm text-tertiary">
+                              {repositoryHint ? `${repositoryHint} ` : null}
+                              {githubConnected ? (
+                                <>
+                                  {m.github_repository_missing()}{" "}
+                                  {connection.installUrl ? (
+                                    <a
+                                      href={connection.installUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 font-medium text-secondary underline underline-offset-4 hover:text-primary"
+                                    >
+                                      {m.github_manage_repository_access()}
+                                      <Share04 aria-hidden="true" className="size-4" />
+                                    </a>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 font-medium text-secondary">
+                                      {m.github_manage_repository_access()}
+                                      <Share04 aria-hidden="true" className="size-4" />
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <Link
+                                  to="/w/$workspaceSlug/settings"
+                                  params={{ workspaceSlug }}
+                                  search={{ section: "integrations" }}
+                                  className="font-medium text-brand-secondary underline underline-offset-4 hover:text-primary"
+                                >
+                                  {m.github_connect()}
+                                </Link>
+                              )}
+                            </p>
+                          </>
                         )}
+                        <form.Alert error={error} />
                       </div>
-                      {needsRepository && (
-                        <>
-                          <ComboBox
-                            size={controlSize}
-                            label={m.project_repository()}
-                            placeholder={m.project_repository_url_placeholder()}
-                            shortcut={false}
-                            allowsCustomValue
-                            items={items.map((item) => ({
-                              id: String(item.id),
-                              label: item.fullName,
-                            }))}
-                            selectedKey={repositoryId ? String(repositoryId) : null}
-                            inputValue={repositoryQuery}
-                            onInputChange={applyRepositoryQuery}
-                            onSelectionChange={(key) => {
-                              if (key) selectRepository(Number(key));
-                            }}
-                          >
-                            {(item) => <SelectItem id={item.id} label={item.label} />}
-                          </ComboBox>
-                          <p className="text-sm text-tertiary">
-                            {repositoryHint ? `${repositoryHint} ` : null}
-                            {githubConnected ? (
-                              <>
-                                {m.github_repository_missing()}{" "}
-                                {connection.installUrl ? (
-                                  <a
-                                    href={connection.installUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 font-medium text-secondary underline underline-offset-4 hover:text-primary"
-                                  >
-                                    {m.github_manage_repository_access()}
-                                    <Share04 aria-hidden="true" className="size-4" />
-                                  </a>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 font-medium text-secondary">
-                                    {m.github_manage_repository_access()}
-                                    <Share04 aria-hidden="true" className="size-4" />
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              <Link
-                                to="/w/$workspaceSlug/settings"
-                                params={{ workspaceSlug }}
-                                search={{ section: "integrations" }}
-                                className="font-medium text-brand-secondary underline underline-offset-4 hover:text-primary"
-                              >
-                                {m.github_connect()}
-                              </Link>
-                            )}
-                          </p>
-                        </>
-                      )}
-                      {error && (
-                        <p role="alert" className="text-sm text-error-primary">
-                          {error}
-                        </p>
-                      )}
-                    </div>
-                    <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
-                      <DialogCancel
-                        type="button"
-                        onPress={() => setStep("choose")}
-                        isDisabled={busy}
-                      >
-                        {m.controls_back()}
-                      </DialogCancel>
-                      <DialogAction
-                        type="submit"
-                        isDisabled={!canSubmit}
-                        isLoading={busy}
-                        showTextWhileLoading
-                      >
-                        {m.project_create()}
-                      </DialogAction>
-                    </DialogActions>
-                  </form>
+                      <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
+                        <DialogCancel
+                          type="button"
+                          onPress={() => setStep("choose")}
+                          isDisabled={busy}
+                        >
+                          {m.controls_back()}
+                        </DialogCancel>
+                        <DialogAction
+                          type="submit"
+                          isDisabled={!canSubmit}
+                          isLoading={busy}
+                          showTextWhileLoading
+                        >
+                          {m.project_create()}
+                        </DialogAction>
+                      </DialogActions>
+                    </form>
+                  </form.AppForm>
                 )}
               </>
             )}

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { XClose as X } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Input } from "#src/components/base/input/input";
+import { useAppForm } from "#src/components/ui/form";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import {
   DialogAction,
@@ -13,6 +13,7 @@ import {
 } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 
 export function AgentDeleteDialog({
@@ -27,29 +28,33 @@ export function AgentDeleteDialog({
   onDelete: (confirmation: string) => Promise<void>;
 }) {
   const controlSize = useDialogControlSize();
-  const [confirmation, setConfirmation] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState("");
   const [bodyScrolled, setBodyScrolled] = useState(false);
   const [deleting, guard] = useSubmitGuard();
-  const confirmed = confirmation.trim() === agentName;
 
-  function submit() {
-    if (!confirmed || deleting) return;
-    setError("");
-    void guard(async () => {
-      try {
-        await onDelete(confirmation.trim());
-      } catch (cause) {
-        setError(
-          isAppErrorCode(cause, "ACCESS_DENIED")
-            ? m.agent_delete_access_denied()
-            : isAppError(cause) && cause.errorId === "agent-delete-protected"
-              ? m.agent_delete_protected()
-              : m.agent_delete_error(),
-        );
-      }
-    });
-  }
+  const form = useAppForm({
+    defaultValues: { confirmation: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current, "confirmation"),
+    onSubmit: async ({ value }) => {
+      const trimmed = value.confirmation.trim();
+      if (trimmed !== agentName || deleting) return;
+      setError("");
+      await guard(async () => {
+        try {
+          await onDelete(trimmed);
+        } catch (cause) {
+          setError(
+            isAppErrorCode(cause, "ACCESS_DENIED")
+              ? m.agent_delete_access_denied()
+              : isAppError(cause) && cause.errorId === "agent-delete-protected"
+                ? m.agent_delete_protected()
+                : m.agent_delete_error(),
+          );
+        }
+      });
+    },
+  });
 
   return (
     <ModalOverlay
@@ -57,7 +62,7 @@ export function AgentDeleteDialog({
       isOpen={open}
       onOpenChange={(nextOpen: boolean) => {
         if (deleting) return;
-        if (!nextOpen) setConfirmation("");
+        if (!nextOpen) form.reset();
         setError("");
         onOpenChange(nextOpen);
       }}
@@ -65,12 +70,13 @@ export function AgentDeleteDialog({
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
         <Dialog className="flex flex-col text-left" data-agent-delete-dialog>
           {({ close }) => (
-            <>
+            <form.AppForm>
               <form
+                ref={formRef}
                 className="contents"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  submit();
+                  void form.handleSubmit();
                 }}
               >
                 <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
@@ -103,39 +109,43 @@ export function AgentDeleteDialog({
                       text={m.agent_delete_confirm({ name: agentName })}
                       name={agentName}
                     />
-                    <Input
-                      size={controlSize}
-                      autoFocus
-                      value={confirmation}
-                      onChange={setConfirmation}
-                      placeholder={m.agent_delete_placeholder()}
-                      isDisabled={deleting}
-                      aria-label={m.agent_delete_confirm({ name: agentName })}
-                    />
+                    <form.AppField name="confirmation">
+                      {(field) => (
+                        <field.Input
+                          size={controlSize}
+                          autoFocus
+                          placeholder={m.agent_delete_placeholder()}
+                          isDisabled={deleting}
+                          aria-label={m.agent_delete_confirm({ name: agentName })}
+                        />
+                      )}
+                    </form.AppField>
                   </label>
-                  {error && (
-                    <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                      {error}
-                    </p>
-                  )}
+                  <form.Alert error={error} className="px-6 pt-4 text-sm text-error-primary" />
                 </div>
                 <DialogActions className="shrink-0 px-6 pt-4 pb-6">
                   <DialogCancel isDisabled={deleting} onPress={close}>
                     {m.controls_cancel()}
                   </DialogCancel>
-                  <DialogAction
-                    color="secondary-destructive"
-                    data-agent-delete-confirm
-                    isDisabled={!confirmed || deleting}
-                    isLoading={deleting}
-                    showTextWhileLoading
-                    type="submit"
+                  <form.Subscribe
+                    selector={(state) => state.values.confirmation.trim() === agentName}
                   >
-                    {deleting ? m.agent_delete_pending() : m.agent_delete_submit()}
-                  </DialogAction>
+                    {(confirmed) => (
+                      <DialogAction
+                        color="secondary-destructive"
+                        data-agent-delete-confirm
+                        isDisabled={!confirmed || deleting}
+                        isLoading={deleting}
+                        showTextWhileLoading
+                        type="submit"
+                      >
+                        {deleting ? m.agent_delete_pending() : m.agent_delete_submit()}
+                      </DialogAction>
+                    )}
+                  </form.Subscribe>
                 </DialogActions>
               </form>
-            </>
+            </form.AppForm>
           )}
         </Dialog>
       </Modal>

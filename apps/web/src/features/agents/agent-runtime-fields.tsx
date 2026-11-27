@@ -13,6 +13,7 @@ import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { useCodexCompatibleSupport } from "#src/features/computers/use-codex-compatible-support";
+import { fieldHint } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { AgentCodexCompatibleFields } from "./agent-codex-compatible-fields";
 import {
@@ -66,8 +67,13 @@ export function AgentRuntimeFields({
   initial,
   credentialConfigured = false,
   enforceRequiredModel = false,
+  providerError,
+  modelProviderError,
   modelError,
+  baseUrlError,
+  apiKeyError,
   onModelErrorClear,
+  onFieldErrorClear,
   onLoad,
   initialOptions,
   onDirtyChange,
@@ -78,8 +84,15 @@ export function AgentRuntimeFields({
   initial?: RuntimeSelection;
   credentialConfigured?: boolean;
   enforceRequiredModel?: boolean;
+  providerError?: string;
+  modelProviderError?: string;
   modelError?: string;
+  baseUrlError?: string;
+  apiKeyError?: string;
   onModelErrorClear?: () => void;
+  onFieldErrorClear?: (
+    field: "provider" | "modelProvider" | "model" | "baseUrl" | "apiKey",
+  ) => void;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
   initialOptions?: RuntimeOptions;
   onDirtyChange?: (dirty: boolean) => void;
@@ -320,6 +333,7 @@ export function AgentRuntimeFields({
         provider={provider}
         providers={providers}
         unusable={options?.unusable}
+        error={providerError}
         className="min-w-0"
         onChange={(key) => {
           setProvider(parseRuntimeProvider(key) ?? RUNTIME_PROVIDER.COFORGE);
@@ -327,6 +341,11 @@ export function AgentRuntimeFields({
           setPiProviderChoice("");
           resetModelFields();
           onModelErrorClear?.();
+          onFieldErrorClear?.("provider");
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("model");
+          onFieldErrorClear?.("baseUrl");
+          onFieldErrorClear?.("apiKey");
         }}
       />
       {providerNotice?.({
@@ -337,6 +356,10 @@ export function AgentRuntimeFields({
           setModelProvider(CODEX_COMPATIBLE_MODEL_PROVIDER);
           resetModelFields();
           onModelErrorClear?.();
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("model");
+          onFieldErrorClear?.("baseUrl");
+          onFieldErrorClear?.("apiKey");
         },
       })}
       {failed ? (
@@ -345,50 +368,61 @@ export function AgentRuntimeFields({
           name="modelProvider"
           size={controlSize}
           isRequired={provider === RUNTIME_PROVIDER.COFORGE}
+          isInvalid={Boolean(modelProviderError)}
+          hint={fieldHint(modelProviderError)}
           maxLength={100}
           defaultValue={modelProvider}
           onChange={() => {
             setApiKey("");
             setManualDirty(true);
+            onFieldErrorClear?.("modelProvider");
+            onFieldErrorClear?.("apiKey");
           }}
         />
       ) : (
         <input type="hidden" name="modelProvider" value={submittedModelProvider} />
       )}
       {!failed && !RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider] && (
-        <Select
-          label={m.agent_form_model_provider()}
-          size={controlSize}
-          className="min-w-0"
-          isDisabled={!options}
-          selectedKey={isPi ? piProviderChoice : modelProvider}
-          onSelectionChange={(key) => {
-            if (key === null) return;
-            const value = String(key);
-            if (isPi) setPiProviderChoice(value);
-            else setModelProvider(value);
-            resetModelFields();
-          }}
-        >
-          {isPi ? (
-            <>
-              <Select.Item id="" label={m.agent_form_pi_provider_configured()} />
-              {PI_BUILTIN_MODEL_PROVIDERS.map((value) => (
-                <Select.Item key={value} id={value} label={modelProviderDisplayName(value)} />
-              ))}
-              {piExtraProvider && (
-                <Select.Item key={piExtraProvider} id={piExtraProvider} label={piExtraProvider} />
-              )}
-            </>
-          ) : (
-            <>
-              <Select.Item id="" label={m.agent_form_provider_default()} />
-              {modelProviders.map((value) => (
-                <Select.Item key={value} id={value} label={value} />
-              ))}
-            </>
-          )}
-        </Select>
+        <div data-field="modelProvider" className="min-w-0">
+          <Select
+            label={m.agent_form_model_provider()}
+            size={controlSize}
+            className="min-w-0"
+            isDisabled={!options}
+            isInvalid={Boolean(modelProviderError)}
+            hint={modelProviderError}
+            selectedKey={isPi ? piProviderChoice : modelProvider}
+            onSelectionChange={(key) => {
+              if (key === null) return;
+              const value = String(key);
+              if (isPi) setPiProviderChoice(value);
+              else setModelProvider(value);
+              resetModelFields();
+              onFieldErrorClear?.("modelProvider");
+              onFieldErrorClear?.("model");
+              onFieldErrorClear?.("apiKey");
+            }}
+          >
+            {isPi ? (
+              <>
+                <Select.Item id="" label={m.agent_form_pi_provider_configured()} />
+                {PI_BUILTIN_MODEL_PROVIDERS.map((value) => (
+                  <Select.Item key={value} id={value} label={modelProviderDisplayName(value)} />
+                ))}
+                {piExtraProvider && (
+                  <Select.Item key={piExtraProvider} id={piExtraProvider} label={piExtraProvider} />
+                )}
+              </>
+            ) : (
+              <>
+                <Select.Item id="" label={m.agent_form_provider_default()} />
+                {modelProviders.map((value) => (
+                  <Select.Item key={value} id={value} label={value} />
+                ))}
+              </>
+            )}
+          </Select>
+        </div>
       )}
       {showCodexCompatibleSection && (
         <AgentCodexCompatibleFields
@@ -398,20 +432,33 @@ export function AgentRuntimeFields({
           model={codexModel}
           modelError={modelError}
           baseUrl={baseUrl}
+          baseUrlError={baseUrlError}
           apiKey={apiKey}
+          apiKeyError={apiKeyError}
           canKeepKey={codexCompatibleCanKeepKey(initial, baseUrl)}
           originChanged={codexCompatibleOriginChanged(initial, baseUrl)}
           onModeChange={(next) => {
             setModelProvider(next);
             resetModelFields();
             onModelErrorClear?.();
+            onFieldErrorClear?.("modelProvider");
+            onFieldErrorClear?.("model");
+            onFieldErrorClear?.("baseUrl");
+            onFieldErrorClear?.("apiKey");
           }}
           onModelChange={(value) => {
             setCodexModel(value);
             onModelErrorClear?.();
+            onFieldErrorClear?.("model");
           }}
-          onBaseUrlChange={setBaseUrl}
-          onApiKeyChange={setApiKey}
+          onBaseUrlChange={(value) => {
+            setBaseUrl(value);
+            onFieldErrorClear?.("baseUrl");
+          }}
+          onApiKeyChange={(value) => {
+            setApiKey(value);
+            onFieldErrorClear?.("apiKey");
+          }}
         />
       )}
       {failed ? (
@@ -422,19 +469,20 @@ export function AgentRuntimeFields({
           isRequired
           validationBehavior={modelRequired ? "aria" : undefined}
           isInvalid={Boolean(modelError)}
-          hint={modelError || undefined}
+          hint={fieldHint(modelError)}
           maxLength={200}
           defaultValue={initial?.model}
           className="min-w-0"
           onChange={() => {
             setManualDirty(true);
             onModelErrorClear?.();
+            onFieldErrorClear?.("model");
           }}
         />
       ) : !isCodexCompatible ? (
         <>
           <input type="hidden" name="model" value={modelValue} />
-          <div className="relative min-w-0">
+          <div data-field="model" className="relative min-w-0">
             <ModelComboBox
               label={m.agent_form_model()}
               className="min-w-0"
@@ -442,7 +490,7 @@ export function AgentRuntimeFields({
               isDisabled={!options}
               isRequired={modelRequired}
               isInvalid={Boolean(modelError)}
-              hint={modelError || undefined}
+              hint={modelError}
               refresh={{
                 run: () => void catalogRefresh.refresh(),
                 busy: catalogRefresh.busy,
@@ -453,6 +501,7 @@ export function AgentRuntimeFields({
               selectedKey={piConfigured && customModelActive ? CUSTOM_MODEL_KEY : modelKey}
               onSelectionChange={(value) => {
                 onModelErrorClear?.();
+                onFieldErrorClear?.("model");
                 if (piConfigured && value === CUSTOM_MODEL_KEY) {
                   setCustomModelActive(true);
                   setModelKey("");
@@ -490,7 +539,7 @@ export function AgentRuntimeFields({
           isRequired
           validate={(value) => (splitCustomModel(value) ? null : m.agent_form_model_custom_error())}
           isInvalid={customInvalid}
-          hint={customInvalid ? m.agent_form_model_custom_error() : undefined}
+          hint={fieldHint(customInvalid ? m.agent_form_model_custom_error() : undefined)}
         />
       )}
       {showApiKeyField && (
@@ -499,8 +548,10 @@ export function AgentRuntimeFields({
           provider={provider}
           apiKeyProviderId={apiKeyProviderId}
           apiKey={apiKey}
+          apiKeyError={apiKeyError}
           matchingConfiguredCredential={matchingConfiguredCredential}
           onChange={setApiKey}
+          onErrorClear={() => onFieldErrorClear?.("apiKey")}
         />
       )}
       {failed && (

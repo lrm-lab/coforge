@@ -3,6 +3,7 @@ import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/interna
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
+import { fieldHint } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 
 export function AgentRuntimeApiKeyField({
@@ -10,15 +11,19 @@ export function AgentRuntimeApiKeyField({
   provider,
   apiKeyProviderId,
   apiKey,
+  apiKeyError,
   matchingConfiguredCredential,
   onChange,
+  onErrorClear,
 }: {
   controlSize: ReturnType<typeof useDialogControlSize>;
   provider: RuntimeProvider;
   apiKeyProviderId: string;
   apiKey: string;
+  apiKeyError?: string;
   matchingConfiguredCredential: boolean;
   onChange: (value: string) => void;
+  onErrorClear?: () => void;
 }) {
   return (
     <Input
@@ -28,19 +33,24 @@ export function AgentRuntimeApiKeyField({
       name="apiKey"
       type="password"
       value={apiKey}
-      onChange={onChange}
+      onChange={(value) => {
+        onChange(value);
+        onErrorClear?.();
+      }}
       isRequired={!matchingConfiguredCredential}
+      isInvalid={Boolean(apiKeyError)}
       minLength={8}
       maxLength={4096}
       autoComplete="new-password"
       placeholder={m.agent_runtime_api_key_placeholder({ provider: apiKeyProviderId })}
-      hint={
+      hint={fieldHint(
+        apiKeyError,
         matchingConfiguredCredential
           ? m.agent_form_api_key_preserve_help()
           : provider === RUNTIME_PROVIDER.PI
             ? m.agent_form_pi_api_key_help()
-            : m.agent_form_coforge_api_key_help()
-      }
+            : m.agent_form_coforge_api_key_help(),
+      )}
     />
   );
 }

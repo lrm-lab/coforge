@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Copy01 } from "@untitledui/icons";
 
@@ -6,7 +6,10 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
+import { setFieldServerError, useAppForm, visibleFieldError } from "#src/components/ui/form";
+import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { copyText } from "#src/lib/clipboard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { submitRuntimeAuthCode } from "./runtime-auth.functions";
 import { loginReducer, safeSignInUrl } from "./runtime-auth-login-state";
@@ -65,67 +68,100 @@ export function CodeForm({
 }) {
   const submit = useServerFn(submitRuntimeAuthCode);
   const controlSize = useDialogControlSize();
-  const [code, setCode] = useState("");
-  const [invalid, setInvalid] = useState(false);
-  const [sending, setSending] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [sending, guard] = useSubmitGuard();
   const hintId = useId();
-  const error = invalid
-    ? m.runtime_auth_code_invalid()
-    : rejected
-      ? m.runtime_auth_code_rejected()
-      : undefined;
+
+  const form = useAppForm({
+    defaultValues: { code: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current, "code"),
+    onSubmit: async ({ value }) => {
+      if (!value.code.trim()) return;
+      await guard(async () => {
+        try {
+          const outcome = await submit({ data: { computerId, loginId, code: value.code } });
+          if (outcome === "sent") {
+            form.reset();
+            dispatch({ type: "code_sent" });
+          } else if (outcome === "invalid_code") {
+            setFieldServerError(form, "code", m.runtime_auth_code_invalid(), formRef.current);
+            dispatch({ type: "code_invalid" });
+          } else {
+            dispatch({ type: "ended" });
+          }
+        } catch {
+          setFieldServerError(form, "code", m.runtime_auth_code_invalid(), formRef.current);
+        }
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (rejected) {
+      setFieldServerError(form, "code", m.runtime_auth_code_rejected(), formRef.current);
+    }
+  }, [rejected, form]);
+
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (sending || !code.trim()) return;
-        setSending(true);
-        setInvalid(false);
-        void submit({ data: { computerId, loginId, code } })
-          .then((outcome) => {
-            if (outcome === "sent") {
-              setCode("");
-              dispatch({ type: "code_sent" });
-            } else if (outcome === "invalid_code") {
-              setInvalid(true);
-              dispatch({ type: "code_invalid" });
-            } else dispatch({ type: "ended" });
-          })
-          .catch(() => setInvalid(true))
-          .finally(() => setSending(false));
-      }}
-    >
-      {/* As on Raft: Submit sits beside the field, and the line under it says where the code
-          comes from until it has to say what is wrong. */}
-      <div className="flex items-end gap-2">
-        <Input
-          className="min-w-0 flex-1"
-          size={controlSize}
-          label={m.runtime_auth_paste_label()}
-          aria-describedby={hintId}
-          isInvalid={Boolean(error)}
-          value={code}
-          onChange={setCode}
-          autoComplete="off"
-          spellCheck="false"
-        />
-        <Button
-          type="submit"
-          size={controlSize}
-          color="secondary"
-          isLoading={sending}
-          isDisabled={!code.trim()}
-        >
-          {m.runtime_auth_submit()}
-        </Button>
-      </div>
-      <p
-        id={hintId}
-        role={error ? "alert" : undefined}
-        className={error ? "mt-1.5 text-xs text-error-primary" : "mt-1.5 text-xs text-tertiary"}
+    <form.AppForm>
+      <form
+        ref={formRef}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
       >
-        {error ?? m.runtime_auth_paste_hint()}
-      </p>
-    </form>
+        <form.AppField name="code">
+          {(field) => {
+            const error = visibleFieldError(field.state.meta, field.form.state.submissionAttempts);
+            return (
+              <>
+                <div className="flex items-end gap-2">
+                  <Input
+                    name={field.name}
+                    className="min-w-0 flex-1"
+                    size={controlSize}
+                    label={m.runtime_auth_paste_label()}
+                    aria-describedby={hintId}
+                    isInvalid={Boolean(error)}
+                    value={field.state.value}
+                    onChange={(next) => {
+                      if (field.state.meta.errorMap.onSubmit) {
+                        field.setMeta((prev) => ({
+                          ...prev,
+                          errorMap: { ...prev.errorMap, onSubmit: undefined },
+                        }));
+                      }
+                      field.handleChange(next);
+                    }}
+                    onBlur={field.handleBlur}
+                    autoComplete="off"
+                    spellCheck="false"
+                  />
+                  <Button
+                    type="submit"
+                    size={controlSize}
+                    color="secondary"
+                    isLoading={sending}
+                    isDisabled={!field.state.value.trim()}
+                  >
+                    {m.runtime_auth_submit()}
+                  </Button>
+                </div>
+                <p
+                  id={hintId}
+                  role={error ? "alert" : undefined}
+                  className={
+                    error ? "mt-1.5 text-xs text-error-primary" : "mt-1.5 text-xs text-tertiary"
+                  }
+                >
+                  {error ?? m.runtime_auth_paste_hint()}
+                </p>
+              </>
+            );
+          }}
+        </form.AppField>
+      </form>
+    </form.AppForm>
   );
 }

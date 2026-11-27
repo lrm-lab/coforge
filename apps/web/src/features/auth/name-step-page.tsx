@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { RadioGroup } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
 import { Label } from "#src/components/base/input/label";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { AuthSplitLayout } from "#src/features/auth/auth-split-layout";
 import { AvatarChoice } from "#src/features/avatars/avatar-choice";
 import { checkWorkspaceSlug, submitDisplayName } from "#src/features/auth/first-sign-in.functions";
@@ -28,17 +28,18 @@ import {
   isValidWorkspaceSlug,
   nameToWorkspaceSlug,
 } from "#src/features/workspaces/workspace-slug";
+import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 type SlugProblem = "slug_invalid" | "slug_taken";
 type Problem = PersonNameProblem | "save_failed" | SlugProblem;
 
-const problemText: Record<Exclude<Problem, SlugProblem>, () => string> = {
+const nameProblemText: Record<PersonNameProblem, () => string> = {
   empty: () => m.welcome_error_empty(),
   too_long: () => m.welcome_error_too_long({ max: PERSON_NAME_MAX_LENGTH }),
   refused: () => m.welcome_error_refused(),
-  save_failed: () => m.welcome_error_save_failed(),
 };
 
 const slugProblemText: Record<SlugProblem, () => string> = {
@@ -50,70 +51,33 @@ function isSlugProblem(problem: Problem): problem is SlugProblem {
   return problem === "slug_invalid" || problem === "slug_taken";
 }
 
-/** How long the URL must stand still before its availability is asked for. */
 const SLUG_CHECK_DELAY_MS = 400;
 
-/** The `/w/` a Workspace slug follows in every URL, in the URL field's leading icon slot. */
 function SlugPrefix({ className }: { className?: string }) {
   return (
     <span className={cn(className, "flex items-center justify-center font-mono text-md")}>/w/</span>
   );
 }
 
-/**
- * Where a signed-in person who has not been asked for a display name lands once, before anything is
- * created for them. Continuing saves the name, makes their personal Workspace, titled with it, and
- * goes on to `returnTo`, or, with none, to the new Workspace's "Connect GitHub" step. The person
- * also picks their face from the cartoon people, starting from the one they would be given. Arriving from
- * a working invite link (`invite` is "active", as the server confirmed) asks for the name alone:
- * nothing else is made, and the person goes on to the join page to join.
- */
-export function NameStepPage({
-  prefill,
-  slugPrefill,
-  avatarPrefill,
-  invite: initialInvite,
-  returnTo,
+function SlugAvailabilityWatcher({
+  slug,
+  enabled,
+  onResult,
 }: {
-  /** What the provider reported as the person's name, when it reads as one. */
-  prefill: string;
-  /** The URL the personal Workspace starts with: the username, unless it is only the fallback. */
-  slugPrefill: string;
-  /** The cartoon person selected at first: the face the person has until they choose. */
-  avatarPrefill: string;
-  /** What the server found out about an invite `returnTo`; the name-only form is for "active". */
-  invite: InviteState;
-  returnTo: string | undefined;
+  slug: string;
+  enabled: boolean;
+  onResult: (checkedSlug: string, available: boolean) => void;
 }) {
-  const submit = useServerFn(submitDisplayName);
-  const navigate = useNavigate();
-  // An invite that stops working after the page loaded turns the form into the normal one.
-  const [invite, setInvite] = useState(initialInvite);
-  const nameOnly = invite === "active";
-  const [displayName, setDisplayName] = useState(prefill);
-  const [avatarPresetId, setAvatarPresetId] = useState(avatarPrefill);
-  const [workspaceSlug, setWorkspaceSlug] = useState(slugPrefill);
-  // Until the person edits the URL, it follows the display name, unless the provider's name had
-  // already given it a start.
-  const [slugEdited, setSlugEdited] = useState(false);
-  // The slug the server reported taken. Compared with the field's current value, so a report for
-  // an earlier slug never shows against a later one.
-  const [takenSlug, setTakenSlug] = useState<string | null>(null);
-  const [problem, setProblem] = useState<Problem | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  // Set at once, where `submitting` only changes on the next render: a second Enter in between
-  // must not start a second save.
-  const inFlight = useRef(false);
-  const slug = workspaceSlug.trim();
+  const onResultRef = useRef(onResult);
+  onResultRef.current = onResult;
 
   useEffect(() => {
-    if (nameOnly || !isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)) return;
+    if (!enabled || !isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)) return;
     let current = true;
     const timer = window.setTimeout(() => {
-      // Errors are ignored: submitting asks the server again.
       checkWorkspaceSlug({ data: { slug } }).then(
         (result) => {
-          if (current) setTakenSlug(result.available ? null : slug);
+          if (current) onResultRef.current(slug, result.available);
         },
         () => {},
       );
@@ -122,70 +86,113 @@ export function NameStepPage({
       current = false;
       window.clearTimeout(timer);
     };
-  }, [slug, nameOnly]);
+  }, [slug, enabled]);
+  return null;
+}
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (inFlight.current) return;
-    // The server judges the name and the URL again; asking here first only spares a round trip.
-    const checked = checkPersonName(displayName);
-    if (!checked.ok) return setProblem(checked.problem);
-    if (!nameOnly && (!isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug))) {
-      return setProblem("slug_invalid");
-    }
-    setProblem(null);
-    inFlight.current = true;
-    setSubmitting(true);
-    const stop = (next: Problem) => {
-      setProblem(next);
-      setSubmitting(false);
-      inFlight.current = false;
-    };
-    let result: Awaited<ReturnType<typeof submit>> | undefined;
-    try {
-      // The server decides whether the invite still works; the page only sends `returnTo`.
-      result = await submit({
-        data: nameOnly
-          ? { displayName, avatarPresetId, returnTo }
-          : { displayName, avatarPresetId, workspaceSlug: slug },
+export function NameStepPage({
+  prefill,
+  slugPrefill,
+  avatarPrefill,
+  invite: initialInvite,
+  returnTo,
+}: {
+  prefill: string;
+  slugPrefill: string;
+  avatarPrefill: string;
+  invite: InviteState;
+  returnTo: string | undefined;
+}) {
+  const submit = useServerFn(submitDisplayName);
+  const navigate = useNavigate();
+  const formRef = useRef<HTMLFormElement>(null);
+  const slugEdited = useRef(false);
+  const [invite, setInvite] = useState(initialInvite);
+  const nameOnly = invite === "active";
+  const [formError, setFormError] = useState("");
+  const [submitting, guard] = useSubmitGuard();
+
+  const form = useAppForm({
+    defaultValues: {
+      displayName: prefill,
+      avatarPresetId: avatarPrefill,
+      workspaceSlug: slugPrefill,
+    },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const slug = value.workspaceSlug.trim();
+      await guard(async () => {
+        setFormError("");
+        let result: Awaited<ReturnType<typeof submit>> | undefined;
+        try {
+          result = await submit({
+            data: nameOnly
+              ? { displayName: value.displayName, avatarPresetId: value.avatarPresetId, returnTo }
+              : {
+                  displayName: value.displayName,
+                  avatarPresetId: value.avatarPresetId,
+                  workspaceSlug: slug,
+                },
+          });
+        } catch {
+          setFormError(m.welcome_error_save_failed());
+          return;
+        }
+        if (!result) return STAY_PENDING;
+        if (!result.ok) {
+          if (result.problem === "invite_unavailable") {
+            setInvite("unavailable");
+            if (!slugEdited.current && slugPrefill === "") {
+              form.setFieldValue("workspaceSlug", nameToWorkspaceSlug(value.displayName));
+            }
+            return;
+          }
+          reportServerProblem(result.problem);
+          return;
+        }
+        const destination = nameOnly
+          ? afterSignInHref(returnTo)
+          : invite === "unavailable" || isDefaultStartPage(returnTo)
+            ? localizedReturnHref(workspacePath(slug))
+            : afterSignInHref(returnTo);
+        try {
+          await navigate({ href: destination });
+        } catch {
+          window.location.assign(destination);
+        }
+        return STAY_PENDING;
       });
-    } catch {
-      return stop("save_failed");
-    }
-    // `useServerFn` resolves with nothing when the call redirected (the session is gone): the
-    // router is already taking the person to sign in.
-    if (!result) return;
-    if (!result.ok) {
-      if (result.problem !== "invite_unavailable") return stop(result.problem);
-      // Nothing was saved: show the notice and the URL field, and let the person go on.
-      setInvite("unavailable");
-      if (!slugEdited && slugPrefill === "") setWorkspaceSlug(nameToWorkspaceSlug(displayName));
-      setSubmitting(false);
-      inFlight.current = false;
-      return;
-    }
-    // The name is saved, so a failure from here on is not a failed save. Stay busy through the
-    // navigation: the page is replaced, not returned to.
-    // With nowhere particular to go on to, the person lands in the new Workspace, where the setup
-    // wizard shows; so they do when `returnTo` is an invite that no longer works (its page is a
-    // dead end). Any other `returnTo` goes on as it always has.
-    const destination = nameOnly
-      ? afterSignInHref(returnTo)
-      : invite === "unavailable" || isDefaultStartPage(returnTo)
-        ? localizedReturnHref(workspacePath(slug))
-        : afterSignInHref(returnTo);
-    try {
-      await navigate({ href: destination });
-    } catch {
-      window.location.assign(destination);
-    }
+    },
+  });
+
+  function clearSlugSubmitError() {
+    form.setFieldMeta("workspaceSlug", (prev) =>
+      prev.errorMap.onSubmit
+        ? { ...prev, errorMap: { ...prev.errorMap, onSubmit: undefined } }
+        : prev,
+    );
   }
 
-  // A problem from submitting belongs to the field it names; the name's problems stay under the
-  // name, and `save_failed` is not about either field.
-  const nameProblem = problem !== null && !isSlugProblem(problem) ? problem : null;
-  const slugMessage: SlugProblem | null =
-    problem !== null && isSlugProblem(problem) ? problem : takenSlug === slug ? "slug_taken" : null;
+  function reportServerProblem(problem: Problem) {
+    if (isSlugProblem(problem)) {
+      setFieldServerError(form, "workspaceSlug", slugProblemText[problem](), formRef.current);
+      return;
+    }
+    if (problem === "save_failed") {
+      setFormError(m.welcome_error_save_failed());
+      return;
+    }
+    setFieldServerError(form, "displayName", nameProblemText[problem](), formRef.current);
+  }
+
+  function handleSlugAvailability(checkedSlug: string, available: boolean) {
+    if (form.getFieldValue("workspaceSlug").trim() !== checkedSlug) return;
+    if (available) {
+      clearSlugSubmitError();
+    } else {
+      setFieldServerError(form, "workspaceSlug", slugProblemText.slug_taken());
+    }
+  }
 
   return (
     <AuthSplitLayout>
@@ -196,81 +203,117 @@ export function NameStepPage({
             {m.welcome_title()}
           </h1>
         </div>
-        <form noValidate onSubmit={onSubmit}>
-          <div className="flex flex-col gap-6">
-            {invite === "unavailable" ? (
-              <p role="status" className="text-center text-md text-tertiary">
-                {m.welcome_invite_unavailable()}
-              </p>
-            ) : null}
-            <Input
-              label={m.welcome_display_name_label()}
-              name="displayName"
-              autoComplete="nickname"
-              autoFocus
-              value={displayName}
-              onChange={(value) => {
-                setDisplayName(value);
-                if (!slugEdited && slugPrefill === "") setWorkspaceSlug(nameToWorkspaceSlug(value));
-                setProblem(null);
-              }}
-              isInvalid={nameProblem !== null}
-              hint={
-                nameProblem ? <span role="alert">{problemText[nameProblem]()}</span> : undefined
-              }
-            />
-            <RadioGroup
-              value={avatarPresetId}
-              onChange={setAvatarPresetId}
-              isDisabled={submitting}
-              orientation="horizontal"
-              className="flex flex-col gap-1.5"
-            >
-              <Label>{m.welcome_avatar_label()}</Label>
-              <div className="grid grid-cols-5 gap-3">
-                {avatarPresets.map((preset) => (
-                  <AvatarChoice
-                    key={preset.id}
-                    value={preset.id}
-                    src={preset.url}
-                    label={m.settings_avatar_preset_label({ number: preset.number })}
-                    hideLabel
-                  />
-                ))}
-              </div>
-            </RadioGroup>
-            {nameOnly ? null : (
-              <Input
-                label={m.welcome_workspace_url_label()}
-                name="workspaceSlug"
-                autoComplete="off"
-                value={workspaceSlug}
-                icon={SlugPrefix}
-                inputClassName="font-mono"
-                onChange={(value) => {
-                  setWorkspaceSlug(value);
-                  setSlugEdited(true);
-                  setProblem(null);
-                }}
-                isInvalid={slugMessage !== null}
-                hint={
-                  slugMessage ? (
-                    <span role="alert">{slugProblemText[slugMessage]()}</span>
-                  ) : undefined
-                }
-              />
-            )}
-          </div>
-          <Button
-            type="submit"
-            size="lg"
-            className="mt-6 w-full"
-            isLoading={submitting}
-            showTextWhileLoading
+        <form.AppForm>
+          <form
+            ref={formRef}
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
           >
-            {m.welcome_continue()}
-          </Button>
-        </form>
+            <form.Subscribe selector={(state) => state.values.workspaceSlug.trim()}>
+              {(slug) => (
+                <SlugAvailabilityWatcher
+                  slug={slug}
+                  enabled={!nameOnly}
+                  onResult={handleSlugAvailability}
+                />
+              )}
+            </form.Subscribe>
+            <div className="flex flex-col gap-6">
+              {invite === "unavailable" ? (
+                <p role="status" className="text-center text-md text-tertiary">
+                  {m.welcome_invite_unavailable()}
+                </p>
+              ) : null}
+              <form.AppField
+                name="displayName"
+                validators={{
+                  onSubmit: ({ value }) => {
+                    const checked = checkPersonName(value);
+                    return checked.ok ? undefined : nameProblemText[checked.problem]();
+                  },
+                }}
+              >
+                {(field) => (
+                  <field.Input
+                    label={m.welcome_display_name_label()}
+                    autoComplete="nickname"
+                    autoFocus
+                    onChange={(next) => {
+                      if (!slugEdited.current && slugPrefill === "") {
+                        form.setFieldValue("workspaceSlug", nameToWorkspaceSlug(next));
+                        clearSlugSubmitError();
+                      }
+                      setFormError("");
+                    }}
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="avatarPresetId">
+                {(field) => (
+                  <RadioGroup
+                    value={field.state.value}
+                    onChange={field.handleChange}
+                    isDisabled={submitting}
+                    orientation="horizontal"
+                    className="flex flex-col gap-1.5"
+                  >
+                    <Label>{m.welcome_avatar_label()}</Label>
+                    <div className="grid grid-cols-5 gap-3">
+                      {avatarPresets.map((preset) => (
+                        <AvatarChoice
+                          key={preset.id}
+                          value={preset.id}
+                          src={preset.url}
+                          label={m.settings_avatar_preset_label({ number: preset.number })}
+                          hideLabel
+                        />
+                      ))}
+                    </div>
+                  </RadioGroup>
+                )}
+              </form.AppField>
+              {nameOnly ? null : (
+                <form.AppField
+                  name="workspaceSlug"
+                  validators={{
+                    onSubmit: ({ value }) => {
+                      const trimmed = value.trim();
+                      return isValidWorkspaceSlug(trimmed) && !isReservedWorkspaceSlug(trimmed)
+                        ? undefined
+                        : slugProblemText.slug_invalid();
+                    },
+                  }}
+                >
+                  {(field) => (
+                    <field.Input
+                      label={m.welcome_workspace_url_label()}
+                      autoComplete="off"
+                      icon={SlugPrefix}
+                      inputClassName="font-mono"
+                      onChange={() => {
+                        slugEdited.current = true;
+                        setFormError("");
+                      }}
+                    />
+                  )}
+                </form.AppField>
+              )}
+              <form.Alert error={formError} />
+            </div>
+            <Button
+              type="submit"
+              size="lg"
+              className="mt-6 w-full"
+              isLoading={submitting}
+              showTextWhileLoading
+            >
+              {m.welcome_continue()}
+            </Button>
+          </form>
+        </form.AppForm>
       </div>
     </AuthSplitLayout>
   );

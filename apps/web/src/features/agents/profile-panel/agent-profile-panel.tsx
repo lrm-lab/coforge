@@ -22,9 +22,10 @@ import {
 import { useAgentRuntimeOptionsLoader } from "#src/features/agents/agent-runtime-options";
 import { listComputers } from "#src/features/computers/computers.functions";
 import {
-  agentUpdateErrorMessage,
+  agentUpdateErrorTarget,
   parseAgentEnvironmentFromForm,
   updateAgentInputFromForm,
+  type AgentFormField,
 } from "#src/features/agents/agent-form";
 import {
   updateAgent,
@@ -199,6 +200,15 @@ export function AgentProfilePanel({
   const [runtimeEditing, setRuntimeEditing] = useState(false);
   const [runtimeFormSaving, guardRuntimeForm] = useSubmitGuard();
   const [runtimeFormError, setRuntimeFormError] = useState("");
+  const [runtimeFieldErrors, setRuntimeFieldErrors] = useState<
+    Partial<Record<AgentFormField, string>>
+  >({});
+
+  function clearRuntimeFieldError(field: AgentFormField) {
+    setRuntimeFieldErrors((current) =>
+      current[field] ? { ...current, [field]: undefined } : current,
+    );
+  }
 
   function baseUpdateInput(overrides: { displayName?: string; description?: string }) {
     if (!profile) throw new Error("profile not loaded");
@@ -207,16 +217,19 @@ export function AgentProfilePanel({
 
   function onStartRuntimeEdit() {
     setRuntimeFormError("");
+    setRuntimeFieldErrors({});
     setRuntimeEditing(true);
   }
   function onCancelRuntimeEdit() {
     setRuntimeEditing(false);
     setRuntimeFormError("");
+    setRuntimeFieldErrors({});
   }
   function onSaveRuntime(form: FormData, changed: { runtime: boolean; environment: boolean }) {
     void guardRuntimeForm(async () => {
       if (!profile) return;
       setRuntimeFormError("");
+      setRuntimeFieldErrors({});
       try {
         let runtimeOutcome: AgentRuntimeSaveOutcome | undefined;
         let environmentOutcome: AgentRuntimeSaveOutcome | undefined;
@@ -244,7 +257,9 @@ export function AgentProfilePanel({
         ]);
         notifyRuntimeSaved(combineRuntimeSaveOutcomes(runtimeOutcome, environmentOutcome));
       } catch (cause) {
-        setRuntimeFormError(agentUpdateErrorMessage(cause));
+        const target = agentUpdateErrorTarget(cause);
+        if (target.field) setRuntimeFieldErrors({ [target.field]: target.message });
+        else setRuntimeFormError(target.message);
       }
     });
   }
@@ -473,6 +488,8 @@ export function AgentProfilePanel({
           environment={environmentState}
           saving={runtimeFormSaving}
           error={runtimeFormError}
+          fieldErrors={runtimeFieldErrors}
+          onFieldErrorClear={clearRuntimeFieldError}
           onSave={onSaveRuntime}
         />
       )}

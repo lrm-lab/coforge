@@ -1,9 +1,10 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
-import { Input } from "#src/components/base/input/input";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { isAppError } from "#src/lib/app-error";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { WORKSPACE_NAME_MAX_LENGTH } from "#src/features/workspaces/workspace.schemas";
 import { createWorkspace } from "#src/features/workspaces/workspaces.functions";
@@ -35,21 +36,21 @@ export type CreateWorkspaceSubmit = {
   children: string;
 };
 
-function slugProblem(slug: string): string {
-  if (!slug) return "";
+function slugProblem(slug: string): string | undefined {
+  if (!slug) return undefined;
   if (!isValidWorkspaceSlug(slug)) return m.workspace_slug_invalid();
   if (isReservedWorkspaceSlug(slug)) return m.workspace_slug_reserved();
-  return "";
+  return undefined;
 }
 
-function createProblem(cause: unknown): string {
+function createProblem(cause: unknown): { field?: "slug"; message: string } {
   switch (isAppError(cause) ? cause.code : undefined) {
     case "CONFLICT":
-      return m.workspace_slug_taken();
+      return { field: "slug", message: m.workspace_slug_taken() };
     case "INVALID_INPUT":
-      return m.workspace_slug_invalid();
+      return { field: "slug", message: m.workspace_slug_invalid() };
     default:
-      return m.workspace_create_error();
+      return { message: m.workspace_create_error() };
   }
 }
 
@@ -62,63 +63,93 @@ export function CreateWorkspaceForm({
   fieldsClassName?: string;
   actions: (submit: CreateWorkspaceSubmit) => ReactNode;
 }) {
-  const [name, setName] = useState("");
-  const [editedSlug, setEditedSlug] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const slug = editedSlug ?? nameToWorkspaceSlug(name);
-  const slugError = slugProblem(slug);
+  const formRef = useRef<HTMLFormElement>(null);
+  const slugEdited = useRef(false);
+  const [formError, setFormError] = useState("");
+  const form = useAppForm({
+    defaultValues: { name: "", slug: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const name = value.name.trim();
+      const slug = value.slug.trim();
+      if (!name || !slug) return;
+      setFormError("");
+      try {
+        await onCreate({ name, slug });
+      } catch (cause) {
+        const problem = createProblem(cause);
+        if (problem.field === "slug") {
+          setFieldServerError(form, "slug", problem.message, formRef.current);
+        } else {
+          setFormError(problem.message);
+        }
+      }
+    },
+  });
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!name.trim() || !slug.trim() || slugError) return;
-    setError("");
-    setSubmitting(true);
-    try {
-      await onCreate({ name: name.trim(), slug: slug.trim() });
-    } catch (cause) {
-      setError(createProblem(cause));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  const shownError = error || slugError;
   return (
-    <form onSubmit={submit}>
-      <div className={fieldsClassName}>
-        <Input
-          label={m.workspace_name_label()}
-          name="name"
-          isRequired
-          maxLength={WORKSPACE_NAME_MAX_LENGTH}
-          value={name}
-          placeholder={m.workspace_name_placeholder()}
-          onChange={setName}
-        />
-        <Input
-          label={m.workspace_slug_label()}
-          name="slug"
-          isRequired
-          value={slug}
-          placeholder={m.workspace_slug_placeholder()}
-          hint={shownError ? undefined : m.workspace_slug_hint()}
-          isInvalid={Boolean(slugError)}
-          onChange={setEditedSlug}
-        />
-        {shownError && (
-          <p role="alert" className="text-sm text-error-primary">
-            {shownError}
-          </p>
-        )}
-      </div>
-      {actions({
-        type: "submit",
-        isDisabled: Boolean(slugError),
-        isLoading: submitting,
-        showTextWhileLoading: true,
-        children: submitting ? m.workspace_create_submitting() : m.workspace_create_submit(),
-      })}
-    </form>
+    <form.AppForm>
+      <form
+        ref={formRef}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <div className={fieldsClassName}>
+          <form.AppField name="name">
+            {(field) => (
+              <field.Input
+                label={m.workspace_name_label()}
+                isRequired
+                maxLength={WORKSPACE_NAME_MAX_LENGTH}
+                placeholder={m.workspace_name_placeholder()}
+                onChange={(next) => {
+                  if (!slugEdited.current) {
+                    form.setFieldValue("slug", nameToWorkspaceSlug(next));
+                  }
+                }}
+              />
+            )}
+          </form.AppField>
+          <form.AppField
+            name="slug"
+            validators={{
+              onChange: ({ value }) => slugProblem(value.trim()),
+              onSubmit: ({ value }) => slugProblem(value.trim()),
+            }}
+          >
+            {(field) => (
+              <field.Input
+                label={m.workspace_slug_label()}
+                isRequired
+                placeholder={m.workspace_slug_placeholder()}
+                hint={m.workspace_slug_hint()}
+                onChange={() => {
+                  slugEdited.current = true;
+                }}
+              />
+            )}
+          </form.AppField>
+          <form.Alert error={formError} />
+        </div>
+        <form.Subscribe
+          selector={(state) => ({
+            submitting: state.isSubmitting,
+            slugInvalid: Boolean(slugProblem(state.values.slug.trim())),
+          })}
+        >
+          {({ submitting, slugInvalid }) =>
+            actions({
+              type: "submit",
+              isDisabled: slugInvalid,
+              isLoading: submitting,
+              showTextWhileLoading: true,
+              children: submitting ? m.workspace_create_submitting() : m.workspace_create_submit(),
+            })
+          }
+        </form.Subscribe>
+      </form>
+    </form.AppForm>
   );
 }

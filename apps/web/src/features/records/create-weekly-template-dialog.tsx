@@ -1,23 +1,26 @@
 import { humanLabel } from "#src/lib/human-label";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
-import { useEffectEvent, useLayoutEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useStore } from "@tanstack/react-form";
 import { Heading } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { CloseButton } from "#src/components/base/buttons/close-button";
-import { Input } from "#src/components/base/input/input";
 import {
   Dialog as SlideoutDialog,
   Modal as SlideoutModal,
   ModalOverlay as SlideoutOverlay,
   SlideoutMenu,
 } from "#src/components/application/slideout-menus/slideout-menu";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import {
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
 import { Select } from "#src/components/base/select/select";
 import type { PickerOption } from "#src/features/pickers/entity-picker";
+import { isAppErrorCode } from "#src/lib/app-error";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { isValidTemplateName, hourlySendTimes } from "./records-content";
 import { FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME } from "./foundation-models-weekly";
@@ -106,7 +109,6 @@ export function CreateWeeklyTemplateDialog({
 }) {
   const controlSize = useDialogControlSize();
   const editing = Boolean(initial);
-  const [name, setName] = useState(FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME);
   const {
     sections,
     setSections,
@@ -119,12 +121,52 @@ export function CreateWeeklyTemplateDialog({
   } = useTemplateOutlineDraft();
   const [allMembers, setAllMembers] = useState(true);
   const [recipientIds, setRecipientIds] = useState<string[]>([]);
-  const [frequency] = useState<"weekly">("weekly");
-  const [sendTime, setSendTime] = useState<string>("15:00");
-  const [sendWeekday, setSendWeekday] = useState(5);
-  const [enabled, setEnabled] = useState(true);
-  const [nameError, setNameError] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const saveOkRef = useRef(false);
+
+  const form = useAppForm({
+    defaultValues: {
+      name: FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME,
+      frequency: "weekly",
+      sendTime: "15:00",
+      sendWeekday: "5",
+      enabled: "yes",
+    },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const normalizedSections = sections
+        .map((section) => ({
+          title: section.title.trim(),
+          children: section.children.map((child) => child.trim()).filter(Boolean),
+        }))
+        .filter((section) => section.title.length > 0);
+      try {
+        await onSave({
+          name: value.name.trim(),
+          frequency: "weekly",
+          sendTime: value.sendTime,
+          sendWeekday: Number(value.sendWeekday) || 5,
+          scheduleEnabled: value.enabled !== "no",
+          sections: normalizedSections,
+          allMembers: allMembers || recipientIds.length === 0,
+          recipientUserIds: allMembers ? [] : recipientIds,
+        });
+        saveOkRef.current = true;
+      } catch (cause) {
+        if (isAppErrorCode(cause, "INVALID_INPUT")) {
+          setFieldServerError(form, "name", m.records_template_name_hint(), formRef.current);
+        }
+      }
+    },
+  });
+
+  const { name, sendTime, sendWeekday, enabled, saving } = useStore(form.store, (state) => ({
+    name: state.values.name,
+    sendTime: state.values.sendTime,
+    sendWeekday: Number(state.values.sendWeekday) || 5,
+    enabled: state.values.enabled !== "no",
+    saving: state.isSubmitting,
+  }));
 
   const recipientOptions = useMemo(
     (): PickerOption[] => [
@@ -141,15 +183,16 @@ export function CreateWeeklyTemplateDialog({
 
   function applyInitial(template: WeeklyTemplateDraft | null | undefined) {
     const draft = draftOf(template ?? null);
-    setName(draft.name);
+    form.reset({
+      name: draft.name,
+      frequency: "weekly",
+      sendTime: draft.sendTime,
+      sendWeekday: String(draft.sendWeekday),
+      enabled: draft.enabled ? "yes" : "no",
+    });
     setSections(draft.sections);
     setAllMembers(draft.allMembers);
     setRecipientIds(draft.recipientIds);
-    setSendTime(draft.sendTime);
-    setSendWeekday(draft.sendWeekday);
-    setEnabled(draft.enabled);
-    setNameError(false);
-    setSaving(false);
   }
 
   const resetDraft = useEffectEvent(() => applyInitial(initial));
@@ -193,34 +236,9 @@ export function CreateWeeklyTemplateDialog({
   }
 
   async function save(): Promise<boolean> {
-    if (!isValidTemplateName(name)) {
-      setNameError(true);
-      return false;
-    }
-    const normalizedSections = sections
-      .map((section) => ({
-        title: section.title.trim(),
-        children: section.children.map((child) => child.trim()).filter(Boolean),
-      }))
-      .filter((section) => section.title.length > 0);
-    setSaving(true);
-    try {
-      await onSave({
-        name: name.trim(),
-        frequency,
-        sendTime,
-        sendWeekday,
-        scheduleEnabled: enabled,
-        sections: normalizedSections,
-        allMembers: allMembers || recipientIds.length === 0,
-        recipientUserIds: allMembers ? [] : recipientIds,
-      });
-      return true;
-    } catch {
-      return false;
-    } finally {
-      setSaving(false);
-    }
+    saveOkRef.current = false;
+    await form.handleSubmit();
+    return saveOkRef.current;
   }
 
   const baseline = useMemo(() => draftKey(draftOf(initial)), [initial]);
@@ -237,11 +255,6 @@ export function CreateWeeklyTemplateDialog({
 
   function requestClose() {
     if (!saving) guard.requestClose();
-  }
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (await save()) onOpenChange(false);
   }
 
   const recipientLabel = (() => {
@@ -280,144 +293,171 @@ export function CreateWeeklyTemplateDialog({
               />
             </header>
 
-            <form
-              className="flex min-h-0 w-full flex-1 flex-col"
-              onSubmit={(event) => void submit(event)}
-            >
-              <SlideoutMenu.Content role="group" className="min-h-0 flex-1 gap-5 py-5">
-                <p className="text-sm font-semibold text-primary">{m.records_template_details()}</p>
+            <form.AppForm>
+              <form
+                ref={formRef}
+                noValidate
+                className="flex min-h-0 w-full flex-1 flex-col"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (await save()) onOpenChange(false);
+                }}
+              >
+                <SlideoutMenu.Content role="group" className="min-h-0 flex-1 gap-5 py-5">
+                  <p className="text-sm font-semibold text-primary">
+                    {m.records_template_details()}
+                  </p>
 
-                <Input
-                  size={controlSize}
-                  maxLength={100}
-                  label={m.records_template_name()}
-                  value={name}
-                  hideRequiredIndicator
-                  onChange={(value) => {
-                    setName(value);
-                    setNameError(value.trim().length > 0 && !isValidTemplateName(value));
-                  }}
-                  placeholder={m.records_template_name_placeholder()}
-                  isInvalid={nameError}
-                  hint={m.records_template_name_hint()}
-                />
-
-                <div className="space-y-3">
-                  {sections.map((section, sectionIndex) => (
-                    <div key={sectionIndex} className="space-y-2">
-                      <OutlineRow
-                        label={m.records_template_heading_level_one()}
-                        value={section.title}
-                        onChange={(value) => updateSectionTitle(sectionIndex, value)}
-                        onRemove={() => removeSection(sectionIndex)}
-                        removeLabel={m.records_template_delete_heading()}
+                  <form.AppField
+                    name="name"
+                    validators={{
+                      onChange: ({ value }) =>
+                        value.trim().length > 0 && !isValidTemplateName(value)
+                          ? m.records_template_name_hint()
+                          : undefined,
+                      onSubmit: ({ value }) =>
+                        isValidTemplateName(value) ? undefined : m.records_template_name_hint(),
+                    }}
+                  >
+                    {(field) => (
+                      <field.Input
+                        size={controlSize}
+                        maxLength={100}
+                        label={m.records_template_name()}
+                        hideRequiredIndicator
+                        placeholder={m.records_template_name_placeholder()}
+                        hint={m.records_template_name_hint()}
                       />
-                      {section.children.length > 0 ? (
-                        <div className="relative ms-3 space-y-2 border-s-2 border-secondary ps-4">
-                          {section.children.map((child, childIndex) => (
-                            <OutlineRow
-                              key={`${sectionIndex}-${childIndex}`}
-                              label={m.records_template_heading_level_two()}
-                              value={child}
-                              onChange={(value) =>
-                                updateChildTitle(sectionIndex, childIndex, value)
-                              }
-                              onRemove={() => removeChild(sectionIndex, childIndex)}
-                              removeLabel={m.records_template_delete_heading()}
-                            />
-                          ))}
+                    )}
+                  </form.AppField>
+
+                  <div className="space-y-3">
+                    {sections.map((section, sectionIndex) => (
+                      <div key={sectionIndex} className="space-y-2">
+                        <OutlineRow
+                          label={m.records_template_heading_level_one()}
+                          value={section.title}
+                          onChange={(value) => updateSectionTitle(sectionIndex, value)}
+                          onRemove={() => removeSection(sectionIndex)}
+                          removeLabel={m.records_template_delete_heading()}
+                        />
+                        {section.children.length > 0 ? (
+                          <div className="relative ms-3 space-y-2 border-s-2 border-secondary ps-4">
+                            {section.children.map((child, childIndex) => (
+                              <OutlineRow
+                                key={`${sectionIndex}-${childIndex}`}
+                                label={m.records_template_heading_level_two()}
+                                value={child}
+                                onChange={(value) =>
+                                  updateChildTitle(sectionIndex, childIndex, value)
+                                }
+                                onRemove={() => removeChild(sectionIndex, childIndex)}
+                                removeLabel={m.records_template_delete_heading()}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="ps-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            color="link-gray"
+                            onPress={() => addChild(sectionIndex)}
+                          >
+                            {m.records_template_add_heading_level_two()}
+                          </Button>
                         </div>
-                      ) : null}
-                      <div className="ps-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          color="link-gray"
-                          onPress={() => addChild(sectionIndex)}
-                        >
-                          {m.records_template_add_heading_level_two()}
-                        </Button>
                       </div>
-                    </div>
-                  ))}
-                  <Button type="button" size={controlSize} color="secondary" onPress={addSection}>
-                    {m.records_template_add_heading_level_one()}
-                  </Button>
-                </div>
-
-                <TemplateRecipientsField
-                  allMembers={allMembers}
-                  recipientIds={recipientIds}
-                  members={members}
-                  recipientLabel={recipientLabel}
-                  recipientOptions={recipientOptions}
-                  selectedRecipientKeys={selectedRecipientKeys}
-                  onClearAll={() => {
-                    setAllMembers(false);
-                    setRecipientIds([]);
-                  }}
-                  onToggleRecipient={toggleRecipient}
-                  onRecipientSelectionChange={onRecipientSelectionChange}
-                />
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Select
-                    label={m.records_template_frequency()}
-                    size={controlSize}
-                    selectedKey={frequency}
-                    onSelectionChange={() => {}}
-                    hideRequiredIndicator
-                  >
-                    <Select.Item id="weekly" label={m.records_template_frequency_weekly()} />
-                  </Select>
-                  <Select
-                    label={m.records_template_send_weekday()}
-                    size={controlSize}
-                    selectedKey={String(sendWeekday)}
-                    onSelectionChange={(key) => setSendWeekday(key ? Number(key) : 5)}
-                    hideRequiredIndicator
-                  >
-                    {SEND_WEEKDAYS.map((day) => (
-                      <Select.Item key={day} id={String(day)} label={weekdayLabel(day)} />
                     ))}
-                  </Select>
-                </div>
+                    <Button type="button" size={controlSize} color="secondary" onPress={addSection}>
+                      {m.records_template_add_heading_level_one()}
+                    </Button>
+                  </div>
 
-                <Select
-                  label={m.records_template_send_time()}
-                  size={controlSize}
-                  selectedKey={sendTime}
-                  onSelectionChange={(key) => setSendTime(key ? String(key) : "15:00")}
-                  hideRequiredIndicator
-                >
-                  {SEND_TIMES.map((time) => (
-                    <Select.Item key={time} id={time} label={time} />
-                  ))}
-                </Select>
+                  <TemplateRecipientsField
+                    allMembers={allMembers}
+                    recipientIds={recipientIds}
+                    members={members}
+                    recipientLabel={recipientLabel}
+                    recipientOptions={recipientOptions}
+                    selectedRecipientKeys={selectedRecipientKeys}
+                    onClearAll={() => {
+                      setAllMembers(false);
+                      setRecipientIds([]);
+                    }}
+                    onToggleRecipient={toggleRecipient}
+                    onRecipientSelectionChange={onRecipientSelectionChange}
+                  />
 
-                <Select
-                  label={m.records_template_enabled()}
-                  size={controlSize}
-                  selectedKey={enabled ? "yes" : "no"}
-                  onSelectionChange={(key) => setEnabled(key !== "no")}
-                  hideRequiredIndicator
-                >
-                  <Select.Item id="yes" label={m.records_template_enabled_yes()} />
-                  <Select.Item id="no" label={m.records_template_enabled_no()} />
-                </Select>
-              </SlideoutMenu.Content>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <form.AppField name="frequency">
+                      {(field) => (
+                        <field.Select
+                          label={m.records_template_frequency()}
+                          size={controlSize}
+                          hideRequiredIndicator
+                        >
+                          <Select.Item id="weekly" label={m.records_template_frequency_weekly()} />
+                        </field.Select>
+                      )}
+                    </form.AppField>
+                    <form.AppField name="sendWeekday">
+                      {(field) => (
+                        <field.Select
+                          label={m.records_template_send_weekday()}
+                          size={controlSize}
+                          hideRequiredIndicator
+                        >
+                          {SEND_WEEKDAYS.map((day) => (
+                            <Select.Item key={day} id={String(day)} label={weekdayLabel(day)} />
+                          ))}
+                        </field.Select>
+                      )}
+                    </form.AppField>
+                  </div>
 
-              <SlideoutMenu.Footer>
-                <DialogActions>
-                  <DialogCancel type="button" isDisabled={saving} onPress={requestClose}>
-                    {m.records_template_cancel()}
-                  </DialogCancel>
-                  <DialogAction type="submit" isDisabled={saving}>
-                    {m.records_template_save()}
-                  </DialogAction>
-                </DialogActions>
-              </SlideoutMenu.Footer>
-            </form>
+                  <form.AppField name="sendTime">
+                    {(field) => (
+                      <field.Select
+                        label={m.records_template_send_time()}
+                        size={controlSize}
+                        hideRequiredIndicator
+                      >
+                        {SEND_TIMES.map((time) => (
+                          <Select.Item key={time} id={time} label={time} />
+                        ))}
+                      </field.Select>
+                    )}
+                  </form.AppField>
+
+                  <form.AppField name="enabled">
+                    {(field) => (
+                      <field.Select
+                        label={m.records_template_enabled()}
+                        size={controlSize}
+                        hideRequiredIndicator
+                      >
+                        <Select.Item id="yes" label={m.records_template_enabled_yes()} />
+                        <Select.Item id="no" label={m.records_template_enabled_no()} />
+                      </field.Select>
+                    )}
+                  </form.AppField>
+
+                  <form.Alert />
+                </SlideoutMenu.Content>
+
+                <SlideoutMenu.Footer>
+                  <DialogActions>
+                    <DialogCancel type="button" isDisabled={saving} onPress={requestClose}>
+                      {m.records_template_cancel()}
+                    </DialogCancel>
+                    <DialogAction type="submit" isDisabled={saving}>
+                      {m.records_template_save()}
+                    </DialogAction>
+                  </DialogActions>
+                </SlideoutMenu.Footer>
+              </form>
+            </form.AppForm>
           </SlideoutDialog>
         </SlideoutModal>
       </SlideoutOverlay>

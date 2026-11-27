@@ -1,25 +1,22 @@
 import { useCallback, useId, useRef, useState, type FormEvent } from "react";
+import { useStore } from "@tanstack/react-form";
 import { Link, useBlocker, type ShouldBlockFn } from "@tanstack/react-router";
 
 import { PageHeader } from "#src/components/layout/page-header";
 import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
+import { setFieldServerError, useAppForm } from "#src/components/ui/form";
 import { UnsavedChangesDialog } from "#src/components/ui/unsaved-changes-dialog";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { DangerZoneRows } from "./app-editor-danger";
 import { DistributionSection } from "./app-editor-distribution";
-import {
-  EditorSection,
-  LoginFields,
-  ProfileFields,
-  whenToUseLength,
-  type FieldErrors,
-} from "./app-editor-fields";
+import { EditorSection, LoginFields, ProfileFields, whenToUseLength } from "./app-editor-fields";
 import { EMPTY_APP_DRAFT, draftOf, inputOf, type AppDraft } from "./app-draft";
 import {
   APP_FIELD_PROBLEMS,
@@ -37,7 +34,11 @@ import { PermissionFields } from "./app-editor-permissions";
 import { SetupSection, type SetupErrors } from "./app-editor-setup";
 import { refusedSetupFields, setupDraftOf, setupInputOf, type SetupDraft } from "./app-setup-draft";
 import { samePermissionGroups, type AppPermissionGroup } from "./app-permissions";
-import { APP_WHEN_TO_USE_MAX_LENGTH, refusedAppFields } from "./app-registration";
+import {
+  APP_WHEN_TO_USE_MAX_LENGTH,
+  refusedAppFields,
+  type AppInputField,
+} from "./app-registration";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import type { AppDeclarations, AppSummary } from "./apps.functions";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
@@ -61,6 +62,18 @@ export type AppEditorProps = {
 
 const EMPTY_SETUP_DRAFT: SetupDraft = { required: false, url: "", description: "" };
 
+const APP_INPUT_FIELDS: readonly AppInputField[] = [
+  "key",
+  "name",
+  "description",
+  "whenToUse",
+  "homepageUrl",
+  "redirectUris",
+  "category",
+  "allowedScopes",
+  "agentManifestUrl",
+];
+
 export function AppEditor({
   app,
   declares,
@@ -81,7 +94,8 @@ export function AppEditor({
   const [saving, guard] = useSubmitGuard();
   const editing = app !== undefined;
   const formRef = useRef<HTMLFormElement>(null);
-  const [draft, setDraft] = useState<AppDraft>(() => (app ? draftOf(app) : EMPTY_APP_DRAFT));
+  const stayOpenRef = useRef(false);
+  const savedRef = useRef(false);
   const permissions = app?.permissions;
   const [groups, setGroups] = useState<AppPermissionGroup[]>(() => permissions?.declared ?? []);
   const [shownRevision, setShownRevision] = useState(permissions?.revision);
@@ -96,7 +110,6 @@ export function AppEditor({
     setup ? setupDraftOf(setup) : EMPTY_SETUP_DRAFT,
   );
   const [setupErrors, setSetupErrors] = useState<SetupErrors>({});
-  const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
   const idPrefix = useId();
@@ -124,19 +137,34 @@ export function AppEditor({
   ];
   const [active, setActive] = useActiveSection(scroller, sections);
   const reducedMotion = usePrefersReducedMotion();
-  const tooLong = whenToUseLength(draft) > APP_WHEN_TO_USE_MAX_LENGTH;
-  const snapshot = () =>
+
+  const snapshotOf = (currentDraft: AppDraft) =>
     JSON.stringify({
-      draft,
+      draft: currentDraft,
       setup: setupDraft,
       ...(permissions
         ? {}
         : { groups: [...groups].sort(), events: [...notificationEvents.submitted].sort() }),
     });
-  const [baseline, setBaseline] = useState(snapshot);
+
+  const form = useAppForm({
+    defaultValues: app ? draftOf(app) : EMPTY_APP_DRAFT,
+    onSubmitInvalid: () => scheduleFocusInvalidField(scroller.current),
+    onSubmit: async ({ value }) => {
+      const stayOpen = stayOpenRef.current;
+      stayOpenRef.current = false;
+      await guard(async () => {
+        savedRef.current = await save(value, stayOpen);
+      });
+    },
+  });
+
+  const draft = useStore(form.store, (state) => state.values);
+  const tooLong = whenToUseLength(draft) > APP_WHEN_TO_USE_MAX_LENGTH;
+  const [baseline, setBaseline] = useState(() => snapshotOf(draft));
   const dirty =
     endpointDirty ||
-    snapshot() !== baseline ||
+    snapshotOf(draft) !== baseline ||
     (permissions !== undefined &&
       (!samePermissionGroups(groups, permissions.declared) || notificationEvents.unsaved));
   const dirtyRef = useRef(dirty);
@@ -155,27 +183,37 @@ export function AppEditor({
     withResolver: true,
   });
 
-  function change<Field extends keyof AppDraft>(field: Field, value: AppDraft[Field]) {
-    setDraft((current) => ({ ...current, [field]: value }));
-    setErrors((current) => ({ ...current, [field]: undefined }));
+  function clearAppFieldErrors() {
+    for (const field of APP_INPUT_FIELDS) {
+      form.setFieldMeta(field, (prev) =>
+        prev.errorMap.onSubmit
+          ? { ...prev, errorMap: { ...prev.errorMap, onSubmit: undefined } }
+          : prev,
+      );
+    }
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    void guard(async () => void (await save(false)));
+    stayOpenRef.current = false;
+    void form.handleSubmit();
   }
 
-  async function save(stayOpen: boolean): Promise<boolean> {
+  async function save(currentDraft: AppDraft, stayOpen: boolean): Promise<boolean> {
     setFormError("");
-    const input = inputOf(draft);
+    const input = inputOf(currentDraft);
     const { key, ...rest } = input;
     const refused = refusedAppFields(editing || key === "" ? rest : input);
     const setupRefused = declares.setup ? refusedSetupFields(setupDraft) : [];
+    clearAppFieldErrors();
     if (refused.length > 0 || setupRefused.length > 0) {
-      setErrors(Object.fromEntries(refused.map((field) => [field, APP_FIELD_PROBLEMS[field]()])));
+      for (const field of refused) {
+        setFieldServerError(form, field, APP_FIELD_PROBLEMS[field]());
+      }
       setSetupErrors(
         Object.fromEntries(setupRefused.map((field) => [field, SETUP_FIELD_PROBLEMS[field]()])),
       );
+      scheduleFocusInvalidField(scroller.current);
       return false;
     }
     setSetupErrors({});
@@ -190,28 +228,33 @@ export function AppEditor({
         },
         releaseGuard,
       );
-      setBaseline(snapshot());
+      setBaseline(snapshotOf(currentDraft));
       return true;
     } catch (cause) {
       const problem = appFormProblem(cause, editing ? m.apps_error_update : m.apps_error_register);
-      if (problem.setupField) setSetupErrors({ [problem.setupField]: problem.message });
-      else if (problem.field) setErrors({ [problem.field]: problem.message });
-      else setFormError(problem.message);
+      if (problem.setupField) {
+        setSetupErrors({ [problem.setupField]: problem.message });
+        scheduleFocusInvalidField(scroller.current);
+      } else if (problem.field) {
+        setFieldServerError(form, problem.field, problem.message, scroller.current);
+      } else {
+        setFormError(problem.message);
+      }
       return false;
     }
   }
 
   async function saveThenRequestPublish(current: AppSummary) {
-    let saved = false;
-    await guard(async () => void (saved = await save(true)));
-    if (saved) await onRequestPublish(current);
+    savedRef.current = false;
+    stayOpenRef.current = true;
+    await form.handleSubmit();
+    if (savedRef.current) await onRequestPublish(current);
   }
 
   const profileComplete = [draft.name, draft.description, draft.homepageUrl].every(
     (value) => value.trim() !== "",
   );
   const hasRedirect = draft.redirectUris.some((uri) => uri.trim() !== "");
-  const fields = { draft, change, errors, editing };
   const installationId = permissions?.installationId ?? setup?.installation?.installationId;
   const installationCard = installationId !== undefined && (
     <InstallationCard installationId={installationId} />
@@ -220,235 +263,240 @@ export function AppEditor({
 
   return (
     <main className="flex h-full min-h-0 flex-1 flex-col bg-primary">
-      <form ref={formRef} noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-        <PhoneFormBar
-          heading={heading}
-          submitLabel={editing ? m.apps_save() : m.apps_register_short()}
-          pending={saving}
-          submitDisabled={tooLong}
-          onCancel={onBack}
-          onSubmit={() => formRef.current?.requestSubmit()}
-        />
-        <div className="max-sm:hidden">
-          <PageHeader
-            leading={<AppLogo name={draft.name || "?"} url={app?.logoUrl} size="sm" />}
+      <form.AppForm>
+        <form ref={formRef} noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <PhoneFormBar
             heading={heading}
-            breadcrumbs={[
-              {
-                label: m.settings_title(),
-                link: (className) => (
-                  <Link
-                    to="/w/$workspaceSlug/settings"
-                    params={{ workspaceSlug }}
-                    activeOptions={{ exact: true }}
-                    className={className}
-                  >
-                    {m.settings_title()}
-                  </Link>
-                ),
-              },
-              {
-                label: m.settings_applications(),
-                link: (className) => (
-                  <Link
-                    to="/w/$workspaceSlug/settings"
-                    params={{ workspaceSlug }}
-                    search={{ section: "applications", appsTab: "mine" }}
-                    activeOptions={{ exact: true }}
-                    className={className}
-                  >
-                    {m.settings_applications()}
-                  </Link>
-                ),
-              },
-            ]}
+            submitLabel={editing ? m.apps_save() : m.apps_register_short()}
+            pending={saving}
+            submitDisabled={tooLong}
+            onCancel={onBack}
+            onSubmit={() => formRef.current?.requestSubmit()}
           />
-        </div>
-        {(formError || issued) && (
-          <div className="grid shrink-0 gap-3 border-b border-secondary px-6 py-4">
-            {formError && <Alert color="error" title={formError} />}
-            {issued && <AppSecretPanel issued={issued} />}
+          <div className="max-sm:hidden">
+            <PageHeader
+              leading={<AppLogo name={draft.name || "?"} url={app?.logoUrl} size="sm" />}
+              heading={heading}
+              breadcrumbs={[
+                {
+                  label: m.settings_title(),
+                  link: (className) => (
+                    <Link
+                      to="/w/$workspaceSlug/settings"
+                      params={{ workspaceSlug }}
+                      activeOptions={{ exact: true }}
+                      className={className}
+                    >
+                      {m.settings_title()}
+                    </Link>
+                  ),
+                },
+                {
+                  label: m.settings_applications(),
+                  link: (className) => (
+                    <Link
+                      to="/w/$workspaceSlug/settings"
+                      params={{ workspaceSlug }}
+                      search={{ section: "applications", appsTab: "mine" }}
+                      activeOptions={{ exact: true }}
+                      className={className}
+                    >
+                      {m.settings_applications()}
+                    </Link>
+                  ),
+                },
+              ]}
+            />
           </div>
-        )}
-        <div className="flex min-h-0 flex-1">
-          <nav
-            aria-label={m.apps_editor_sections()}
-            className="hidden w-44 shrink-0 border-r border-secondary p-3 md:block"
-          >
-            <ul className="grid gap-1">
-              {sections.map((section) => (
-                <li key={section.id}>
-                  <Button
-                    type="button"
-                    color="tertiary"
-                    size="sm"
-                    aria-current={active === section.id ? "true" : undefined}
-                    className={cn(
-                      "w-full justify-start",
-                      active === section.id && "bg-active text-brand-secondary",
-                    )}
-                    onPress={() => {
-                      setActive(section.id);
-                      document
-                        .getElementById(section.id)
-                        ?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
-                    }}
-                  >
-                    {section.title}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </nav>
-          <div
-            ref={scroller}
-            className="min-h-0 flex-1 divide-y divide-secondary overflow-y-auto px-6"
-          >
-            <EditorSection
-              id={ids.profile}
-              title={m.apps_section_profile()}
-              status={profileComplete ? m.apps_status_complete() : m.apps_status_needs_details()}
-              description={m.apps_section_profile_description()}
+          {(formError || issued) && (
+            <div className="grid shrink-0 gap-3 border-b border-secondary px-6 py-4">
+              {formError && <Alert color="error" title={formError} />}
+              {issued && <AppSecretPanel issued={issued} />}
+            </div>
+          )}
+          <div className="flex min-h-0 flex-1">
+            <nav
+              aria-label={m.apps_editor_sections()}
+              className="hidden w-44 shrink-0 border-r border-secondary p-3 md:block"
             >
-              <ProfileFields
-                {...fields}
-                logo={
-                  <AppLogoField
-                    name={draft.name}
-                    isDisabled={saving}
-                    logo={
-                      app && {
-                        url: app.logoUrl,
-                        upload: (file) => onUploadLogo(app, file),
-                        reset: () => onResetLogo(app),
+              <ul className="grid gap-1">
+                {sections.map((section) => (
+                  <li key={section.id}>
+                    <Button
+                      type="button"
+                      color="tertiary"
+                      size="sm"
+                      aria-current={active === section.id ? "true" : undefined}
+                      className={cn(
+                        "w-full justify-start",
+                        active === section.id && "bg-active text-brand-secondary",
+                      )}
+                      onPress={() => {
+                        setActive(section.id);
+                        document
+                          .getElementById(section.id)
+                          ?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
+                      }}
+                    >
+                      {section.title}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+            <div
+              ref={scroller}
+              className="min-h-0 flex-1 divide-y divide-secondary overflow-y-auto px-6"
+            >
+              <EditorSection
+                id={ids.profile}
+                title={m.apps_section_profile()}
+                status={profileComplete ? m.apps_status_complete() : m.apps_status_needs_details()}
+                description={m.apps_section_profile_description()}
+              >
+                <ProfileFields
+                  form={form}
+                  editing={editing}
+                  logo={
+                    <AppLogoField
+                      name={draft.name}
+                      isDisabled={saving}
+                      logo={
+                        app && {
+                          url: app.logoUrl,
+                          upload: (file) => onUploadLogo(app, file),
+                          reset: () => onResetLogo(app),
+                        }
                       }
-                    }
-                  />
-                }
-              />
-            </EditorSection>
-            <EditorSection
-              id={ids.login}
-              title={m.apps_section_login()}
-              status={
-                !hasRedirect
-                  ? m.apps_status_not_configured()
-                  : editing
-                    ? m.apps_status_ready()
-                    : m.apps_status_ready_to_save()
-              }
-              description={m.apps_section_login_description()}
-            >
-              <LoginFields {...fields} agentEvents={declares.agentEvents} />
-            </EditorSection>
-            {declares.setup && (
+                    />
+                  }
+                />
+              </EditorSection>
               <EditorSection
-                id={ids.setup}
-                title={m.apps_section_setup()}
+                id={ids.login}
+                title={m.apps_section_login()}
                 status={
-                  setupDraft.required ? m.apps_setup_status_required() : m.apps_setup_status_none()
+                  !hasRedirect
+                    ? m.apps_status_not_configured()
+                    : editing
+                      ? m.apps_status_ready()
+                      : m.apps_status_ready_to_save()
                 }
-                description={m.apps_section_setup_description()}
+                description={m.apps_section_login_description()}
               >
-                {installationCard}
-                <SetupSection
-                  draft={setupDraft}
-                  setup={setup}
-                  errors={setupErrors}
-                  isDisabled={saving}
-                  onChange={(next) => {
-                    setSetupDraft(next);
-                    setSetupErrors({});
-                  }}
-                  onRefresh={onRefreshSetup}
-                />
+                <LoginFields form={form} agentEvents={declares.agentEvents} />
               </EditorSection>
-            )}
-            {declares.permissions && (
-              <EditorSection
-                id={ids.permissions}
-                title={m.apps_section_permissions()}
-                status={m.apps_permissions_selected({ count: groups.length })}
-                description={m.apps_section_permissions_description()}
-              >
-                {!declares.setup && installationCard}
-                <PermissionFields
+              {declares.setup && (
+                <EditorSection
+                  id={ids.setup}
+                  title={m.apps_section_setup()}
+                  status={
+                    setupDraft.required
+                      ? m.apps_setup_status_required()
+                      : m.apps_setup_status_none()
+                  }
+                  description={m.apps_section_setup_description()}
+                >
+                  {installationCard}
+                  <SetupSection
+                    draft={setupDraft}
+                    setup={setup}
+                    errors={setupErrors}
+                    isDisabled={saving}
+                    onChange={(next) => {
+                      setSetupDraft(next);
+                      setSetupErrors({});
+                    }}
+                    onRefresh={onRefreshSetup}
+                  />
+                </EditorSection>
+              )}
+              {declares.permissions && (
+                <EditorSection
+                  id={ids.permissions}
+                  title={m.apps_section_permissions()}
+                  status={m.apps_permissions_selected({ count: groups.length })}
+                  description={m.apps_section_permissions_description()}
+                >
+                  {!declares.setup && installationCard}
+                  <PermissionFields
+                    groups={groups}
+                    permissions={permissions}
+                    isDisabled={saving}
+                    onChange={setGroups}
+                    onApprove={async () => {
+                      if (app && permissions)
+                        await guard(() => onApprovePermissions(app, permissions.revision));
+                    }}
+                    installationShownAbove={declares.setup && installationId !== undefined}
+                    eventsUnsaved={declares.notifications && notificationEvents.unsaved}
+                  />
+                </EditorSection>
+              )}
+              {declares.notifications && (
+                <NotificationsSection
+                  id={ids.notifications}
+                  appKey={app?.key}
                   groups={groups}
-                  permissions={permissions}
+                  events={notificationEvents.events}
                   isDisabled={saving}
-                  onChange={setGroups}
-                  onApprove={async () => {
-                    if (app && permissions)
-                      await guard(() => onApprovePermissions(app, permissions.revision));
+                  onEventsChange={notificationEvents.setEvents}
+                  onEndpointDirtyChange={setEndpointDirty}
+                />
+              )}
+              {declares.bot && (
+                <BotSection
+                  id={ids.bot}
+                  appKey={app?.key}
+                  declared={app?.enableBot ?? false}
+                  isDisabled={saving}
+                  onChanged={onRefreshSetup}
+                />
+              )}
+              {app && (
+                <DistributionSection
+                  id={ids.distribution}
+                  appKey={app.key}
+                  status={app.publishStatus ?? "private"}
+                  actions={{
+                    requestPublish: () => saveThenRequestPublish(app),
+                    withdraw: () => onWithdrawPublish(app),
                   }}
-                  installationShownAbove={declares.setup && installationId !== undefined}
-                  eventsUnsaved={declares.notifications && notificationEvents.unsaved}
                 />
-              </EditorSection>
-            )}
-            {declares.notifications && (
-              <NotificationsSection
-                id={ids.notifications}
-                appKey={app?.key}
-                groups={groups}
-                events={notificationEvents.events}
-                isDisabled={saving}
-                onEventsChange={notificationEvents.setEvents}
-                onEndpointDirtyChange={setEndpointDirty}
-              />
-            )}
-            {declares.bot && (
-              <BotSection
-                id={ids.bot}
-                appKey={app?.key}
-                declared={app?.enableBot ?? false}
-                isDisabled={saving}
-                onChanged={onRefreshSetup}
-              />
-            )}
-            {app && (
-              <DistributionSection
-                id={ids.distribution}
-                appKey={app.key}
-                status={app.publishStatus ?? "private"}
-                actions={{
-                  requestPublish: () => saveThenRequestPublish(app),
-                  withdraw: () => onWithdrawPublish(app),
-                }}
-              />
-            )}
-            {editing && (
-              <EditorSection
-                id={ids.danger}
-                title={m.apps_section_danger()}
-                status={m.apps_status_restricted()}
-                description={m.apps_section_danger_description()}
-              >
-                <DangerZoneRows
-                  app={app}
-                  isDisabled={saving}
-                  onRegenerate={() => onRegenerate(app)}
-                  onDelete={() => onDelete(app, releaseGuard)}
-                  onRequestUnpublish={() => onRequestUnpublish(app)}
-                />
-              </EditorSection>
-            )}
+              )}
+              {editing && (
+                <EditorSection
+                  id={ids.danger}
+                  title={m.apps_section_danger()}
+                  status={m.apps_status_restricted()}
+                  description={m.apps_section_danger_description()}
+                >
+                  <DangerZoneRows
+                    app={app}
+                    isDisabled={saving}
+                    onRegenerate={() => onRegenerate(app)}
+                    onDelete={() => onDelete(app, releaseGuard)}
+                    onRequestUnpublish={() => onRequestUnpublish(app)}
+                  />
+                </EditorSection>
+              )}
+            </div>
           </div>
-        </div>
-        <DialogActions className="shrink-0 border-t border-secondary px-6 py-4 max-sm:hidden">
-          <DialogCancel type="button" isDisabled={saving} onPress={onBack}>
-            {m.controls_cancel()}
-          </DialogCancel>
-          <DialogAction
-            type="submit"
-            isDisabled={saving || tooLong}
-            isLoading={saving}
-            showTextWhileLoading
-          >
-            {saving ? m.apps_saving() : editing ? m.apps_save() : m.apps_register_submit()}
-          </DialogAction>
-        </DialogActions>
-      </form>
+          <DialogActions className="shrink-0 border-t border-secondary px-6 py-4 max-sm:hidden">
+            <DialogCancel type="button" isDisabled={saving} onPress={onBack}>
+              {m.controls_cancel()}
+            </DialogCancel>
+            <DialogAction
+              type="submit"
+              isDisabled={saving || tooLong}
+              isLoading={saving}
+              showTextWhileLoading
+            >
+              {saving ? m.apps_saving() : editing ? m.apps_save() : m.apps_register_submit()}
+            </DialogAction>
+          </DialogActions>
+        </form>
+      </form.AppForm>
       <UnsavedChangesDialog
         open={blocker.status === "blocked"}
         onKeepEditing={() => blocker.reset?.()}

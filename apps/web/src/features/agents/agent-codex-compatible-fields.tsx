@@ -7,6 +7,7 @@ import {
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
+import { fieldHint } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 
 export function AgentCodexCompatibleFields({
@@ -16,7 +17,9 @@ export function AgentCodexCompatibleFields({
   model,
   modelError,
   baseUrl,
+  baseUrlError,
   apiKey,
+  apiKeyError,
   canKeepKey,
   originChanged,
   onModeChange,
@@ -30,7 +33,9 @@ export function AgentCodexCompatibleFields({
   model: string;
   modelError?: string;
   baseUrl: string;
+  baseUrlError?: string;
   apiKey: string;
+  apiKeyError?: string;
   canKeepKey: boolean;
   originChanged: boolean;
   onModeChange: (modelProvider: string) => void;
@@ -48,6 +53,8 @@ export function AgentCodexCompatibleFields({
   const trimmedBaseUrl = baseUrl.trim();
   const baseUrlInvalid =
     baseUrlTouched && trimmedBaseUrl !== "" && !codexCompatibleBaseUrl(baseUrl);
+  const shownBaseUrlError =
+    baseUrlError ?? (baseUrlInvalid ? m.agent_form_codex_base_url_invalid() : undefined);
 
   return (
     <>
@@ -82,7 +89,7 @@ export function AgentCodexCompatibleFields({
             value={model}
             onChange={onModelChange}
             isInvalid={Boolean(modelError)}
-            hint={modelError || undefined}
+            hint={fieldHint(modelError)}
           />
           <Input
             label={m.agent_form_codex_base_url()}
@@ -97,17 +104,13 @@ export function AgentCodexCompatibleFields({
             value={baseUrl}
             onChange={onBaseUrlChange}
             onBlur={() => setBaseUrlTouched(true)}
-            isInvalid={baseUrlInvalid}
+            isInvalid={Boolean(shownBaseUrlError)}
             validate={(value) =>
               !value.trim() || codexCompatibleBaseUrl(value)
                 ? null
                 : m.agent_form_codex_base_url_invalid()
             }
-            hint={
-              baseUrlInvalid
-                ? m.agent_form_codex_base_url_invalid()
-                : m.agent_form_codex_base_url_help()
-            }
+            hint={fieldHint(shownBaseUrlError, m.agent_form_codex_base_url_help())}
           />
           <Input
             label={m.agent_form_codex_api_key()}
@@ -117,18 +120,20 @@ export function AgentCodexCompatibleFields({
             size={controlSize}
             className="min-w-0"
             isRequired={!canKeepKey}
+            isInvalid={Boolean(apiKeyError)}
             minLength={8}
             maxLength={4096}
             placeholder={m.agent_form_codex_api_key_placeholder()}
             value={apiKey}
             onChange={onApiKeyChange}
-            hint={
+            hint={fieldHint(
+              apiKeyError,
               canKeepKey
                 ? m.agent_form_api_key_preserve_help()
                 : originChanged
                   ? m.agent_form_codex_api_key_origin_changed_help()
-                  : m.agent_form_codex_api_key_help()
-            }
+                  : m.agent_form_codex_api_key_help(),
+            )}
           />
         </>
       )}

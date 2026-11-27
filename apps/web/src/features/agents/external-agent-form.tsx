@@ -1,18 +1,19 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
-import { TextArea } from "#src/components/base/textarea/textarea";
+import { setFieldServerError, useAppForm, visibleFieldError } from "#src/components/ui/form";
 import { Popconfirm } from "#src/components/ui/popconfirm";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
 import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { createExternalAgent, deleteAgent } from "./agents.functions";
-import { agentCreateErrorMessage } from "./agent-form";
+import { agentCreateErrorTarget } from "./agent-form";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField, type AgentUsernameDraft } from "./agent-username-field";
@@ -47,6 +48,7 @@ export function ExternalAgentForm({
   const openDirect = useOpenDirectConversation();
   const closeList = useCloseConversationList();
   const workspaceSlug = useWorkspaceSlug();
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState("");
   const [submitting, guard] = useSubmitGuard();
   const [createdAgent, setCreatedAgent] = useState<{
@@ -55,6 +57,50 @@ export function ExternalAgentForm({
     displayName: string;
     key: string;
   } | null>(null);
+
+  const form = useAppForm({
+    defaultValues: { name: "", description: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      const formData = formRef.current ? new FormData(formRef.current) : undefined;
+      const name = finishedAgentUsername(String(formData?.get("name") ?? ""));
+      if (!name) {
+        setError("");
+        setFieldServerError(form, "name", m.agent_form_username_required(), formRef.current);
+        return;
+      }
+      const description = value.description.trim();
+      await guard(async () => {
+        setError("");
+        try {
+          const result = await create({
+            data: {
+              hosting: "external",
+              name,
+              description,
+            },
+          });
+          await Promise.all([
+            refreshLists(),
+            queryClient.prefetchQuery(agentProfileQuery(result.agent.id)),
+          ]);
+          setCreatedAgent({
+            id: result.agent.id,
+            name: result.agent.name,
+            displayName: result.agent.displayName || result.agent.name,
+            key: result.credential.key,
+          });
+        } catch (caught) {
+          const target = agentCreateErrorTarget(caught);
+          if (target.field === "name") {
+            setFieldServerError(form, "name", target.message, formRef.current);
+          } else {
+            setError(target.message);
+          }
+        }
+      });
+    },
+  });
 
   useEffect(() => {
     onSubmittingChange(submitting);
@@ -73,39 +119,9 @@ export function ExternalAgentForm({
     ]);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const name = finishedAgentUsername(String(form.get("name") ?? ""));
-    if (!name) {
-      setError(m.agent_form_username_required());
-      return;
-    }
-    const description = String(form.get("description") ?? "").trim();
-    await guard(async () => {
-      setError("");
-      try {
-        const result = await create({
-          data: {
-            hosting: "external",
-            name,
-            description,
-          },
-        });
-        await Promise.all([
-          refreshLists(),
-          queryClient.prefetchQuery(agentProfileQuery(result.agent.id)),
-        ]);
-        setCreatedAgent({
-          id: result.agent.id,
-          name: result.agent.name,
-          displayName: result.agent.displayName || result.agent.name,
-          key: result.credential.key,
-        });
-      } catch (caught) {
-        setError(agentCreateErrorMessage(caught));
-      }
-    });
+    void form.handleSubmit();
   }
 
   async function finish(agentId: string) {
@@ -131,32 +147,49 @@ export function ExternalAgentForm({
   }
 
   return (
-    <AgentCreateForm
-      onSubmit={submit}
-      footer={
-        <AgentCreateFooter
-          onCancel={onClose}
-          submitLabel={m.external_agent_create_submit()}
-          submitting={submitting}
-        />
-      }
-    >
-      <div className="space-y-4 px-6 pt-5 pb-4">
-        <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} draft={usernameDraft} />
-        <TextArea
-          name="description"
-          label={m.agent_create_description()}
-          placeholder={m.agent_form_description_placeholder()}
-          rows={2}
-          isDisabled={submitting}
-        />
-        {error ? (
-          <p role="alert" className="text-sm text-error-primary">
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </AgentCreateForm>
+    <form.AppForm>
+      <AgentCreateForm
+        formRef={formRef}
+        onSubmit={submit}
+        footer={
+          <AgentCreateFooter
+            onCancel={onClose}
+            submitLabel={m.external_agent_create_submit()}
+            submitting={submitting}
+          />
+        }
+      >
+        <div className="space-y-4 px-6 pt-5 pb-4">
+          <form.AppField name="name">
+            {(field) => (
+              <AgentUsernameField
+                autoFocus={autoFocus}
+                isReadOnly={submitting}
+                error={visibleFieldError(field.state.meta, field.form.state.submissionAttempts)}
+                onErrorClear={() => {
+                  field.setMeta((prev) => ({
+                    ...prev,
+                    errorMap: { ...prev.errorMap, onSubmit: undefined },
+                  }));
+                }}
+                draft={usernameDraft}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="description">
+            {(field) => (
+              <field.TextArea
+                label={m.agent_create_description()}
+                placeholder={m.agent_form_description_placeholder()}
+                rows={2}
+                isDisabled={submitting}
+              />
+            )}
+          </form.AppField>
+          <form.Alert error={error} />
+        </div>
+      </AgentCreateForm>
+    </form.AppForm>
   );
 }
 

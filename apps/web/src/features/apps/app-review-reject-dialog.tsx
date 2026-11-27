@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useStore } from "@tanstack/react-form";
 import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -8,19 +9,18 @@ import {
   DialogCancel,
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
-import { TextArea } from "#src/components/base/textarea/textarea";
 import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
 import { Alert } from "#src/components/ui/alert";
+import { useAppForm } from "#src/components/ui/form";
 import {
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { REVIEW_REASON_MAX_LENGTH } from "./app-publish-status";
 
-/** Rejects a review request with an optional reason, which is kept for reviewers and never shown
- * to the app's developers. A refusal stays in the dialog. */
 export function RejectReviewDialog({
   appName,
   open,
@@ -30,20 +30,33 @@ export function RejectReviewDialog({
   appName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Throws when the server refuses the decision. */
   onReject: (reason: string) => Promise<void>;
 }) {
   const controlSize = useDialogControlSize();
-  const [reason, setReason] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState(false);
   const [pending, guard] = useSubmitGuard();
-  // A typed reason is the edit; discarding it also empties the field, as the dialog stays mounted.
+  const form = useAppForm({
+    defaultValues: { reason: "" },
+    onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
+    onSubmit: async ({ value }) => {
+      await guard(async () => {
+        setError(false);
+        try {
+          await onReject(value.reason);
+        } catch {
+          setError(true);
+        }
+      });
+    },
+  });
+  const reason = useStore(form.store, (state) => state.values.reason);
   const unsaved = useUnsavedChangesGuard({
     overlayOpen: open,
     dirty: reason.trim() !== "",
     close: () => onOpenChange(false),
     onDiscard: () => {
-      setReason("");
+      form.reset();
       setError(false);
     },
   });
@@ -59,49 +72,47 @@ export function RejectReviewDialog({
       >
         <Modal className="w-[calc(100vw-2rem)] max-w-md">
           <Dialog className="text-left">
-            {/* ⌘/Ctrl+Enter rejects from the reason; Enter there starts a new line (task #101). */}
-            <form
-              className="grid gap-4 p-6"
-              onKeyDown={submitOnModEnter}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void guard(async () => {
-                  setError(false);
-                  try {
-                    await onReject(reason);
-                  } catch {
-                    setError(true);
-                  }
-                });
-              }}
-            >
-              <Heading slot="title" className="text-lg font-semibold text-primary">
-                {m.apps_review_reject_title({ name: appName })}
-              </Heading>
-              <TextArea
-                size={controlSize}
-                label={m.apps_review_reject_reason()}
-                value={reason}
-                onChange={setReason}
-                rows={4}
-                maxLength={REVIEW_REASON_MAX_LENGTH}
-                isDisabled={pending}
-              />
-              {error && <Alert color="error" title={m.apps_review_reject_error()} />}
-              <DialogActions>
-                <DialogCancel type="button" isDisabled={pending} onPress={unsaved.requestClose}>
-                  {m.apps_review_cancel()}
-                </DialogCancel>
-                <DialogAction
-                  type="submit"
-                  color="secondary-destructive"
-                  isLoading={pending}
-                  showTextWhileLoading
-                >
-                  {pending ? m.apps_review_rejecting() : m.apps_review_reject_confirm()}
-                </DialogAction>
-              </DialogActions>
-            </form>
+            <form.AppForm>
+              <form
+                ref={formRef}
+                className="grid gap-4 p-6"
+                onKeyDown={submitOnModEnter}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void form.handleSubmit();
+                }}
+              >
+                <Heading slot="title" className="text-lg font-semibold text-primary">
+                  {m.apps_review_reject_title({ name: appName })}
+                </Heading>
+                <form.AppField name="reason">
+                  {(field) => (
+                    <field.TextArea
+                      size={controlSize}
+                      label={m.apps_review_reject_reason()}
+                      rows={4}
+                      maxLength={REVIEW_REASON_MAX_LENGTH}
+                      isDisabled={pending}
+                      onChange={() => setError(false)}
+                    />
+                  )}
+                </form.AppField>
+                {error && <Alert color="error" title={m.apps_review_reject_error()} />}
+                <DialogActions>
+                  <DialogCancel type="button" isDisabled={pending} onPress={unsaved.requestClose}>
+                    {m.apps_review_cancel()}
+                  </DialogCancel>
+                  <DialogAction
+                    type="submit"
+                    color="secondary-destructive"
+                    isLoading={pending}
+                    showTextWhileLoading
+                  >
+                    {pending ? m.apps_review_rejecting() : m.apps_review_reject_confirm()}
+                  </DialogAction>
+                </DialogActions>
+              </form>
+            </form.AppForm>
           </Dialog>
         </Modal>
       </ModalOverlay>

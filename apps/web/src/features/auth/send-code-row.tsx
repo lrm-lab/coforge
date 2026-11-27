@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 
 import { Button } from "#src/components/base/buttons/button";
+import { HintText } from "#src/components/base/input/hint-text";
 import {
   InputOTP,
   InputOTPGroup,
@@ -75,13 +76,17 @@ export function CodeInput({
 
 export function SendCodeRow({
   codeSending: { sending, secondsLeft, onSend },
+  error,
+  errorClassName,
   children,
 }: {
   codeSending: ReturnType<typeof useCodeSending>;
+  error?: string;
+  errorClassName?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2.5">
+    <div data-field="code" className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium text-secondary">{m.login_code_label()}</span>
         <Button
@@ -97,6 +102,11 @@ export function SendCodeRow({
         </Button>
       </div>
       {children}
+      {error ? (
+        <HintText isInvalid role="alert" className={errorClassName}>
+          {error}
+        </HintText>
+      ) : null}
     </div>
   );
 }

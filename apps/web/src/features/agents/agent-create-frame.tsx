@@ -1,4 +1,12 @@
-import { createContext, useContext, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { createPortal } from "react-dom";
 import { Heading, Text } from "react-aria-components";
 import { XClose as X } from "@untitledui/icons";
@@ -83,12 +91,14 @@ export function AgentCreateModal({
 }
 
 export function AgentCreateForm({
+  formRef,
   onSubmit,
   intro,
   footer,
   changed = false,
   children,
 }: {
+  formRef?: Ref<HTMLFormElement>;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   changed?: boolean;
   intro?: ReactNode;
@@ -102,6 +112,7 @@ export function AgentCreateForm({
   useReportDirty(dirty, setDirty);
   return (
     <form
+      ref={formRef}
       onSubmit={onSubmit}
       onInput={() => setTyped(true)}
       className="flex min-h-0 flex-1 flex-col"

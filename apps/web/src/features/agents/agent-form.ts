@@ -98,6 +98,51 @@ const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
   ),
 ]);
 
+export type AgentFormField =
+  | "name"
+  | "computerId"
+  | "provider"
+  | "modelProvider"
+  | "model"
+  | "baseUrl"
+  | "apiKey";
+
+export type AgentFormErrorTarget = {
+  field?: AgentFormField;
+  message: string;
+};
+
+const AGENT_RUNTIME_UNAVAILABLE_FIELDS = new Map<string, AgentFormField>([
+  ["not_connected", "computerId"],
+  ["runtime_unconfirmed", "provider"],
+  ["runtime_missing", "provider"],
+  ["runtime_unusable", "provider"],
+  ["runtime_not_shared", "provider"],
+  ["model_missing", "model"],
+]);
+
+const AGENT_FORM_ERROR_FIELDS = new Map<string, AgentFormField>([
+  ["agent-name-taken", "name"],
+  ["agent-name-required", "name"],
+  ["agent-computer-required", "computerId"],
+  ["agent-computer-locked", "computerId"],
+  ["agent-provider-unsupported", "provider"],
+  ["agent-model-provider-required", "modelProvider"],
+  ["antigravity-model-effort-suffix", "model"],
+  ["agent-codex-compatible-endpoint-required", "baseUrl"],
+  ["agent-codex-compatible-key-required", "apiKey"],
+  ["agent-api-key-required", "apiKey"],
+]);
+
+function agentFormErrorField(cause: unknown): AgentFormField | undefined {
+  if (!isAppError(cause)) return undefined;
+  if (cause.errorId === "agent-runtime-unavailable") {
+    const reason = (cause.details as { reason?: string } | undefined)?.reason;
+    return AGENT_RUNTIME_UNAVAILABLE_FIELDS.get(reason ?? "");
+  }
+  return AGENT_FORM_ERROR_FIELDS.get(cause.errorId ?? "");
+}
+
 function agentFormErrorMessage(cause: unknown, fallback: () => string): string {
   if (isAppError(cause)) {
     if (cause.errorId === "agent-runtime-unavailable") {
@@ -116,11 +161,29 @@ export function agentUpdateErrorMessage(cause: unknown): string {
   return agentFormErrorMessage(cause, m.agent_update_error);
 }
 
+export function agentUpdateErrorTarget(cause: unknown): AgentFormErrorTarget {
+  const field = agentFormErrorField(cause);
+  return {
+    ...(field ? { field } : {}),
+    message: agentUpdateErrorMessage(cause),
+  };
+}
+
 export function agentCreateErrorMessage(cause: unknown): string {
   return (
     externalCredentialRateLimitMessage(cause) ??
     agentFormErrorMessage(cause, m.agent_form_server_error)
   );
+}
+
+export function agentCreateErrorTarget(cause: unknown): AgentFormErrorTarget {
+  const rateLimit = externalCredentialRateLimitMessage(cause);
+  if (rateLimit) return { message: rateLimit };
+  const field = agentFormErrorField(cause);
+  return {
+    ...(field ? { field } : {}),
+    message: agentFormErrorMessage(cause, m.agent_form_server_error),
+  };
 }
 
 export function agentEnvironmentNameError(key: string): string | undefined {
