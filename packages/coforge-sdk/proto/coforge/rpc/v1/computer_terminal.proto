@@ -10,6 +10,7 @@ message TerminalControl {
   string session_id = 5;
   string attach_id = 6;
   uint32 attach_generation = 7;
+  string message_type = 8;
   oneof command {
     TerminalOpenOrAttach open_or_attach = 11;
     TerminalInput input = 12;

@@ -1,9 +1,11 @@
 import type { DaemonConnectRejectionReason } from "@lrm/coforge-sdk/internal";
 import type { RecoveredUpgradeResult, UpgradeOperationsReading } from "./upgrade-result-reporter";
+import type { ComputerTerminalSessionFactory } from "./computer-terminal-relay";
 import type { UnrefTimerSchedule } from "./unref-timer";
 
 export type DaemonRuntimeLifecycle = {
   procMemoryConfigPath?: string;
+  createComputerTerminal?: ComputerTerminalSessionFactory;
   requestRestart?(requestId: string): Promise<void>;
   requestUpgrade?(
     requestId: string,

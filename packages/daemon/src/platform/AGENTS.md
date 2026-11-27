@@ -14,6 +14,13 @@ Rules for OS primitives in `src/platform/`. They extend
 
 ## Processes
 
+- `computer-terminal-launch.ts` resolves the local terminal's effective-UID account,
+  platform temp directory, and explicit shell environment.
+- `computer-terminal-pty.ts` owns binary PTY I/O and one in-flight input write.
+  The `computer-terminal-anchor.ts` subprocess is the session leader before the
+  shell starts. On owner disconnect it cleans up live members of that PTY session,
+  including background job groups that survive the shell. A process that calls
+  `setsid` leaves the session.
 - `process-transport.ts` supplies pipe or opt-in terminal I/O to the shared process-tree owner and its launchd runner. Provider output is never parsed here.
 - `posix-process-tree.ts` is the shared POSIX owner for direct launches and terminal children inside launchd. Terminal cleanup snapshots descendants before TERM and checks PID/start time before escalation, including children in another session. Whole-tree `terminate()` snapshots descendants before signaling too, so a member that escaped the child's process group (setsid/setpgid) is still signaled while its parent chain is intact. Keep turn-scoped pipe cleanup unchanged.
 - `proc-job-process.ts` owns OS primitives for Agent background jobs (`coforge proc`): start-time/PGID identity verification (reusing `parseProcStat` on Linux, `ps` on macOS), verified process-group termination, Linux user `systemd-run --scope` detection, and detached `Bun.spawn` directly to log descriptors.

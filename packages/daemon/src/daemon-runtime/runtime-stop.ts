@@ -99,7 +99,10 @@ export class RuntimeStop {
     const { ports } = this;
     this.#stopping.abort();
     // Close every local capability synchronously before any shutdown await.
-    const piChatClosed = ports.startup.close();
+    const interactiveClosed = ports.startup.close().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
     ports.sweeps.stop();
     ports.configApply.dispose();
     ports.machineStatus.stop();
@@ -142,7 +145,7 @@ export class RuntimeStop {
     for (const token of ports.agentProxyTokens.values()) ports.agentProxy?.revoke(token);
     ports.agentProxyTokens.clear();
     ports.agentContexts.clear();
-    this.#promise = this.#stop(shutdownReason, piChatClosed).finally(() => {
+    this.#promise = this.#stop(shutdownReason, interactiveClosed).finally(() => {
       this.#promise = undefined;
     });
     return this.#promise;
@@ -207,7 +210,10 @@ export class RuntimeStop {
     }
   }
 
-  async #stop(shutdownReason: DaemonShutdownReason, piChatClosed: Promise<void>): Promise<void> {
+  async #stop(
+    shutdownReason: DaemonShutdownReason,
+    interactiveClosed: Promise<unknown>,
+  ): Promise<void> {
     const { ports } = this;
     // No retry timer may outlive this daemon instance: a launch that was mid-cooldown left a
     // "starting" record behind, which the next instance repairs and recovers (`recover()`).
@@ -249,9 +255,10 @@ export class RuntimeStop {
     ports.usageReport.clear();
     for (const agentId of activeAgentIds) ports.sendAgentStatus(agentId, "inactive");
     ports.currentActivityLaunches.clear();
+    const interactiveError = await interactiveClosed;
+    shutdownError ??= interactiveError;
     await Promise.all([
       this.#settleReminders(),
-      piChatClosed,
       this.#settleMigrations(),
       ports.transport().flushTokenUsage?.(DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS),
       ports.connection.computerId

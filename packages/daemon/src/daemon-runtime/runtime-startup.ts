@@ -9,7 +9,6 @@ import {
   diagnosticErrorCode,
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
-  type DaemonConnectRejectionReason,
   type RuntimeProvider,
   type UsageScanResponse,
 } from "@lrm/coforge-sdk/internal";
@@ -37,6 +36,7 @@ import type { RuntimeAuthController } from "./runtime-auth-controller";
 import type { UpgradeResultReporter } from "./upgrade-result-reporter";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
 import type { ActivityLaunch } from "./activity-launch";
+import type { DaemonRuntimeLifecycle } from "./runtime-lifecycle";
 import type { RuntimeSweeps } from "./runtime-sweeps";
 import type { runtimeMachineStatus } from "./machine-status-reporter";
 import type { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
@@ -109,18 +109,16 @@ export type RuntimeStartupPorts = {
     request: AgentWorkspaceDeleteRequest,
   ): Promise<Pick<AgentWorkspaceDeleteResult, "status">>;
   sendPiChatFrame?(frame: PiChatFrame): Promise<void>;
-  lifecycle: {
-    readInstallerRecovery?(): Promise<boolean>;
-    requestRestart?(requestId: string): Promise<void>;
-    requestUpgrade?(
-      requestId: string,
-      expectedVersion?: string,
-      releaseChannel?: string,
-    ): Promise<void>;
-    connectionRefused?(reason: DaemonConnectRejectionReason): void;
-    recoveredRestartRequestIds?: string[];
-    recoveredUpgradeRequestIds?: string[];
-  };
+  lifecycle: Pick<
+    DaemonRuntimeLifecycle,
+    | "readInstallerRecovery"
+    | "requestRestart"
+    | "requestUpgrade"
+    | "connectionRefused"
+    | "recoveredRestartRequestIds"
+    | "recoveredUpgradeRequestIds"
+    | "createComputerTerminal"
+  >;
   reminders: Pick<ReminderDueReceiver, "restore">;
   resyncAppConfigs(): void;
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "enable" | "lastBusy">;
@@ -177,8 +175,9 @@ export class RuntimeStartup {
     this.#diskJanitor = undefined;
     const piChat = this.#piChat;
     this.#piChat = undefined;
-    const piChatClosed = piChat?.close();
-    return piChatClosed ?? Promise.resolve();
+    return Promise.all([piChat?.close(), this.#publications?.stopComputerTerminal()]).then(
+      () => {},
+    );
   }
 
   unsubscribeAll(): void {
@@ -203,8 +202,6 @@ export class RuntimeStartup {
     mkdirSync(connection.workspaceRoot, { recursive: true });
     const stored = await ports.credentials.load(connection.workspaceId, connection.computerId);
     if (!stored) throw new Error("Workspace credential is missing");
-    // The stored dk_ migrates to the Computer's own sk_computer (task #417): saved before it is
-    // confirmed, so a failure leaves the old key live and the connection still opens with it.
     const token = await migrateComputerKey({
       credentials: ports.credentials,
       client: connection.serverHttpUrl
@@ -224,13 +221,19 @@ export class RuntimeStartup {
       COFORGE_DAEMON_VERSION,
       performance.timeOrigin,
     );
-    const publications = new RuntimePublicationSubscriptions({
-      ...ports.publications,
-      purgeProcJobs: ports.procJobs ? () => ports.procJobs!.purgeWorkspace() : undefined,
-      transport: ports.transport(),
-      workspaceId: connection.workspaceId,
-      computerId: connection.computerId,
-    });
+    const publications = new RuntimePublicationSubscriptions(
+      {
+        ...ports.publications,
+        purgeProcJobs: ports.procJobs ? () => ports.procJobs!.purgeWorkspace() : undefined,
+        transport: ports.transport(),
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+      },
+      {
+        daemonInstanceId: ports.runtimeInstanceId,
+        create: ports.lifecycle.createComputerTerminal,
+      },
+    );
     try {
       const auth = subscribeRuntimeAuth(ports.transport(), {
         owner: {
@@ -401,7 +404,12 @@ export class RuntimeStartup {
             recoveredRestartRequestIds: ports.lifecycle.recoveredRestartRequestIds ?? [],
             recoveredUpgradeRequestIds: ports.lifecycle.recoveredUpgradeRequestIds ?? [],
             ...upgradeActivation,
-            capabilities: readyCapabilities(!!ports.publications.migration, !!this.#authControl),
+            capabilities: readyCapabilities(
+              !!ports.publications.migration,
+              !!this.#authControl,
+              undefined,
+              publications.terminalCapable,
+            ),
           };
         },
         signal,

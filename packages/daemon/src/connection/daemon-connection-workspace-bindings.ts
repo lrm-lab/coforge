@@ -23,6 +23,8 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   | "sendRuntimeManageResult"
   | "onPiChatRequest"
   | "sendPiChatFrame"
+  | "onComputerTerminalControl"
+  | "sendComputerTerminalFrame"
 > {
   protected abstract get daemonQueries(): DaemonQueries;
 
@@ -83,5 +85,11 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   }
   get sendPiChatFrame() {
     return this.daemonQueries.piChat.sendResult;
+  }
+  get onComputerTerminalControl() {
+    return this.daemonQueries.computerTerminal.onRequest;
+  }
+  get sendComputerTerminalFrame() {
+    return this.daemonQueries.computerTerminal.sendResult;
   }
 }

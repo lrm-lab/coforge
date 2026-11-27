@@ -30,6 +30,11 @@ import {
 } from "./agent-failure-logs";
 import { diagnosticErrorCode, diagnosticErrorName, thrownMessage } from "@lrm/coforge-sdk/internal";
 
+import {
+  ComputerTerminalRelay,
+  type ComputerTerminalSessionFactory,
+} from "./computer-terminal-relay";
+
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 type Hold<Value> = (value: Value, run: () => Promise<void>) => void;
@@ -69,8 +74,35 @@ export class RuntimePublicationSubscriptions {
   readonly #heldControl = new HeldPublications<() => Promise<void>>();
   readonly #heldMessages = new HeldPublications<() => Promise<void>>();
   #buffering = true;
+  readonly #terminal?: ComputerTerminalRelay;
 
-  constructor(private readonly ports: RuntimePublicationSubscriptionPorts) {}
+  constructor(
+    private readonly ports: RuntimePublicationSubscriptionPorts,
+    terminal?: { daemonInstanceId: string; create?: ComputerTerminalSessionFactory },
+  ) {
+    const { transport, workspaceId, computerId } = ports;
+    if (
+      terminal &&
+      (process.platform === "darwin" || process.platform === "linux") &&
+      transport.onComputerTerminalControl &&
+      transport.sendComputerTerminalFrame
+    ) {
+      this.#terminal = new ComputerTerminalRelay({
+        ...terminal,
+        workspaceId,
+        computerId,
+        send: (frame) => transport.sendComputerTerminalFrame!(frame),
+      });
+    }
+  }
+
+  get terminalCapable(): boolean {
+    return this.#terminal !== undefined;
+  }
+
+  stopComputerTerminal(): Promise<void> | undefined {
+    return this.#terminal?.stop();
+  }
 
   async install(): Promise<(() => void)[]> {
     const { transport } = this.ports;
@@ -78,6 +110,10 @@ export class RuntimePublicationSubscriptions {
     const subscribe = (unsubscribe: (() => void) | undefined) => {
       if (unsubscribe) subscriptions.push(unsubscribe);
     };
+    if (this.#terminal)
+      subscribe(
+        transport.onComputerTerminalControl?.((control) => this.#terminal!.control(control)),
+      );
     const receive =
       <Value>(hold: Hold<Value>, handle: (value: Value) => Promise<void>) =>
       (value: Value) => {

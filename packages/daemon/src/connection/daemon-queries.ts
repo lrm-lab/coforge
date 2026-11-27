@@ -43,6 +43,12 @@ import {
   type PublicationKind,
 } from "./publication-routing";
 
+import {
+  COMPUTER_TERMINAL_FRAME_METHOD,
+  decodeTerminalControl,
+  encodeTerminalFrame,
+} from "@lrm/coforge-sdk/internal/computer-terminal-wire";
+
 const logger = getLogger(["coforge", "daemon", "queries"]);
 
 type Scope = { workspaceId: string; computerId: string };
@@ -102,6 +108,7 @@ export class DaemonQueries {
   readonly agentSideAsk;
   readonly runtimeManage;
   readonly piChat;
+  readonly computerTerminal;
   readonly #byKind: ReadonlyMap<
     DaemonQueryKind,
     { receive(bytes: Uint8Array, scope: Scope): boolean }
@@ -187,6 +194,12 @@ export class DaemonQueries {
       decodePiChatRequest,
       encodePiChatFrame,
       PI_CHAT_FRAME_METHOD,
+      rpc,
+    );
+    this.computerTerminal = new DaemonQuery(
+      decodeTerminalControl,
+      encodeTerminalFrame,
+      COMPUTER_TERMINAL_FRAME_METHOD,
       rpc,
     );
     this.#ordered = [

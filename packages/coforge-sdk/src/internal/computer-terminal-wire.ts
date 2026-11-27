@@ -6,6 +6,10 @@ import {
   type TerminalFrame,
 } from "#src/internal/gen/coforge/rpc/v1/computer_terminal_pb";
 
+import { RPC_METHODS } from "./rpc-methods";
+
+export const COMPUTER_TERMINAL_CONTROL_MESSAGE_TYPE = "coforge.rpc.v1.TerminalControl";
+export const COMPUTER_TERMINAL_FRAME_METHOD = RPC_METHODS.daemonComputerTerminalFrame;
 export const COMPUTER_TERMINAL_CAPABILITY = "computer-terminal:v1";
 export const TERMINAL_MAX_CHUNK_BYTES = 16 * 1024;
 export const TERMINAL_MAX_HISTORY_BYTES = 1024 * 1024;
@@ -190,12 +194,20 @@ function parseFrame(event: TerminalFrame["event"]): ComputerTerminalFrame["event
 export function encodeTerminalControl(input: ComputerTerminalControl): Uint8Array {
   const scope = terminalScope(input);
   const command = parseControl(create(TerminalControlSchema, input).command);
-  return toBinary(TerminalControlSchema, create(TerminalControlSchema, { ...scope, command }));
+  return toBinary(
+    TerminalControlSchema,
+    create(TerminalControlSchema, {
+      ...scope,
+      command,
+      messageType: COMPUTER_TERMINAL_CONTROL_MESSAGE_TYPE,
+    }),
+  );
 }
 
 export function decodeTerminalControl(bytes: Uint8Array): ComputerTerminalControl {
   requireTerminal(bytes.byteLength <= MAX_WIRE_BYTES);
   const frame = fromBinary(TerminalControlSchema, bytes);
+  requireTerminal(frame.messageType === COMPUTER_TERMINAL_CONTROL_MESSAGE_TYPE);
   return { ...terminalScope(frame), command: parseControl(frame.command) };
 }
 

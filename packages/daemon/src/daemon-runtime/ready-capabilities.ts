@@ -1,3 +1,4 @@
+import { COMPUTER_TERMINAL_CAPABILITY } from "@lrm/coforge-sdk/internal/computer-terminal-wire";
 import { CODEX_COMPATIBLE_PROVIDER_CAPABILITY } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { kiroEnterpriseAuthSupported } from "#src/code-agent/kiro/auth-host";
 import {
@@ -35,6 +36,7 @@ export function readyCapabilities(
   migrations: boolean,
   runtimeAuth = false,
   platform = process.platform,
+  computerTerminal = false,
 ) {
   return [
     PI_CHAT_CAPABILITY,
@@ -63,5 +65,6 @@ export function readyCapabilities(
       ? [KIRO_IDENTITY_CENTER_AUTH_CAPABILITY, KIRO_FREE_AUTH_CAPABILITY]
       : []),
     ...(migrations ? [AGENT_MIGRATION_CAPABILITY] : []),
+    ...(computerTerminal ? [COMPUTER_TERMINAL_CAPABILITY] : []),
   ];
 }

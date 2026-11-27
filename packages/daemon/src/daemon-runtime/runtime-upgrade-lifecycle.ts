@@ -37,6 +37,7 @@ export function startupLifecycle(
 ): StartupLifecycle {
   return {
     requestRestart: lifecycle.requestRestart,
+    createComputerTerminal: lifecycle.createComputerTerminal,
     requestUpgrade: upgradeLifecycleRequest(lifecycle, results, workspaceId),
     connectionRefused: lifecycle.connectionRefused,
     recoveredRestartRequestIds: lifecycle.recoveredRestartRequestIds,

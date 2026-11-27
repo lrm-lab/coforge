@@ -55,6 +55,15 @@ if (Bun.argv[2] === "__pi-chat") {
   const { runProcJobGroupAnchor } =
     await import("@lrm/coforge-daemon/src/platform/proc-job-group-anchor");
   await runProcJobGroupAnchor();
+} else if (
+  Bun.argv[2] === "__computer-terminal-anchor" ||
+  Bun.argv[1] === "__computer-terminal-anchor"
+) {
+  const { runComputerTerminalAnchor } =
+    await import("@lrm/coforge-daemon/src/platform/computer-terminal-anchor");
+  const command = Bun.argv.slice(Bun.argv[1] === "__computer-terminal-anchor" ? 2 : 3);
+  await runComputerTerminalAnchor(command);
+  process.exit(0);
 } else if (Bun.argv[2] === "__daemon") {
   const { runMachineSupervisor } = await import("@lrm/coforge-daemon");
   performance.mark("coforge:startup:daemon_imported");

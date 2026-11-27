@@ -20,6 +20,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { APP_REGISTRATION_NOTICE_MESSAGE_TYPE } from "@lrm/coforge-sdk/internal/app-registration-notice";
 
+import { COMPUTER_TERMINAL_CONTROL_MESSAGE_TYPE } from "@lrm/coforge-sdk/internal/computer-terminal-wire";
+
 export type DaemonQueryKind =
   | "pi_chat"
   | "agent_memory"
@@ -44,6 +46,7 @@ export type ComputerLifecycleKind = "computer_upgrade" | "computer_restart";
 export type DaemonProviderKind = "usage_scan" | "reset_credit" | "model_refresh" | "effort_read";
 
 export type PublicationKind =
+  | "computer_terminal"
   | "runtime_auth"
   | DaemonQueryKind
   | "reminder_sync"
@@ -62,6 +65,7 @@ export type PublicationKind =
   | "agent_start";
 
 const PUBLICATION_ORDER: readonly PublicationKind[] = [
+  "computer_terminal",
   "runtime_auth",
   "pi_chat",
   "agent_memory",
@@ -139,6 +143,7 @@ const DISCRIMINATOR_FIELDS = new Map<number, ReadonlyMap<string, PublicationKind
   [
     8,
     new Map([
+      [COMPUTER_TERMINAL_CONTROL_MESSAGE_TYPE, "computer_terminal"],
       ["coforge.rpc.v1.RuntimeAuthIntent", "runtime_auth"],
       ["coforge.rpc.v1.AgentWorkspaceFilesListRequest", "agent_workspace_files_list"],
       [REMINDER_DUE_MESSAGE_TYPE, "reminder_due"],

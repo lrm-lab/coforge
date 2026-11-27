@@ -73,7 +73,13 @@ export function dispatchAgentPublication(
   const ownsDaemon = (value: { workspaceId: string; computerId?: string }) =>
     value.workspaceId === workspaceId && value.computerId === computerId;
 
-  const tryKind = (kind: PublicationKind): boolean => {
+  const kinds = scanPublicationKinds(data);
+  if (kinds.includes("computer_terminal")) {
+    if (!deps.readyPublications.holding) deps.queries.computerTerminal.receive(data, config);
+    return;
+  }
+
+  const tryKind = (kind: Exclude<PublicationKind, "computer_terminal">): boolean => {
     switch (kind) {
       case "runtime_auth":
         return routeRuntimeAuthPublication(data, config, deps.runtimeAuthIntent.current);
@@ -221,8 +227,8 @@ export function dispatchAgentPublication(
 
   let tried: Set<PublicationKind> | undefined;
   let deliveryErrors: Map<PublicationKind, unknown> | undefined;
-  for (const kind of scanPublicationKinds(data)) {
-    if (tryKind(kind)) return;
+  for (const kind of kinds) {
+    if (kind === "computer_terminal" || tryKind(kind)) return;
     tried ??= new Set();
     tried.add(kind);
   }

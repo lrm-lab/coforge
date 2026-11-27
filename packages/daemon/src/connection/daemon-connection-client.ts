@@ -13,6 +13,10 @@ import type {
   RuntimeAuthLoginReport,
   RuntimeAuthLogoutReport,
 } from "@lrm/coforge-sdk/internal";
+import type {
+  ComputerTerminalControl,
+  ComputerTerminalFrame,
+} from "@lrm/coforge-sdk/internal/computer-terminal-wire";
 import type { PiChatRequest, PiChatFrame } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import type { AgentReplyIntent } from "@lrm/coforge-sdk/internal/reply-intent";
 import type {
@@ -149,6 +153,10 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onSkillsList?(callback: (request: AgentSkillsListRequest) => Promise<void>): () => void;
   onPiChatRequest?(callback: (request: PiChatRequest) => Promise<void>): () => void;
   sendPiChatFrame?(frame: PiChatFrame): Promise<void>;
+  onComputerTerminalControl?(
+    callback: (control: ComputerTerminalControl) => Promise<void>,
+  ): () => void;
+  sendComputerTerminalFrame?(frame: ComputerTerminalFrame): Promise<void>;
   sendSkillsListResult?(result: AgentSkillsListResult): Promise<void>;
   onWorkspaceFilesList?(
     callback: (request: AgentWorkspaceFilesListRequest) => Promise<void>,
