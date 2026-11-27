@@ -1,4 +1,5 @@
 import type { AgentActivity, AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { countLiveProcessDescendants } from "#src/agent-runtime/process-descendants";
 import { daemonIdleFacts } from "./agent-idle-facts";
 import type { ActivityDraft, BusyActivity } from "./agent-activity-publisher";
 import { RuntimeRelease } from "./runtime-release";
@@ -50,6 +51,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     isStopping(agentId: string): boolean;
   };
   runnerHold(): unknown;
+  countLiveDescendants?: typeof countLiveProcessDescendants;
   migrations(): { holds(agentId: string): boolean } | undefined;
   runningMentionIdentity(agentId: string): unknown;
   noticeActionClocks(): {
@@ -109,6 +111,9 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
       input.mentionDeliveries().carry.carryForRelaunch(agentId, freshSession),
     abortMentionCarry: (agentId) => input.mentionDeliveries().carry.abortRelaunch(agentId),
     release: (agentId, timeoutMs) => input.processManager().release(agentId, timeoutMs),
+    countLiveDescendants:
+      input.countLiveDescendants ??
+      (process.platform === "win32" ? undefined : countLiveProcessDescendants),
     reconcileIdleTurn: (agentId, launch) =>
       input.activityPublisher().reconcileIdle?.(agentId, launch) ?? false,
   });

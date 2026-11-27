@@ -83,6 +83,7 @@ export function trackAgentLaunch(
   const identity = { agentId, launchId: launch.launchId };
   const toolCalls = new ToolCallLedger(undefined, undefined, undefined, {
     identity,
+    trackUnfinishedCommands: config.provider === RUNTIME_PROVIDER.ANTIGRAVITY,
   });
   launch.toolCalls = toolCalls;
   launch.stalled = new StalledTurnTracker(

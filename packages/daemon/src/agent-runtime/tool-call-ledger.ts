@@ -42,13 +42,12 @@ export type ToolCallLogIdentity = Readonly<{ agentId: string; launchId: string }
 type ToolCallLedgerOptions = {
   /** Absent for a ledger outside a daemon launch (a test): nothing is logged then. */
   identity?: ToolCallLogIdentity;
+  trackUnfinishedCommands?: boolean;
 };
 
 /**
  * One launch's tool calls from the provider's raw events: which are still open (stalled recovery
- * never restarts over one) and how long each ran, for the outcome its `tool_end` reports. A
- * completed turn forgets every call, so a call that never ends (an interrupted turn, a crash)
- * reports nothing and is not kept.
+ * never restarts over one) and how long each ran, for the outcome its `tool_end` reports.
  *
  * A call lasting `TOOL_CALL_LOG_MIN_MS` or more is one log line — the tool's name and how long it
  * ran, never its arguments or output — so a later reader can tell a silent turn that was running
@@ -64,12 +63,13 @@ export class ToolCallLedger {
   #oldestOpenId: string | undefined;
   #loggedCalls = 0;
   #reportedTruncation = false;
+  #unfinishedCommandStartedAtMs: number | undefined;
 
   constructor(
     private readonly clock: () => number = () => performance.now(),
     private readonly wallClock: () => number = Date.now,
     private readonly processClock: () => number = processClockMs,
-    options: ToolCallLedgerOptions = {},
+    private readonly options: ToolCallLedgerOptions = {},
   ) {
     this.#identity = options.identity;
   }
@@ -99,7 +99,17 @@ export class ToolCallLedger {
         if (this.#oldestOpenId === event.id) this.#recomputeOldestOpen();
       }
     } else if (event.type === "completed") {
-      for (const [id, call] of this.#calls)
+      for (const [id, call] of this.#calls) {
+        if (
+          this.options.trackUnfinishedCommands &&
+          event.status === "completed" &&
+          call.name === "run_command" &&
+          call.endedAtMs === undefined
+        )
+          this.#unfinishedCommandStartedAtMs = Math.min(
+            this.#unfinishedCommandStartedAtMs ?? call.startedAtProcessClockMs,
+            call.startedAtProcessClockMs,
+          );
         this.#logCall(
           id,
           call,
@@ -107,12 +117,22 @@ export class ToolCallLedger {
             ? "agent_runtime:tool_unfinished"
             : "agent_runtime:tool_finished",
         );
+      }
       this.#clearCalls();
     }
   }
 
   get hasOpenToolCall(): boolean {
     return this.#openCount > 0;
+  }
+
+  get unfinishedCommandStartedAtMs(): number | undefined {
+    return this.#unfinishedCommandStartedAtMs;
+  }
+
+  clearUnfinishedCommand(startedAtMs: number): void {
+    if (this.#unfinishedCommandStartedAtMs === startedAtMs)
+      this.#unfinishedCommandStartedAtMs = undefined;
   }
 
   oldestOpenTool(): { name: string; silentForMs: number } | undefined {

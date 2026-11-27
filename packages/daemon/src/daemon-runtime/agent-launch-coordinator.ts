@@ -167,9 +167,7 @@ export class AgentLaunchCoordinator {
       providerCapabilities: (provider) => this.ports.wakeRecycle?.providerCapabilities?.(provider),
       readSummaryFacts: (agentId, sessionId) =>
         this.ports.wakeRecycle?.readSummaryFacts?.(agentId, sessionId),
-      stop: async (stop) => {
-        await this.ports.runtimeRelease?.stopColdIdle?.(stop);
-      },
+      stop: async (stop) => (await this.ports.runtimeRelease?.stopColdIdle?.(stop)) ?? false,
     });
     this.turnEndCompaction = new TurnEndCompaction({
       idle: (agentId) =>
