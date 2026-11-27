@@ -18,7 +18,7 @@ deploy_image_retention=5
 # matches any org prefix so pre-rename lrm-teams copies are covered as well.
 deploy_repo_images() {
 	local pattern="$1"
-	docker images --no-trunc --digests --format '{{.ID}}|{{.Repository}}|{{.CreatedAt}}' |
+	docker images --no-trunc --digests --format '{{.ID}}|{{.Repository}}|{{.Tag}}|{{.CreatedAt}}' |
 		awk -F'|' -v pat="$pattern" '$2 ~ pat'
 }
 
@@ -48,20 +48,42 @@ container_image_ids() {
 
 # Prints the IDs of in-scope web and checker images to remove: everything older than the
 # newest $deploy_image_retention unique image IDs per repository, minus container references.
+# Ordering comes from the deploy-<UTC> tag written at pull time, not
+# CreatedAt: reproducible builds stamp every image at the epoch, so sorting by
+# creation date ranks a freshly pulled image as the oldest and pruned it
+# within the hour (the 2026-11-26 rollback re-pulled 700MB for exactly this
+# reason). An image with no deploy tag is always a candidate: pre-mechanism
+# leftovers otherwise occupy retention slots forever.
+deploy_generation_candidates() {
+	awk -F'|' -v retain="$deploy_image_retention" '
+		$3 ~ /^deploy-/ {
+			if (!($1 in best) || $3 > best[$1]) best[$1] = $3
+			next
+		}
+		{ untagged[$1] = 1 }
+		END {
+			n = 0
+			for (id in best) tagged[n++] = best[id] "|" id
+			for (i = 0; i < n; i++) {
+				for (j = i + 1; j < n; j++) {
+					if (tagged[j] > tagged[i]) { t = tagged[i]; tagged[i] = tagged[j]; tagged[j] = t }
+				}
+			}
+			for (i = retain; i < n; i++) {
+				split(tagged[i], parts, "|")
+				print parts[2]
+			}
+			for (id in untagged) if (!(id in best)) print id
+		}
+	'
+}
+
 deploy_images_to_remove() {
 	local protected
 	protected="$(container_image_ids)" || return 1
 	{
-		deploy_web_images |
-			sort -t'|' -k3,3 -r |
-			awk -F'|' '!seen[$1]++' |
-			tail -n "+$((deploy_image_retention + 1))" |
-			cut -d'|' -f1
-		deploy_checker_images |
-			sort -t'|' -k3,3 -r |
-			awk -F'|' '!seen[$1]++' |
-			tail -n "+$((deploy_image_retention + 1))" |
-			cut -d'|' -f1
+		deploy_web_images | deploy_generation_candidates
+		deploy_checker_images | deploy_generation_candidates
 	} | sort -u | grep -vxF -f <(printf '%s\n' "$protected") || true
 }
 
@@ -96,4 +118,42 @@ prune_deploy_images() {
 		deploy_warning="${deploy_warning:+$deploy_warning; }web image retention left $failures image(s) behind"
 	fi
 	return 0
+}
+
+# Each Web image pull attempt ends at a deadline, then a forced kill. On 2026-10-13 and 2026-10-16
+# one layer's connection from the production host to ghcr.io fell to well under 1 Mbps without
+# ever failing, and the unbounded pull outlived the 15-minute job. The Engine abandons a pull when
+# its client's connection drops (https://docs.docker.com/reference/cli/docker/image/pull/), so the
+# next attempt starts on fresh connections. The deadline sits above the slowest healthy pull
+# seen: every layer, cold, in 3m06s on 2026-10-12.
+web_pull_attempts=3
+web_pull_deadline=210
+checker_pull_attempts=2
+checker_pull_deadline=120
+
+# Pulls a candidate image by its digest with `docker pull`, which needs none of the Compose secrets.
+pull_digest_image() {
+	local label="$1" target_image="$2" attempts="$3" deadline="$4" attempt status started detail
+	pull_failure=failed
+	for ((attempt = 1; attempt <= attempts; attempt++)); do
+		started=$SECONDS
+		status=0
+		timeout --kill-after=10s "${deadline}s" docker pull --quiet "$target_image" >/dev/null || status=$?
+		case "$status" in
+		0) detail="succeeded in $((SECONDS - started))s" ;;
+		124 | 137)
+			pull_failure="timed out"
+			detail="timed out after ${deadline}s"
+			;;
+		*)
+			pull_failure=failed
+			detail="failed with exit status $status"
+			;;
+		esac
+		printf '%s image pull attempt %d of %d %s\n' "$label" "$attempt" "$attempts" "$detail" >&2
+		if [ "$status" -eq 0 ]; then
+			return 0
+		fi
+	done
+	return 1
 }

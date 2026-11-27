@@ -55,16 +55,6 @@ timeout=120
 public_health_timeout=180
 wildcard_probe_timeout=60
 wildcard_probe_host=
-# Each Web image pull attempt ends at a deadline, then a forced kill. On 2026-10-13 and 2026-10-16
-# one layer's connection from the production host to ghcr.io fell to well under 1 Mbps without
-# ever failing, and the unbounded pull outlived the 15-minute job. The Engine abandons a pull when
-# its client's connection drops (https://docs.docker.com/reference/cli/docker/image/pull/), so the
-# next attempt starts on fresh connections. The deadline sits above the slowest healthy pull
-# seen: every layer, cold, in 3m06s on 2026-10-12.
-web_pull_attempts=3
-web_pull_deadline=210
-checker_pull_attempts=2
-checker_pull_deadline=120
 image=
 checker_image=
 compose_file=
@@ -242,6 +232,23 @@ record_checker_release() {
 			mv "$checker_state_file.tmp" "$checker_state_file"
 	fi
 }
+
+# Reproducible builds stamp every image CreatedAt at the epoch, so retention
+# cannot order generations by creation date. Tag the live images with the
+# deploy time instead; an untagged live-or-previous image would be pruned as a
+# zombie at the end of this very deployment, forcing a full re-pull on the
+# next rollback. The candidate is tagged after its pull below.
+tag_deploy_image() {
+	local target="$1" stamp="$2" repo
+	[ -n "$target" ] || return 0
+	repo="${target%%@*}"
+	[ "$repo" != "$target" ] || return 0
+	docker tag "$target" "${repo}:deploy-${stamp}" >/dev/null 2>&1 || true
+}
+
+deploy_tag_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+tag_deploy_image "$last_healthy" "$deploy_tag_stamp"
+tag_deploy_image "$last_healthy_checker" "$deploy_tag_stamp"
 
 if [ -n "$current_image" ] && [ "$current_image" = "$image" ] && [ "$current_checker_image" = "$checker_image" ] &&
 	{ [ -n "$checker_image" ] || { surviving_checker_containers="$(checker_containers)" && [ -z "$surviving_checker_containers" ]; }; }; then
@@ -437,44 +444,21 @@ if ! compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfi
 	exit 0
 fi
 
-# Pulls a candidate image by its digest with `docker pull`, which needs none of the Compose secrets.
-pull_digest_image() {
-	local label="$1" target_image="$2" attempts="$3" deadline="$4" attempt status started detail
-	pull_failure=failed
-	for ((attempt = 1; attempt <= attempts; attempt++)); do
-		started=$SECONDS
-		status=0
-		timeout --kill-after=10s "${deadline}s" docker pull --quiet "$target_image" >/dev/null || status=$?
-		case "$status" in
-		0) detail="succeeded in $((SECONDS - started))s" ;;
-		124 | 137)
-			pull_failure="timed out"
-			detail="timed out after ${deadline}s"
-			;;
-		*)
-			pull_failure=failed
-			detail="failed with exit status $status"
-			;;
-		esac
-		printf '%s image pull attempt %d of %d %s\n' "$label" "$attempt" "$attempts" "$detail" >&2
-		if [ "$status" -eq 0 ]; then
-			return 0
-		fi
-	done
-	return 1
-}
-
 if ! pull_digest_image "Web" "$image" "$web_pull_attempts" "$web_pull_deadline"; then
 	discard_candidate_configuration
 	report "$current_image" "failed: Web image pull $pull_failure" "failed" ""
 	exit 0
 fi
 
+tag_deploy_image "$image" "$deploy_tag_stamp"
+
 if [ -n "$checker_image" ] && ! pull_digest_image "Artifact Checker" "$checker_image" "$checker_pull_attempts" "$checker_pull_deadline"; then
 	discard_candidate_configuration
 	report "$current_image" "failed: Artifact Checker image pull $pull_failure" "failed" ""
 	exit 0
 fi
+
+tag_deploy_image "$checker_image" "$deploy_tag_stamp"
 
 if ! run_migrations; then
 	report "$last_healthy" "failed: $migration_failure" "failed" ""
