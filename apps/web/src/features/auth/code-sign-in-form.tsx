@@ -86,11 +86,9 @@ export function CodeSignInForm({
           onChange={edit(setDestination)}
           isInvalid={problem === "invalid_destination"}
         />
-        <SendCodeRow codeSending={codeSending} size="lg">
+        <SendCodeRow codeSending={codeSending}>
           <CodeInput
             size="lg"
-            hideLabel
-            className="min-w-0 flex-1"
             value={code}
             onChange={edit(setCode)}
             isInvalid={problem === "invalid_code"}

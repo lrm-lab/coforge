@@ -251,10 +251,9 @@ function PasswordForm({
           {m.settings_password_code_goes_to({ destination })}
         </p>
       )}
-      <SendCodeRow codeSending={codeSending} size={size}>
+      <SendCodeRow codeSending={codeSending}>
         <CodeInput
           size={size}
-          className="min-w-0 flex-1"
           value={code}
           onChange={(value) => {
             setCode(value);
@@ -365,14 +364,8 @@ function BindForm({
         }}
         isInvalid={problem === "invalid_destination"}
       />
-      <SendCodeRow codeSending={codeSending} size={size}>
-        <CodeInput
-          size={size}
-          className="min-w-0 flex-1"
-          value={code}
-          onChange={setCode}
-          isInvalid={false}
-        />
+      <SendCodeRow codeSending={codeSending}>
+        <CodeInput size={size} value={code} onChange={setCode} isInvalid={false} />
       </SendCodeRow>
       {problem ? <ProblemLine problem={problem} /> : null}
       <DialogActions>

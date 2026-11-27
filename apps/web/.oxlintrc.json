@@ -22,6 +22,7 @@
     "coforge/no-handrolled-date-math": "error",
     "coforge/no-dt-colon": "error",
     "coforge/no-ragged-dl": "error",
-    "coforge/no-hinted-radio-button": "error"
+    "coforge/no-hinted-radio-button": "error",
+    "coforge/no-raw-otp-input": "error"
   }
 }

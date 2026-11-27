@@ -1,11 +1,24 @@
 import type { ReactNode } from "react";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "#src/components/ui/input-otp";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { useCodeSending } from "./use-code-sending";
 
-/** What the problems of asking for a code and typing it say, for the forms that do both. */
+export const VERIFICATION_CODE_LENGTH = 6;
+
+const FIRST_GROUP = [0, 1, 2] as const;
+const SECOND_GROUP = [3, 4, 5] as const;
+
+const stripNonDigits = (pasted: string) => pasted.replace(/\D/g, "");
+
 export const codeProblemText = {
   invalid_destination: () => m.login_invalid_destination(),
   invalid_code: () => m.login_invalid_code(),
@@ -13,64 +26,77 @@ export const codeProblemText = {
   send_failed: () => m.login_send_failed(),
 };
 
-/** The field a verification code is typed in. */
 export function CodeInput({
   value,
   onChange,
   isInvalid,
   className,
-  size,
-  hideLabel,
+  size = "md",
 }: {
   value: string;
   onChange: (value: string) => void;
   isInvalid: boolean;
   className?: string;
   size?: "sm" | "md" | "lg";
-  /** The field names itself by its placeholder alone, as on the sign-in page. */
-  hideLabel?: boolean;
 }) {
+  const slotClass =
+    size === "lg"
+      ? "h-11 w-9 text-md font-mono sm:h-12 sm:w-11 sm:text-lg"
+      : "h-11 w-9 text-md font-mono sm:h-11 sm:w-10";
+
   return (
-    <Input
-      label={hideLabel ? undefined : m.login_code_label()}
-      placeholder={hideLabel ? m.login_code_placeholder() : undefined}
-      size={size}
+    <InputOTP
       name="code"
+      maxLength={VERIFICATION_CODE_LENGTH}
       inputMode="numeric"
       autoComplete="one-time-code"
-      className={className}
+      pattern={REGEXP_ONLY_DIGITS}
+      pasteTransformer={stripNonDigits}
       value={value}
       onChange={onChange}
-      isInvalid={isInvalid}
-    />
+      aria-label={m.login_code_label()}
+      aria-invalid={isInvalid || undefined}
+      containerClassName={cn("justify-center gap-2 sm:gap-2.5", className)}
+    >
+      <InputOTPGroup className="gap-1.5 sm:gap-2">
+        {FIRST_GROUP.map((index) => (
+          <InputOTPSlot key={index} index={index} className={slotClass} />
+        ))}
+      </InputOTPGroup>
+      <InputOTPSeparator />
+      <InputOTPGroup className="gap-1.5 sm:gap-2">
+        {SECOND_GROUP.map((index) => (
+          <InputOTPSlot key={index} index={index} className={slotClass} />
+        ))}
+      </InputOTPGroup>
+    </InputOTP>
   );
 }
 
-/** A field with the button that sends a code beside it, counting the minute down before another. */
 export function SendCodeRow({
   codeSending: { sending, secondsLeft, onSend },
-  size = "md",
   children,
 }: {
   codeSending: ReturnType<typeof useCodeSending>;
-  size?: "sm" | "md" | "lg";
-  /** The field, which takes the row's width (`min-w-0 flex-1`). */
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-end gap-3">
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-secondary">{m.login_code_label()}</span>
+        <Button
+          type="button"
+          color="secondary"
+          size="sm"
+          className="shrink-0 pointer-coarse:min-h-11"
+          isLoading={sending}
+          isDisabled={secondsLeft > 0}
+          onPress={onSend}
+        >
+          {secondsLeft > 0 ? m.login_code_resend_in({ seconds: secondsLeft }) : m.login_code_send()}
+        </Button>
+      </div>
       {children}
-      <Button
-        type="button"
-        color="secondary"
-        size={size}
-        className="login-outline shrink-0"
-        isLoading={sending}
-        isDisabled={secondsLeft > 0}
-        onPress={onSend}
-      >
-        {secondsLeft > 0 ? m.login_code_resend_in({ seconds: secondsLeft }) : m.login_code_send()}
-      </Button>
     </div>
   );
 }

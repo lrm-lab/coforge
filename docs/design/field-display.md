@@ -31,3 +31,4 @@
 - 路径、代码、指标用 `font-mono`；其他标识符（主机名、ID）跟正文同字体（见 [界面原则](ui-principles.md)）。
 - 空值显示 `—`，不显示 "N/A"、"Unknown"、"暂无"。
 - label 要在上下文里不产生歧义：「System」下面的版本号写「CoForge version」，不写「Version」。
+- 6 位一次性验证码不放进普通单行输入框，统一用 `InputOTP`（`#src/components/ui/input-otp`）拆成 3+3 分组的独立圆角字格，并给当前输入格加轻强调聚焦光环；登录/改密/绑定复用 `CodeInput` 与 `SendCodeRow`（发送/重发按钮放在字格上方，避免 390px 窄屏挤压）。`coforge/no-raw-otp-input` 禁止给单行 `<Input>` 或 `<input>` 写 `autoComplete="one-time-code"`。

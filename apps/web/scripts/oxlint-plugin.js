@@ -1,5 +1,6 @@
 import { createMetadataRules } from "./oxlint-metadata-rules.js";
 import { createOptionCardRules } from "./oxlint-option-card-rules.js";
+import { createOtpRules } from "./oxlint-otp-rules.js";
 
 const noNativeTitle = {
   create(context) {
@@ -539,6 +540,12 @@ const { noHintedRadioButton } = createOptionCardRules({
   upstreamOfficialFiles: UPSTREAM_OFFICIAL_FILES,
 });
 
+const { noRawOtpInput } = createOtpRules({
+  normalizedFilename,
+  staticStringValue,
+  upstreamOfficialFiles: UPSTREAM_OFFICIAL_FILES,
+});
+
 export default {
   meta: {
     name: "coforge",
@@ -563,5 +570,6 @@ export default {
     "no-dt-colon": noDtColon,
     "no-ragged-dl": noRaggedDl,
     "no-hinted-radio-button": noHintedRadioButton,
+    "no-raw-otp-input": noRawOtpInput,
   },
 };
