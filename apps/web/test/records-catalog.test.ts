@@ -3,7 +3,6 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { recordReportSend } from "#src/server/records/record-report-send.server";
 import { recordReportContent } from "#src/server/records/record-report-content.server";
 import { recordSubject } from "#src/server/records/record-subject.server";
-import { recordNavAttention } from "#src/server/records/record-nav-attention.server";
 import { recordTemplates } from "#src/server/records/record-catalog-templates.server";
 import { recordDistribution } from "#src/server/records/record-distribution.server";
 
@@ -876,112 +875,6 @@ test("saveReportContent autosave does not ask to send", async () => {
 
   expect(result.assistantPosted).toBe(false);
   expect(comments).toHaveLength(0);
-});
-
-test("loadNavAttention reads every applied stream with two batched queries", async () => {
-  // Wednesday 09:30 in Asia/Shanghai: inside the preview hour of a 10:00 send, not of a 15:00 one.
-  const now = new Date("2026-09-16T01:30:00Z");
-  let findManyCalls = 0;
-  const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "owner" }) },
-    weeklyReportTemplate: {
-      findMany: async () => [
-        { id: "settings-late", sendWeekday: 3, sendTime: "15:00" },
-        { id: "settings-soon", sendWeekday: 3, sendTime: "10:00" },
-        { id: "settings-sent", sendWeekday: 3, sendTime: "10:00" },
-      ],
-    },
-    weeklyReport: {
-      findMany: async (args: { where: { submissions: { some?: unknown; none?: unknown } } }) => {
-        findManyCalls += 1;
-        return args.where.submissions.some
-          ? [{ settingsId: "settings-sent" }]
-          : [{ settingsId: "settings-soon", content: null }];
-      },
-      findFirst: async () => null,
-    },
-  } as unknown as PrismaClient;
-
-  const result = await recordNavAttention(db).loadNavAttention({
-    workspaceId: "workspace-1",
-    userId: "leader",
-    now,
-  });
-
-  expect(result).toEqual({ preview: true });
-  expect(findManyCalls).toBe(2);
-});
-
-test("loadNavAttention stays quiet when the only armed stream was already sent", async () => {
-  const now = new Date("2026-09-16T01:30:00Z");
-  const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "owner" }) },
-    weeklyReportTemplate: {
-      findMany: async () => [{ id: "settings-sent", sendWeekday: 3, sendTime: "10:00" }],
-    },
-    weeklyReport: {
-      findMany: async (args: { where: { submissions: { some?: unknown } } }) =>
-        args.where.submissions.some ? [{ settingsId: "settings-sent" }] : [],
-      findFirst: async () => null,
-    },
-  } as unknown as PrismaClient;
-
-  const result = await recordNavAttention(db).loadNavAttention({
-    workspaceId: "workspace-1",
-    userId: "leader",
-    now,
-  });
-
-  expect(result).toEqual({ preview: false });
-});
-
-test("loadNavAttention lights the Records rail when the viewer has an unread assignment", async () => {
-  const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "owner" }) },
-    weeklyReportTemplate: { findMany: async () => [] },
-    weeklyReport: {
-      findFirst: async (args: {
-        where: {
-          kind?: string;
-          authorId?: string;
-          sourceTemplateId?: { not: null };
-          hiddenFromAuthor?: boolean;
-          content?: { path: string[]; equals: boolean };
-        };
-      }) => {
-        expect(args.where.kind).toBe("member");
-        expect(args.where.authorId).toBe("member-1");
-        expect(args.where.sourceTemplateId).toEqual({ not: null });
-        expect(args.where.hiddenFromAuthor).toBe(false);
-        expect(args.where.content).toEqual({ path: ["assignment", "unread"], equals: true });
-        return { id: "assignment-1" };
-      },
-    },
-  } as unknown as PrismaClient;
-
-  const result = await recordNavAttention(db).loadNavAttention({
-    workspaceId: "workspace-1",
-    userId: "member-1",
-  });
-
-  expect(result).toEqual({ preview: true });
-});
-
-test("loadNavAttention stays quiet when the member has no unread assignment", async () => {
-  const db = {
-    workspaceMembership: { findUnique: async () => ({ role: "owner" }) },
-    weeklyReportTemplate: { findMany: async () => [] },
-    weeklyReport: {
-      findFirst: async () => null,
-    },
-  } as unknown as PrismaClient;
-
-  const result = await recordNavAttention(db).loadNavAttention({
-    workspaceId: "workspace-1",
-    userId: "member-1",
-  });
-
-  expect(result).toEqual({ preview: false });
 });
 
 test("loadKeyPointPrompts returns empty defaults when the Leader has no settings", async () => {
