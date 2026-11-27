@@ -101,7 +101,13 @@ function readWindowHeader(
 export function formatReadWindow(
   target: string,
   response: ReadWindowResponse,
-  options: { around?: string; unread?: boolean; task?: boolean } = {},
+  options: {
+    around?: string;
+    unread?: boolean;
+    task?: boolean;
+    pendingConfirmation?: boolean;
+    checkpointFor?: (id: string) => string | undefined;
+  } = {},
 ): string {
   const messages = response.messages ?? [];
   const task = options.task === true;
@@ -125,7 +131,9 @@ export function formatReadWindow(
         "",
         response.moreUnread
           ? `No unread messages from others in ${target} up to seq ${through}.`
-          : `No unread messages in ${target}. You have read through seq ${through}.`,
+          : options.pendingConfirmation
+            ? `This page contains no unread messages from others in ${target}.`
+            : `No unread messages in ${target}. You have read through seq ${through}.`,
         ...(response.moreUnread ? unreadFooter(target, response, task) : []),
         ...historyAfterRead(events),
       ].join("\n");
@@ -146,7 +154,9 @@ export function formatReadWindow(
   ];
   if (options.around)
     lines.push(
-      `Around: ${options.around}. Your read position did not move. To read new messages and mark them read, use --unread.`,
+      options.pendingConfirmation
+        ? `Around: ${options.around}. Your read position did not move.`
+        : `Around: ${options.around}. Your read position did not move. To read new messages and mark them read, use --unread.`,
     );
   if (folded) lines.push(folded);
   const taskHint = formatTaskWorkflowHint(messages);
@@ -164,12 +174,15 @@ export function formatReadWindow(
     lines.push(
       `${coordinationLine(message)}[${messages.indexOf(message) + 1}/${messages.length} msg=${message.id} seq=${message.sequence}${message.replyCount ? ` replyCount=${message.replyCount}` : ""} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}]${commentAnchorAt(message)} ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${forwardedSuffix(message)}`,
     );
+    const checkpoint = options.checkpointFor?.(message.id);
+    if (checkpoint) lines.push(checkpoint);
   }
 
   lines.push("");
   lines.push(`End of window: ${messages.length}/${messages.length} shown.`);
   const dmHint = formatAgentDmHint(messages);
   if (dmHint) lines.push(dmHint);
-  if (options.unread) lines.push(...unreadFooter(target, response, task));
+  if (options.unread && !options.pendingConfirmation)
+    lines.push(...unreadFooter(target, response, task));
   return lines.join("\n");
 }

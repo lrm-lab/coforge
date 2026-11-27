@@ -2,7 +2,7 @@ import { runVersion } from "#src/version-commands";
 import { runMemoryCommand } from "./memory-commands";
 import { runProcCommand } from "./proc-commands";
 import { cliUsage } from "#src/usage";
-import { commandHelp } from "#src/command-help/index";
+import { commandHelp, invalidArgument } from "#src/command-help/index";
 import { runMessageResolve } from "#src/message-resolve";
 import { formatReaction } from "#src/message-format";
 import { weeklyReportWorkflowSchema } from "@lrm/coforge-sdk/internal";
@@ -33,6 +33,12 @@ import {
 } from "#src/mention-format";
 import { runActionPrepare } from "#src/action-prepare-run";
 import { runActionWithdraw, runInboxDismiss, runInboxRead } from "#src/inbox-commands";
+import {
+  parseReadConfirmation,
+  runReadConfirmation,
+  runReadConfirmationPage,
+} from "#src/read-confirmation";
+import { readConfirmationPage } from "#src/message-read-args";
 import { formatReadWindow } from "#src/message-read-format";
 import {
   formatAttachmentDownloadSuccess,
@@ -66,6 +72,11 @@ export async function run(args: readonly string[], transport: MessageTransport):
   if (ownArgs.includes("--help")) {
     const help = commandHelp(ownArgs.filter((arg) => arg !== "--help"));
     if (help) return help;
+  }
+  if (args[0] === "read" && args[1] === "confirm") {
+    if (args.length !== 3)
+      throw invalidArgument("read confirm", "Provide one confirmation JSON argument.");
+    return runReadConfirmation(transport, parseReadConfirmation(args[2]!));
   }
   const invocation = parseArgs(args);
   if (invocation.command === "whoami") {
@@ -302,6 +313,10 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   if (command === "check") return formatMessageCheck(await transport.check(invocation.target));
   const readOptions = invocation.command === "read" ? invocation : undefined;
+  if (readOptions) {
+    const page = readConfirmationPage({ kind: "message", target: invocation.target }, readOptions);
+    if (page) return runReadConfirmationPage(transport, page, invocation.target);
+  }
   const readResponse = (await transport.read(invocation.target, readOptions)) as {
     messages: AgentMessageRecord[];
     hasOlder?: boolean;

@@ -37,6 +37,7 @@ import { validateWeeklyReportKeyPointsCommand } from "#src/connection/weekly-rep
 import { validateWeeklyReportMemoryCommand } from "#src/connection/weekly-report-memory";
 import { getLogger } from "@logtape/logtape";
 import { parseMessageRequest } from "./agent-proxy-message-request";
+import { READ_CONFIRMATION_PROXY_ROUTES } from "./agent-proxy-read-routes";
 import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
 import { APP_PROXY_ROUTES } from "./agent-proxy-app-routes";
 import { ARTIFACT_FILE_PROXY_ROUTES } from "./agent-proxy-artifact-routes";
@@ -322,6 +323,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     parse: ({ fields, binding }) => parseMessageRequest(fields, binding),
   }),
   ...TASK_CONVERSATION_PROXY_ROUTES,
+  ...READ_CONFIRMATION_PROXY_ROUTES,
 ];
 function canAnswerNow(
   runtime: AgentProxyRuntime,

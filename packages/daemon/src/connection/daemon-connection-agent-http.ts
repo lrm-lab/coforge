@@ -21,6 +21,7 @@ import type {
   AgentProfileShowRequest,
   AgentProfileUpdateRequest,
   AgentTaskConversationRequest,
+  AgentReadRequest,
   AgentThreadListResponse,
   AgentUserInfoRequest,
   AgentManualGetRequest,
@@ -365,6 +366,17 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
     return agentApp(this.forwardPorts(), request, agentApiKey);
   }
 
+  agentReadConfirmation(request: AgentReadRequest, agentApiKey: string): Promise<Response> {
+    return forwardAgentRequest(
+      this.forwardPorts(),
+      "Agent read confirmation",
+      {
+        ...agentApiRoutes.cloud.readConfirmation[request.operation],
+        body: JSON.stringify(request.body),
+      },
+      agentApiKey,
+    );
+  }
   agentTaskConversation(
     request: AgentTaskConversationRequest,
     agentApiKey: string,

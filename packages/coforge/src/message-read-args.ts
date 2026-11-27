@@ -1,3 +1,5 @@
+import { parseReadConfirmation } from "./read-confirmation";
+import type { AgentReadConfirmation, AgentReadPageRequest } from "@lrm/coforge-sdk/agent";
 import { refuseTaskRef } from "./task-target-refusal";
 import { invalidArgument } from "./command-help";
 import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
@@ -8,6 +10,9 @@ export type MessageReadOptions = {
   around?: string;
   limit?: number;
   unread?: boolean;
+  confirmDelivery?: boolean;
+  peek?: boolean;
+  confirm?: AgentReadConfirmation;
 };
 
 export const MESSAGE_READ_MAX_LIMIT = 100;
@@ -24,6 +29,9 @@ export function parseMessageReadArgs(
       around: { type: "string" },
       limit: { type: "string" },
       unread: { type: "boolean" },
+      "confirm-delivery": { type: "boolean" },
+      peek: { type: "boolean" },
+      confirm: { type: "string" },
     },
     allowEmptyValues: false,
     duplicates: "error",
@@ -41,12 +49,16 @@ export function parseMessageReadArgs(
     ["after", "--after"],
     ["around", "--around"],
     ["limit", "--limit"],
+    ["confirm", "--confirm"],
   ] as const) {
     const value = parsed[name];
     if (value !== undefined) values.set(flag, value);
   }
   const target = parsed.target;
-  const options = readWindowOptions("message read", values, parsed.unread === true);
+  const options = readWindowOptions("message read", values, parsed.unread === true, {
+    confirmDelivery: parsed["confirm-delivery"] === true,
+    peek: parsed.peek === true,
+  });
   if (!target)
     throw invalidArgument(
       "message read",
@@ -62,6 +74,7 @@ export function readWindowOptions(
   command: string,
   values: ReadonlyMap<string, string>,
   unread: boolean,
+  mode?: { confirmDelivery: boolean; peek: boolean },
 ): MessageReadOptions {
   const limit = values.get("--limit");
   if (limit !== undefined) {
@@ -72,7 +85,11 @@ export function readWindowOptions(
         `--limit must be a whole number from 1 to ${MESSAGE_READ_MAX_LIMIT}; "${limit}" is not.`,
       );
   }
+  const rawConfirm = values.get("--confirm");
   const options: MessageReadOptions = {
+    ...(mode?.confirmDelivery ? { confirmDelivery: true } : {}),
+    ...(mode?.peek ? { peek: true } : {}),
+    ...(rawConfirm ? { confirm: parseReadConfirmation(rawConfirm) } : {}),
     ...(unread ? { unread: true } : {}),
     ...(limit !== undefined ? { limit: Number(limit) } : {}),
     ...(values.has("--before") ? { before: values.get("--before")! } : {}),
@@ -88,4 +105,23 @@ export function readWindowOptions(
   if (anchors.length > 1)
     throw invalidArgument(command, "Give at most one of --before, --after and --around.");
   return options;
+}
+
+export function readConfirmationPage(
+  source: AgentReadPageRequest["source"],
+  { before, after, around, unread, limit, confirmDelivery, peek, confirm }: MessageReadOptions,
+): AgentReadPageRequest | undefined {
+  if (!confirmDelivery && !peek && !confirm) return undefined;
+  return {
+    source,
+    window: {
+      ...(before ? { before } : {}),
+      ...(after ? { after } : {}),
+      ...(around ? { around } : {}),
+      ...(unread ? { unread } : {}),
+      ...(limit ? { limit } : {}),
+      ...(peek || around ? { consume: false } : {}),
+    },
+    ...(confirm ? { confirm } : {}),
+  };
 }

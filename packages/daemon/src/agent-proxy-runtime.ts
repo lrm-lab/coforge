@@ -35,6 +35,7 @@ import type {
   AgentAppRequest,
   AgentArtifactRequest,
   AgentTaskConversationRequest,
+  AgentReadRequest,
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
@@ -222,6 +223,11 @@ export type AgentProxyRuntime = {
   agentArtifactDownload?(
     context: string,
     request: AgentArtifactDownloadRequest,
+    agentApiKey: string,
+  ): Promise<Response>;
+  agentReadConfirmation?(
+    context: string,
+    request: AgentReadRequest,
     agentApiKey: string,
   ): Promise<Response>;
   agentTaskConversation?(

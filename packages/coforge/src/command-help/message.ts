@@ -13,7 +13,7 @@ export const messageHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "message read": {
     syntax:
-      "coforge message read --target <target> [--unread | --before|--after|--around <seq>] [--limit <n>]",
+      "coforge message read --target <target> [--unread | --before|--after|--around <seq>] [--limit <n>] [--confirm-delivery | --peek] [--confirm <JSON>]",
     flags: [
       "--target  the conversation to read",
       "--unread  messages after your read position (no anchor combines with it)",

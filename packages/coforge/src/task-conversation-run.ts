@@ -22,9 +22,11 @@ import {
   formatTaskReply,
   formatTaskView,
 } from "./task-conversation-format";
+import { runReadConfirmationPage, type ReadConfirmationTransport } from "./read-confirmation";
+import { readConfirmationPage } from "./message-read-args";
 import { readPipedSendContent, refuseForeignStdinFile } from "./send-stdin";
 
-export type TaskConversationTransport = {
+export type TaskConversationTransport = ReadConfirmationTransport & {
   taskConversation?(request: AgentTaskConversationRequest): Promise<unknown>;
   upload?: MessageTransport["upload"];
 };
@@ -166,6 +168,14 @@ export async function runTaskConversation(
   invocation: TaskConversationInvocation,
   readBody: () => Promise<string> = readPipedSendContent,
 ): Promise<string> {
+  if (invocation.op === "read") {
+    const { task, options } = invocation;
+    const page = readConfirmationPage(
+      { kind: "task", channel: task.board, taskNumber: task.number },
+      options,
+    );
+    if (page) return runReadConfirmationPage(transport, page, task.ref);
+  }
   const send = transport.taskConversation?.bind(transport);
   if (!send) throw new Error("Task conversation transport is unavailable");
   if (invocation.op === "following")

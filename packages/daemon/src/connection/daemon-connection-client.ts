@@ -20,6 +20,7 @@ import type {
   AgentActionPrepareResponse,
   AgentAppRequest,
   AgentTaskConversationRequest,
+  AgentReadRequest,
   AgentTaskIdleNudgeRequest,
   AgentTaskIdleNudgeResponse,
   AgentSendReconciliationResponse,
@@ -286,6 +287,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   agentApp?(request: AgentAppRequest, agentApiKey: string): Promise<Response>;
   agentTeamMemory?(request: TeamMemoryCommand, agentApiKey: string): Promise<Response>;
   agentArtifact?(request: AgentArtifactCall, agentApiKey: string): Promise<Response>;
+  agentReadConfirmation?(request: AgentReadRequest, agentApiKey: string): Promise<Response>;
   agentTaskConversation?(
     request: AgentTaskConversationRequest,
     agentApiKey: string,

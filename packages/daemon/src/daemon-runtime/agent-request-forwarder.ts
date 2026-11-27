@@ -7,6 +7,7 @@ import type {
   AgentAppConfigUpdateRequest,
   AgentAppRequest,
   AgentTaskConversationRequest,
+  AgentReadRequest,
   AgentManualGetRequest,
   AgentManualGetResponse,
   AgentManualSearchRequest,
@@ -46,6 +47,7 @@ import type {
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentContexts } from "./agent-contexts";
 import { forwardedTaskReadResponse } from "./forwarded-task-read-response";
+import { settleAgentReadConfirmation } from "./agent-read-confirmation";
 import { settleForwardedTaskRead } from "./agent-history-read";
 import { actionStampingAuthorizedAgent } from "./notice-action-clocks";
 import {
@@ -71,6 +73,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentApp"
     | "agentArtifact"
     | "agentTaskConversation"
+    | "agentReadConfirmation"
     | "threadList"
     | "labelList"
     | "agentLabel"
@@ -97,6 +100,7 @@ export type AgentRequestForwarderPorts = Readonly<{
   }>;
   contexts?: Pick<AgentContexts, "ledger">;
   authorizedAgent(context: string, agentApiKey: string | undefined): string;
+  settleConfirmedRead?: (agentId: string, response: Response) => Promise<Response>;
   recordForwardedRead?: (
     agentId: string,
     query: Record<string, string> | undefined,
@@ -120,6 +124,8 @@ export function assembleAgentRequests(input: {
       input.authorizedAgent,
       input.attention.noticeActionClocks,
     ),
+    settleConfirmedRead: (agentId, response) =>
+      settleAgentReadConfirmation(input.attention, agentId, response),
     recordForwardedRead: (agentId, query, result) =>
       settleForwardedTaskRead(input.attention, agentId, query, result),
   });
@@ -249,6 +255,21 @@ export class AgentRequestForwarder {
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("agentApp", NOT_CONNECTED)(request, agentApiKey);
+  }
+  async agentReadConfirmation(
+    context: string,
+    request: AgentReadRequest,
+    agentApiKey: string,
+  ): Promise<Response> {
+    const agentId = this.#ports.authorizedAgent(context, agentApiKey);
+    const response = await this.#transportCall("agentReadConfirmation", NOT_CONNECTED)(
+      request,
+      agentApiKey,
+    );
+    return this.#ports.settleConfirmedRead &&
+      (request.operation === "confirm" || request.body.confirm)
+      ? this.#ports.settleConfirmedRead(agentId, response)
+      : response;
   }
   async agentTaskConversation(
     context: string,

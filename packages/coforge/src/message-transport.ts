@@ -48,6 +48,7 @@ import type { InboxTransport } from "#src/inbox-check";
 import type { LocalMemoryCommand, LocalMemoryResult } from "@lrm/coforge-sdk/agent";
 import type { LabelTransport } from "#src/label-commands";
 import type { ReminderResponse, ReminderTransportRequest } from "#src/reminder-commands";
+import type { ReadConfirmationTransport } from "./read-confirmation";
 import type { TaskConversationTransport } from "#src/task-conversation-run";
 import type { WorkspaceInfoResult } from "#src/workspace-info";
 import type { MessageCheckResult } from "#src/message-check-format";
@@ -69,7 +70,8 @@ type ArtifactCalls = Pick<
   "artifact" | "artifactUpload" | "artifactDownload"
 >;
 
-export type MessageTransport = LabelTransport &
+export type MessageTransport = ReadConfirmationTransport &
+  LabelTransport &
   ArtifactCalls & {
     teamMemory?(request: TeamMemoryCommand): Promise<TeamMemoryResult>;
     memory?(request: LocalMemoryCommand): Promise<LocalMemoryResult>;

@@ -28,7 +28,10 @@ type TaskConversationOp = Exclude<TaskConversationInvocation["op"], "following">
 const FLAGS: Record<TaskConversationOp, { values: string[]; switches: string[] }> = {
   view: { values: ["--limit"], switches: [] },
   reply: { values: ["--mention", "--attachment-id"], switches: ["--json"] },
-  read: { values: ["--before", "--after", "--around", "--limit"], switches: ["--unread"] },
+  read: {
+    values: ["--before", "--after", "--around", "--limit", "--confirm"],
+    switches: ["--unread", "--confirm-delivery", "--peek"],
+  },
   follow: { values: [], switches: [] },
   unfollow: { values: ["--reason"], switches: [] },
 };
@@ -158,7 +161,10 @@ export function parseTaskConversationArgs(
       return {
         ...invocation,
         op: "read",
-        options: readWindowOptions("task read", values, given.has("--unread")),
+        options: readWindowOptions("task read", values, given.has("--unread"), {
+          confirmDelivery: given.has("--confirm-delivery"),
+          peek: given.has("--peek"),
+        }),
       };
     case "follow":
       return { ...invocation, op: "follow" };

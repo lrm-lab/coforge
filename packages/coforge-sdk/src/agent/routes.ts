@@ -40,6 +40,10 @@ const ACTION_WITHDRAW_ROUTE = {
   method: "POST",
   path: "/api/agent/v1/actions/withdraw",
 } as const;
+const READ_CONFIRMATION_ROUTES = {
+  page: { method: "POST", path: "/api/agent/v1/reads/page" },
+  confirm: { method: "POST", path: "/api/agent/v1/reads/confirm" },
+} as const;
 const TASK_CONVERSATION_ROUTES = {
   view: { method: "GET", path: "/api/agent/v1/tasks/view" },
   read: { method: "GET", path: "/api/agent/v1/tasks/read" },
@@ -199,6 +203,7 @@ export const agentApiRoutes = {
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     taskConversations: TASK_CONVERSATION_ROUTES,
+    readConfirmation: READ_CONFIRMATION_ROUTES,
     taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
     threadFollow: THREAD_FOLLOW_ROUTE,
@@ -250,6 +255,7 @@ export const agentApiRoutes = {
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     taskConversations: TASK_CONVERSATION_ROUTES,
+    readConfirmation: READ_CONFIRMATION_ROUTES,
     taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
     threadFollow: THREAD_FOLLOW_ROUTE,
@@ -381,6 +387,7 @@ export const agentApiRoutes = {
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     taskConversations: TASK_CONVERSATION_ROUTES,
+    readConfirmation: READ_CONFIRMATION_ROUTES,
     taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
     threadFollow: THREAD_FOLLOW_ROUTE,

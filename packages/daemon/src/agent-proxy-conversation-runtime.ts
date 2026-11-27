@@ -7,5 +7,6 @@ export const conversationRuntime = (agentApi: () => AgentRequestForwarder) =>
   ({
     threadList: async (...args) => agentApi().threadList(...args),
     inboxList: async (...args) => agentApi().inboxList(...args),
+    agentReadConfirmation: async (...args) => agentApi().agentReadConfirmation(...args),
     agentTaskConversation: async (...args) => agentApi().agentTaskConversation(...args),
   }) satisfies Partial<AgentProxyRuntime>;

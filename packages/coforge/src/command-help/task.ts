@@ -51,7 +51,7 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task read": {
     syntax:
-      "coforge task read [<ref>] [--target <board> --number <n>] [--unread | --before|--after|--around <id>] [--limit <n>]",
+      "coforge task read [<ref>] [--target <board> --number <n>] [--unread | --before|--after|--around <id>] [--limit <n>] [--confirm-delivery | --peek] [--confirm <JSON>]",
     flags: [
       "--unread  messages after your read position, moving it forward (no anchor combines with it)",
       "--before | --after | --around  one history window, by message id",

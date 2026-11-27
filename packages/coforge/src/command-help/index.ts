@@ -25,6 +25,10 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   ...appHelp,
   ...agentHelp,
   ...messageHelp,
+  "read confirm": {
+    syntax: "coforge read confirm '<JSON receipt>'",
+    guidance: "Submit the page and consecutive checkpoints of the complete messages you received.",
+  },
   channel: {
     syntax:
       "coforge channel info|members|join|leave|create|update|archive|unarchive|add-member|remove-member|mute|unmute ...",

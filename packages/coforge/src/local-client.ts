@@ -56,6 +56,8 @@ import {
   envelopeRequest,
   operationFailedCode,
   preIssuanceError,
+  proxyEndpointOf,
+  readProxyErrorBody,
   requireProxySetup,
 } from "./proxy-request";
 import { attachmentCommentsRequest } from "./attachment-comments-request";
@@ -63,13 +65,12 @@ import { attachmentViewRequest } from "./attachment-view-request";
 import { inboxCheckRequest, inboxListRequest } from "./inbox-request";
 import { mentionActionRequest, mentionDeliveryRequest } from "./mention-request";
 import { githubCommitTrailersRequest } from "./github-credential";
+import { readConfirmationTransport } from "./read-confirmation-request";
 import { taskConversationRequest } from "./task-conversation-request";
 import { reminderRequest } from "./reminder-request";
 import { labelRequests } from "./label-request";
 import { profileRequests } from "./profile-request";
-import { readProxyErrorBody } from "./proxy-request";
 
-/** The deadline of every local proxy call but a message send (`AGENT_SEND_LOCAL_DEADLINE_MS`). */
 const OPERATION_DEADLINE_MS = 10_000;
 
 /** Past the daemon's own 10-second upstream deadline (`AGENT_RPC_TIMEOUT_MS`, started later), so
@@ -89,12 +90,7 @@ export function connectLocal(
     target: string | undefined,
     idempotent = false,
   ) => proxyHttpFailure(operation, status, body, target, { idempotent, context });
-  const proxyEndpoint = (path: string) => {
-    const endpoint = new URL(proxyUrl);
-    endpoint.pathname = path;
-    endpoint.search = "";
-    return endpoint;
-  };
+  const proxyEndpoint = proxyEndpointOf(proxyUrl);
   const call = async (
     operation:
       | "check"
@@ -240,6 +236,7 @@ export function connectLocal(
     },
     githubCommitTrailers: (repository: string | null): Promise<string[]> =>
       githubCommitTrailersRequest(proxyEndpoint, context, proxyUrl, repository),
+    ...readConfirmationTransport(context, proxyUrl, conversationTarget),
     taskConversation: (request: AgentTaskConversationRequest) =>
       taskConversationRequest(proxyEndpoint, context, proxyUrl, request),
     manualGet: (topic: string, intent: string, reason: string): Promise<AgentManualGetResponse> =>

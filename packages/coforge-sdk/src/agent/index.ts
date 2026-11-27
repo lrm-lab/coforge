@@ -3,6 +3,7 @@ export * from "./client-app-artifact-resources";
 export * from "./routes";
 export * from "./types";
 export * from "./messages";
+export * from "./read-confirmation";
 export * from "./channels";
 export * from "./action-cards";
 export * from "./manual";
