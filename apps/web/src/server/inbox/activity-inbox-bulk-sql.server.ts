@@ -95,11 +95,11 @@ export function threadsDoneSql(workspaceId: string, target: Prisma.Sql) {
 export function allConversationsTargetSql(workspaceId: string, userId: string, before: Date) {
   return Prisma.sql`
     WITH listed AS (
-      SELECT cm."id" AS "memberId"
+      SELECT cm."id" AS "memberId", c."channelName"
       FROM ${conversationItemsSql(workspaceId, userId)}
       WHERE ${conversationItemListedSql(userId)}
       UNION
-      SELECT cm."id" AS "memberId"
+      SELECT cm."id" AS "memberId", NULL::text AS "channelName"
       FROM ${taskItemsSql(workspaceId, userId)}
       ${conversationMentionLateral}
       WHERE ${taskItemListedSql(Prisma.sql`mention."firstId"`)}
@@ -110,42 +110,57 @@ export function allConversationsTargetSql(workspaceId: string, userId: string, b
     FROM listed
     JOIN "conversation_members" cm ON cm."id" = listed."memberId"
     CROSS JOIN LATERAL (
-      SELECT m."sequence" FROM "messages" m
-      WHERE m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
-        AND m."createdAt" <= ${before}
-      ORDER BY m."sequence" DESC LIMIT 1
+      ${activityBulkBoundarySql(
+        Prisma.sql`listed."channelName"`,
+        Prisma.sql`m."threadRootId" IS NULL`,
+        before,
+      )}
     ) upto
     WHERE COALESCE(cm."doneThroughSequence", 0) < upto."sequence"`;
 }
 
-/**
- * Reads every conversation one person belongs to through the newest message its row stands for
- * (`ROW_MESSAGES_SQL`) posted at or before `before`, consuming mark-as-unread markers at or below that point. Touches only the
- * rows that move, and returns each one's conversation, whether it is a channel and whether it is a task's own
- * conversation (hidden: no badge to move).
- */
+function activityBulkBoundarySql(channelName: Prisma.Sql, rowMessages: Prisma.Sql, before: Date) {
+  const relevantChannel = Prisma.sql`(${channelName} IS NOT NULL AND cm."notificationLevel" = 'relevant')`;
+  return Prisma.sql`SELECT CASE WHEN ${relevantChannel} THEN (
+      SELECT MAX(m."sequence") FROM "message_mentions" mm
+      JOIN "messages" m ON m."id" = mm."messageId" AND m."conversationId" = mm."conversationId"
+      WHERE mm."memberId" = cm."id"
+        AND m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
+        AND m."sequence" > COALESCE(cm."doneThroughSequence", 0)
+        AND m."createdAt" <= ${before}
+    ) ELSE (
+      SELECT m."sequence" FROM "messages" m
+      WHERE m."conversationId" = cm."conversationId" AND ${rowMessages}
+        AND m."createdAt" <= ${before}
+      ORDER BY m."sequence" DESC LIMIT 1
+    ) END AS "sequence"`;
+}
+
 export function markConversationsReadSql(workspaceId: string, userId: string, before: Date) {
   return Prisma.sql`
+    WITH target AS (
+      SELECT cm."id" AS "memberId", latest."sequence", c."channelName" IS NOT NULL AS "channel",
+        c."kind" = 'task_thread' AS "task"
+      FROM "conversation_members" cm
+      JOIN "conversations" c ON c."id" = cm."conversationId"
+      CROSS JOIN LATERAL (${activityBulkBoundarySql(Prisma.sql`c."channelName"`, ROW_MESSAGES_SQL, before)}) latest
+      WHERE c."workspaceId" = ${workspaceId}::uuid
+        AND cm."userId" = ${userId}::uuid
+        AND cm."workspaceId" = ${workspaceId}::uuid
+        AND cm."leftAt" IS NULL
+        AND (cm."notificationLevel" <> 'relevant' OR c."channelName" IS NULL
+          OR (c."archivedAt" IS NULL AND c."hiddenFromWorkspaceAt" IS NULL))
+    )
     UPDATE "conversation_members" cm
-    SET "readThroughSequence" = GREATEST(cm."readThroughSequence", latest."sequence"),
+    SET "readThroughSequence" = GREATEST(cm."readThroughSequence", target."sequence"),
         "unreadFromSequence" = CASE
-          WHEN cm."unreadFromSequence" <= latest."sequence" THEN NULL
+          WHEN cm."unreadFromSequence" <= target."sequence" THEN NULL
           ELSE cm."unreadFromSequence" END
-    FROM "conversations" c
-    CROSS JOIN LATERAL (
-      SELECT m."sequence" FROM "messages" m
-      WHERE m."conversationId" = c."id" AND ${ROW_MESSAGES_SQL} AND m."createdAt" <= ${before}
-      ORDER BY m."sequence" DESC LIMIT 1
-    ) latest
-    WHERE c."id" = cm."conversationId"
-      AND c."workspaceId" = ${workspaceId}::uuid
-      AND cm."userId" = ${userId}::uuid
-      AND cm."workspaceId" = ${workspaceId}::uuid
-      AND cm."leftAt" IS NULL
-      AND (cm."readThroughSequence" < latest."sequence"
-        OR cm."unreadFromSequence" <= latest."sequence")
-    RETURNING cm."conversationId" AS "conversationId", c."channelName" IS NOT NULL AS "channel",
-      c."kind" = 'task_thread' AS "task"`;
+    FROM target
+    WHERE cm."id" = target."memberId"
+      AND (cm."readThroughSequence" < target."sequence"
+        OR cm."unreadFromSequence" <= target."sequence")
+    RETURNING cm."conversationId" AS "conversationId", target."channel", target."task"`;
 }
 
 /** Every listed thread's target for Mark all done, through its newest reply at or before `before`. */
