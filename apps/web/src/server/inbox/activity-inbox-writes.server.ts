@@ -13,7 +13,6 @@ import {
   directThreadsSql,
   followedChannelThreadsSql,
   markConversationDoneSql,
-  markConversationsReadSql,
   markThreadDoneSql,
   markThreadsReadSql,
 } from "#src/server/conversations/human-unread.server";
@@ -22,6 +21,7 @@ import {
   publishThreadUnreadChanges,
 } from "#src/server/conversations/thread-unread-marks.server";
 import { announceActivityAttention, announceReadMoved } from "./activity-attention.server";
+import { markConversationsReadSql } from "./activity-inbox-bulk-sql.server";
 
 export type ActivityInboxRealtime = Pick<
   ConversationRealtime,
