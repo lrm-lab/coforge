@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+message TerminalControl {
+  uint32 protocol_major = 1;
+  string workspace_id = 2;
+  string computer_id = 3;
+  string owner_user_id = 4;
+  string session_id = 5;
+  string attach_id = 6;
+  uint32 attach_generation = 7;
+  oneof command {
+    TerminalOpenOrAttach open_or_attach = 11;
+    TerminalInput input = 12;
+    TerminalResize resize = 13;
+    TerminalDetach detach = 14;
+    TerminalClose close = 15;
+  }
+}
+
+message TerminalOpenOrAttach {
+  uint32 cols = 1;
+  uint32 rows = 2;
+  bool takeover = 3;
+}
+
+message TerminalInput {
+  uint32 input_seq = 1;
+  bytes bytes = 2;
+}
+
+message TerminalResize {
+  uint32 cols = 1;
+  uint32 rows = 2;
+}
+
+message TerminalDetach {}
+
+message TerminalClose {}
+
+message TerminalFrame {
+  uint32 protocol_major = 1;
+  string workspace_id = 2;
+  string computer_id = 3;
+  string owner_user_id = 4;
+  string session_id = 5;
+  string attach_id = 6;
+  uint32 attach_generation = 7;
+  oneof event {
+    TerminalOpened opened = 21;
+    TerminalSnapshot snapshot = 22;
+    TerminalOutput output = 23;
+    TerminalInputAccepted input_accepted = 24;
+    TerminalExit exit = 25;
+    TerminalError error = 26;
+    TerminalClosed closed = 27;
+  }
+}
+
+message TerminalOpened {
+  string daemon_instance_id = 1;
+  string shell_kind = 2;
+  uint32 cols = 3;
+  uint32 rows = 4;
+  uint32 next_output_seq = 5;
+  bool history_unavailable = 6;
+}
+
+message TerminalSnapshot {
+  uint32 output_seq = 1;
+  bytes bytes = 2;
+  bool final = 3;
+}
+
+message TerminalOutput {
+  uint32 output_seq = 1;
+  bytes bytes = 2;
+}
+
+message TerminalInputAccepted {
+  uint32 input_seq = 1;
+}
+
+message TerminalExit {
+  oneof status {
+    int32 code = 1;
+    string signal = 2;
+  }
+}
+
+message TerminalError {
+  string code = 1;
+}
+
+message TerminalClosed {
+  string reason = 1;
+}

@@ -33,6 +33,8 @@ export const RPC_METHODS = {
   daemonRuntimeAuthStatusReport: "daemon:v1:runtime_auth:status_report",
   daemonPiChatExecute: "daemon:v1:pi_chat:execute",
   daemonPiChatFrame: "daemon:v1:pi_chat:frame",
+  daemonComputerTerminalControl: "daemon:v1:computer_terminal:control",
+  daemonComputerTerminalFrame: "daemon:v1:computer_terminal:frame",
   daemonRuntimeAuthIntent: "daemon:v1:runtime_auth:intent",
   daemonRuntimeAuthLoginReport: "daemon:v1:runtime_auth:login_report",
   daemonRuntimeAuthLogoutReport: "daemon:v1:runtime_auth:logout_report",
