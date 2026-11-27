@@ -1,11 +1,4 @@
-# Swarm computer image (staging or production via config/environments).
-# The host starts this image with no command. The entrypoint keeps the desktop
-# listeners up and runs `coforge-computer foreground` as a child. The host
-# injects the binding environment; this image does not run `setup --workspace`.
-# Pi, Brazil Aimaster (muse-spark) + Beijing ModelFactory (DeepSeek), and the
-# Lenovo CA stay in the image. The desktop is a slim XFCE session: Chromium,
-# Thunar, and a terminal, with the CoForge mark on the wallpaper. It stays
-# down until a client connects.
+# Swarm computer image. See AGENTS.md.
 
 ARG SANDBOX_IMAGE=cube-sandbox-cn.tencentcloudcr.com/cube-sandbox/sandbox-code@sha256:b551b169de85c0216cce9453a8e22059ca47fd3dceced75e918cf1c8de60464b
 FROM ${SANDBOX_IMAGE}
@@ -17,7 +10,6 @@ ARG PI_SUITE=npm:@lebronj/pi-suite
 ARG PI_WORKSPACE_DIR=/workspace
 ARG PI_EVOLUTION_ENABLED=1
 ARG NPM_REGISTRY=
-# Debian apt mirror (empty = keep image default sources). China default: Tencent.
 ARG APT_MIRROR=https://mirrors.cloud.tencent.com/debian
 ARG APT_SECURITY_MIRROR=https://mirrors.cloud.tencent.com/debian-security
 ARG COMPUTER_VERSION=
@@ -53,11 +45,9 @@ RUN chmod +x /tmp/install-desktop-apt.sh \
   && /tmp/install-desktop-apt.sh \
   && rm -f /tmp/install-desktop-apt.sh
 
-# Python packages for the image. Playwright is the client library only —
-# PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD skips its browsers; agents use system
-# Chromium via connect_over_cdp. Runtime pip goes into /root/.coforge/venv
-# (see persist-user-data.sh); that venv uses --system-site-packages so the
-# baked playwright import is visible without a second install.
+# Bake into /usr/bin/python3 (3.11): PATH prefers sandbox 3.12; runtime venv
+# uses --system-site-packages on 3.11. Playwright is client-only
+# (PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD); agents CDP to system Chromium.
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
@@ -81,8 +71,8 @@ RUN set -eux; \
     pip_args="${pip_args} --trusted-host ${PIP_TRUSTED_HOST}"; \
   fi; \
   # shellcheck disable=SC2086
-  pip3 install ${pip_args} -r /tmp/requirements.txt; \
-  python3 -c 'from playwright.sync_api import sync_playwright'; \
+  /usr/bin/python3 -m pip install ${pip_args} -r /tmp/requirements.txt; \
+  /usr/bin/python3 -c 'from playwright.sync_api import sync_playwright'; \
   rm -f /tmp/requirements.txt
 
 COPY lenovo-modelfactory-ca.pem /root/.pi/agent/certs/lenovo-modelfactory-ca.pem
@@ -348,9 +338,10 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && grep -q 'COFORGE_CLOUD_COMPUTER' /usr/local/bin/entrypoint-foreground.sh \
   && grep -q 'persist_workspace' /usr/local/bin/persist-user-data.sh \
   && grep -q 'ensure_venv' /usr/local/bin/persist-user-data.sh \
-  && python3 -c 'import venv' \
-  && python3 -c 'import Xlib' \
-  && python3 -c 'from playwright.sync_api import sync_playwright' \
+  && /usr/bin/python3 -c 'import venv' \
+  && /usr/bin/python3 -c 'import Xlib' \
+  && /usr/bin/python3 -c 'from playwright.sync_api import sync_playwright; sync_playwright().start().stop()' \
+  && ! ldd /usr/local/lib/python3.*/dist-packages/playwright/driver/node 2>/dev/null | grep -q 'not found' \
   && test -x /usr/local/bin/select-computer-binary.sh \
   && test -x /usr/local/bin/activate-computer-release.sh \
   && test -x /usr/local/bin/supervise-computer-runtime.sh \
