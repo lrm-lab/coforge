@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+enum ComputerAttachSessionIntent {
+  COMPUTER_ATTACH_SESSION_INTENT_UNSPECIFIED = 0;
+  COMPUTER_ATTACH_SESSION_INTENT_ATTACH = 1;
+  COMPUTER_ATTACH_SESSION_INTENT_RECOVER = 2;
+}
+
+enum ComputerAttachSessionState {
+  COMPUTER_ATTACH_SESSION_STATE_UNSPECIFIED = 0;
+  COMPUTER_ATTACH_SESSION_STATE_AWAITING_APPROVAL = 1;
+  COMPUTER_ATTACH_SESSION_STATE_APPROVED = 2;
+  COMPUTER_ATTACH_SESSION_STATE_COMPLETING = 3;
+  COMPUTER_ATTACH_SESSION_STATE_BOUND = 4;
+  COMPUTER_ATTACH_SESSION_STATE_READY = 5;
+  COMPUTER_ATTACH_SESSION_STATE_DENIED = 6;
+  COMPUTER_ATTACH_SESSION_STATE_EXPIRED = 7;
+  COMPUTER_ATTACH_SESSION_STATE_FAILED = 8;
+}
+
+enum ComputerAttachErrorCode {
+  COMPUTER_ATTACH_ERROR_CODE_UNSPECIFIED = 0;
+  COMPUTER_ATTACH_ERROR_CODE_INVALID_REQUEST = 1;
+  COMPUTER_ATTACH_ERROR_CODE_ATTACH_SESSION_EXPIRED = 2;
+  COMPUTER_ATTACH_ERROR_CODE_ATTACH_DENIED = 3;
+  COMPUTER_ATTACH_ERROR_CODE_ATTACH_DISABLED = 4;
+  COMPUTER_ATTACH_ERROR_CODE_REQUIRES_ADMIN = 5;
+  COMPUTER_ATTACH_ERROR_CODE_SERVER_NOT_FOUND = 6;
+  COMPUTER_ATTACH_ERROR_CODE_MACHINE_KEY_MISMATCH = 7;
+  COMPUTER_ATTACH_ERROR_CODE_TICKET_CONSUMED = 8;
+  COMPUTER_ATTACH_ERROR_CODE_COMPLETION_TIMEOUT = 9;
+  COMPUTER_ATTACH_ERROR_CODE_RECOVERY_UNAVAILABLE = 10;
+  COMPUTER_ATTACH_ERROR_CODE_INVALID_CREDENTIAL = 11;
+  COMPUTER_ATTACH_ERROR_CODE_SLOW_DOWN = 12;
+  COMPUTER_ATTACH_ERROR_CODE_COMPUTER_CONFLICT = 13;
+}
+
+message ComputerAttachError {
+  ComputerAttachErrorCode code = 1;
+  optional uint32 retry_after_seconds = 2;
+}
+
+message ComputerAttachCapabilities {
+  uint32 protocol_major = 1;
+}
+
+message ComputerAttachSessionCreateRequest {
+  uint32 protocol_major = 1;
+  string machine_id = 2;
+  string machine_name = 3;
+  string hostname = 4;
+  string platform = 5;
+  string os_version = 6;
+  string computer_version = 7;
+  bytes machine_public_key = 8;
+  optional string workspace_slug = 9;
+  optional string existing_computer_id = 10;
+  ComputerAttachSessionIntent intent = 11;
+}
+
+message ComputerAttachSessionCreateResponse {
+  string session_id = 1;
+  string poll_secret = 2;
+  optional string user_code = 3;
+  optional string verification_uri = 4;
+  uint32 expires_in_seconds = 5;
+  uint32 poll_interval_seconds = 6;
+}
+
+message ComputerAttachSessionPollRequest {
+  string poll_secret = 1;
+}
+
+message ComputerAttachSessionChallenge {
+  string nonce = 1;
+  optional string attach_ticket = 2;
+  uint32 expires_in_seconds = 3;
+}
+
+message ComputerAttachSessionPollResponse {
+  ComputerAttachSessionState state = 1;
+  ComputerAttachSessionChallenge challenge = 2;
+  optional string workspace_id = 3;
+  optional string workspace_slug = 4;
+}
+
+message ComputerAttachSessionCompleteRequest {
+  string nonce = 1;
+  bytes signature = 2;
+  optional string attach_ticket = 3;
+}
+
+message ComputerAttachSessionCompleteResponse {
+  string computer_id = 1;
+  string workspace_id = 2;
+  string workspace_slug = 3;
+  string api_key = 4;
+  bool resumed = 5;
+}
+
+message ComputerAttachSessionPreflightResponse {
+  string computer_id = 1;
+  string workspace_id = 2;
+  string workspace_slug = 3;
+}

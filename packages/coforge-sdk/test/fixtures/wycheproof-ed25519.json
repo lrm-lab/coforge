@@ -1,0 +1,111 @@
+{
+  "source": "https://github.com/C2SP/wycheproof/blob/65ca494727a52944c204441c860b039e6786b99b/testvectors_v1/ed25519_test.json",
+  "license": "Apache-2.0",
+  "vectors": [
+    {
+      "id": 1,
+      "message": "",
+      "signature": "d4fbdb52bfa726b44d1786a8c0d171c3e62ca83c9e5bbe63de0bb2483f8fd6cc1429ab72cafc41ab56af02ff8fcc43b99bfe4c7ae940f60f38ebaa9d311c4007",
+      "publicKey": "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa",
+      "accepted": true
+    },
+    {
+      "id": 60,
+      "message": "313233343030",
+      "signature": "0000000000000000000000000000000000000000000000000000000000000000e0b8e7770d51c7a36375d006c5bffd6af43ff54aaf47e4330dc118c71d61ec02",
+      "publicKey": "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa",
+      "accepted": false
+    },
+    {
+      "id": 61,
+      "message": "313233343030",
+      "signature": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff463a1908382e7eb7693acef9884f7cf931a215e0791876be22c631a59881fd0e",
+      "publicKey": "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa",
+      "accepted": false
+    },
+    {
+      "id": 63,
+      "message": "54657374",
+      "signature": "7c38e026f29e14aabd059a0f2db8b0cd783040609a8be684db12f82a27774ab067654bce3832c2d76f8f6f5dafc08d9339d4eef676573336a5c51eb6f946b31d",
+      "publicKey": "7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa",
+      "accepted": false
+    },
+    {
+      "id": 151,
+      "message": "313233343030",
+      "signature": "0100000000000000000000000000000000000000000000000000000000000080c803ee1f2342aa96ff698a393d1ab5e66f3eda101d6d120b394c3fd32c117d0a",
+      "publicKey": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "accepted": false
+    },
+    {
+      "id": 152,
+      "message": "6d657373616765",
+      "signature": "58666666666666666666666666666666666666666666666666666666666666660100000000000000000000000000000000000000000000000000000000000000",
+      "publicKey": "0100000000000000000000000000000000000000000000000000000000000000",
+      "accepted": false
+    },
+    {
+      "id": 153,
+      "message": "746f7273696f6e2d312d3134",
+      "signature": "b63dd4baa9c75ea9f3f1021ada3bf7dd6872e4cfbdac9653965ef78c4be9845d27df2ce4101220ec96bc5ccbcefa1336871b76e6ef52a0fb35745bb187b1a10d",
+      "publicKey": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+      "accepted": false
+    },
+    {
+      "id": 154,
+      "message": "",
+      "signature": "c459280d27f66a3285aa648ca1cc444cdfcde27a6062d117c6cb399e0969d6edf8b80551824c3e7275922ac8751e59a42793406560453c4e366999f900480506",
+      "publicKey": "0000000000000000000000000000000000000000000000000000000000000080",
+      "accepted": false
+    },
+    {
+      "id": 155,
+      "message": "746f7273696f6e2d332d34",
+      "signature": "afd0270f467226b517fa8f911d1d320906df0065fe0045593c8fd0394770b83e6bb6f264bca826f9a4631816571f8f42681a94db6d3f032e64721265a06c7009",
+      "publicKey": "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+      "accepted": false
+    },
+    {
+      "id": 156,
+      "message": "",
+      "signature": "f8cea2efb481e92ca61b8972098e07aa1c16f2166cbd8da7ae682b55e433693920b491d7e08ab6c8e521b2f0300befbfcbfd7078340bc153a251896ef8b7c805",
+      "publicKey": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "accepted": false
+    },
+    {
+      "id": 157,
+      "message": "746f7273696f6e2d352d3231",
+      "signature": "54df79ed63c1bfdc39fd6408ad5f04143bcfc22b7e1dd0e5ea3bc00eccbbbf8260faa75789f6428d7a8a5a3b850b6779171de7edd504ffcfb5db320dd9864b06",
+      "publicKey": "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+      "accepted": false
+    },
+    {
+      "id": 158,
+      "message": "",
+      "signature": "520679470254237dbe8f93dc12e8b05363f5236b5671ebff01251649930f6c287531efeb34b73a6fe0f3170a211ce386ae269b0d145d5a7e63bb4ba15ce0c408",
+      "publicKey": "0000000000000000000000000000000000000000000000000000000000000000",
+      "accepted": false
+    },
+    {
+      "id": 159,
+      "message": "746f7273696f6e2d372d39",
+      "signature": "b57aca4330dc58dcfd4ca75a1f7f3161aaf394a57769c7a9e9837d27cf7a80f7e88557a67e0b4792628285f53ed0f4fac97bc187e436fac5ea0513d320d5560f",
+      "publicKey": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+      "accepted": false
+    },
+    {
+      "id": 160,
+      "message": "6d697865642d6f726465722d302d312d38",
+      "signature": "49b0d4daf5493b98c7220f7b785fdf10f4befad3262e00f2cd6813c90d1319f6a7c6c0d69149f691d0c6b428642bb08d7046e0abff7e68e6b83547129f51080b",
+      "publicKey": "15deb30729eb3e465c88f11b57d0c8d36eb0f670c3b22d2f80ea6049eeb2c23b",
+      "accepted": false
+    },
+    {
+      "id": 210,
+      "message": "af82",
+      "signature": "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a",
+      "publicKey": "d1e06adf4e05e248e1e52beca14b6be4da0af01b41645d2849b407ec22f41d47",
+      "accepted": false
+    }
+  ]
+}

@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.17.0",
+    "@noble/ed25519": "3.2.0",
     "@types/mdast": "^4.0.4",
     "micromark-util-decode-numeric-character-reference": "^2.0.2",
     "micromark-util-types": "^2.0.3",
