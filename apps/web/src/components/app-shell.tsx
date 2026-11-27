@@ -58,6 +58,7 @@ import type { SidebarLayoutCookie } from "#src/features/settings/sidebar-layout-
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { cx } from "#src/utils/cx";
 import { FeedbackHost } from "#src/features/feedback/feedback-host";
+import { FeedbackRailButton, FeedbackRow } from "#src/features/feedback/feedback-entry";
 import { KeyboardShortcutsHost } from "#src/features/shortcuts/keyboard-shortcuts-host";
 
 export type AppUser = {
@@ -323,6 +324,7 @@ function WorkspaceChrome({
     () => (
       <>
         <WhatsNewRow base={base} />
+        <FeedbackRow />
         <UserRow
           base={base}
           user={user}
@@ -348,6 +350,7 @@ function WorkspaceChrome({
       <>
         <WhatsNewRailButton base={base} />
         <NotificationBell workspaceSlug={currentWorkspace.slug} badgeRing="ring-sidebar" />
+        <FeedbackRailButton />
         <UserMenuCard compact base={base} user={user} onSignOut={signOut} />
       </>
     ),

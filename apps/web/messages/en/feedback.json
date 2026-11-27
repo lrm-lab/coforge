@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "feedback_entry": "Send feedback",
+  "feedback_entry_subtitle": "Report bugs or share ideas with screenshots",
   "feedback_dialog_title": "Send feedback",
   "feedback_category_label": "Feedback type",
   "feedback_category_bug": "Bug report",

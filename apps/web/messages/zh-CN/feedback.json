@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "feedback_entry": "提交反馈",
+  "feedback_entry_subtitle": "反馈问题或建议，支持附截图",
   "feedback_dialog_title": "提交反馈",
   "feedback_category_label": "反馈类型",
   "feedback_category_bug": "问题反馈",

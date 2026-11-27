@@ -1,5 +1,5 @@
 import { useRef, type FC, type RefObject } from "react";
-import { Keyboard01, LogOut01 as LogOut, MessageTextSquare01, Settings01 } from "@untitledui/icons";
+import { Keyboard01, LogOut01 as LogOut, Settings01 } from "@untitledui/icons";
 import {
   Button as AriaButton,
   Header as AriaHeader,
@@ -14,7 +14,6 @@ import {
 import type { AppUser } from "#src/components/app-shell";
 import { HotkeyKeycaps, useHotkeyAria } from "#src/components/ui/kbd";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { useOpenFeedback } from "#src/features/feedback/feedback-host";
 import { useOpenKeyboardShortcuts } from "#src/features/shortcuts/keyboard-shortcuts-host";
 import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
 import { NotificationBell } from "#src/features/usage-limits/notification-bell";
@@ -71,7 +70,6 @@ export function UserMenuCard({
       className={compact ? undefined : "rounded-md"}
     />
   );
-  const openFeedback = useOpenFeedback();
   const openShortcuts = useOpenKeyboardShortcuts();
   const shortcutsBinding = useShortcutBindings("shortcuts")[0];
   return (
@@ -109,7 +107,6 @@ export function UserMenuCard({
           onAction={(key) => {
             if (key === "sign-out") void onSignOut();
             if (key === "shortcuts") openShortcuts();
-            if (key === "feedback") openFeedback();
           }}
           className="outline-hidden"
         >
@@ -132,7 +129,6 @@ export function UserMenuCard({
               shortcut={shortcutsBinding}
               icon={Keyboard01}
             />
-            <AccountMenuItem id="feedback" label={m.feedback_entry()} icon={MessageTextSquare01} />
           </AriaMenuSection>
           <AriaMenuSection aria-label={m.controls_sign_out()} className="py-1.5">
             <AccountMenuItem id="sign-out" label={m.controls_sign_out()} icon={LogOut} tray />
