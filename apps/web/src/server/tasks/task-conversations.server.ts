@@ -1,4 +1,4 @@
-import type { MentionSelectorInput, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type { TaskPrincipal } from "@lrm/coforge-sdk/internal";
 
 import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
@@ -6,22 +6,21 @@ import type { AgentMessagesPage } from "#src/server/agents/agent-messages.server
 
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
-import {
-  MessageRequestInProgressError,
-  type MessageRequestIdempotency,
-  type MessageRequestRecords,
-} from "#src/server/conversations/message-request-idempotency.server";
+import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 import { memberId } from "./task-board-ports.server";
-import { publishTaskConversationMessage } from "./task-publication.server";
+import {
+  reconcileTaskReply,
+  writeTaskReply,
+  type TaskReplyInput,
+} from "./task-conversation-reply.server";
 import { taskDiscussionDeliveryTarget } from "./task-discussion-target.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { postUnfollowNotice } from "./task-unfollow-notice.server";
 import { boardLabel } from "./task-conversation-notice.server";
-import { postTaskMessage } from "./task-discussion-send.server";
 import {
   discussionOf,
   followTask,
@@ -115,78 +114,29 @@ export class TaskConversations {
     };
   }
 
-  async reply(
-    principal: TaskPrincipal,
-    ref: TaskConversationRef,
-    input: {
-      body: string;
-      idempotencyKey?: string;
-      attachmentIds?: readonly string[];
-      mentions?: readonly MentionSelectorInput[];
-    },
-  ) {
+  async reply(principal: TaskPrincipal, ref: TaskConversationRef, input: TaskReplyInput) {
     const body = input.body.trim();
     if (!body || body.length > 64_000) throw new AppError("INVALID_INPUT");
     const { task, member, scope } = await this.resolve(principal, ref, { member: true });
-    const post = async () => {
-      const posted = await this.ports.db.$transaction((tx) =>
-        postTaskMessage(tx, {
-          taskId: task.id,
-          scope,
-          member: { ...member!, id: memberId(member!) },
-          body,
-          attachmentIds: input.attachmentIds,
-          mentions: input.mentions,
-        }),
-      );
-      await publishTaskConversationMessage(this.ports, posted.messageId, posted.messageId).catch(
-        () => undefined,
-      );
-      return {
-        id: posted.messageId,
-        sequence: posted.sequence,
-        body: posted.body,
-        createdAt: posted.createdAt,
-        threadRootId: null,
-        attachments: [],
-        workspaceId: scope.workspaceId,
-      };
-    };
-    const persisted =
-      this.idempotency && input.idempotencyKey
-        ? await this.idempotency.execute(
-            {
-              workspaceId: scope.workspaceId,
-              senderKind: principal.agentId ? "agent" : "user",
-              senderId: (principal.agentId ?? principal.userId)!,
-              idempotencyKey: `task:${task.id}:${input.idempotencyKey}`,
-            },
-            post,
-          )
-        : await post();
-    return { messageId: persisted.id, sequence: persisted.sequence };
+    return writeTaskReply(this.ports, this.idempotency, {
+      scope,
+      taskId: task.id,
+      principal,
+      member: { ...member!, id: memberId(member!) },
+      body,
+      input,
+    });
   }
 
   async reconcileReply(principal: TaskPrincipal, ref: TaskConversationRef, idempotencyKey: string) {
     const { task, scope } = await this.resolve(principal, ref, { member: true });
-    const records = this.idempotency as
-      | (MessageRequestIdempotency & Partial<MessageRequestRecords>)
-      | undefined;
-    if (!records?.find) return { state: "not_found" as const };
-    const found = await records.find({
-      workspaceId: scope.workspaceId,
-      senderKind: principal.agentId ? "agent" : "user",
-      senderId: (principal.agentId ?? principal.userId)!,
-      idempotencyKey: `task:${task.id}:${idempotencyKey}`,
-    });
-    if (found?.state === "processing") throw new MessageRequestInProgressError();
-    if (found?.state === "completed")
-      return {
-        state: "committed" as const,
-        messageId: found.message.id,
-        sequence: found.message.sequence,
-      };
-    return { state: "not_found" as const };
+    return reconcileTaskReply(
+      this.idempotency,
+      scope.workspaceId,
+      task.id,
+      principal,
+      idempotencyKey,
+    );
   }
 
   /**
