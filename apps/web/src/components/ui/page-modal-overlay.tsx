@@ -327,14 +327,13 @@ function UnifiedPageModalOverlayInner({
         "pt-(--modal-pt) pb-(--modal-pb) [--modal-pb:clamp(16px,8vh,64px)] [--modal-pt:16px] sm:[--modal-pb:32px] sm:[--modal-pt:32px]",
         isOverlayEntering && "motion-enter animate-in fade-in",
         isExiting && "motion-leave animate-out fade-out",
-        "invisible bg-transparent backdrop-blur-none",
         instant ? "animate-none!" : [isOverlayEntering && "scrim-in", isExiting && "scrim-out"],
         "max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0",
         !keyboardMayBeUp &&
           "max-sm:[--visual-viewport-height:var(--app-height,100dvh)]! max-sm:[--visual-viewport-top:0px]!",
         "max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]",
         resolvedClass,
-        "invisible z-10 bg-transparent backdrop-blur-none",
+        "max-sm:visible sm:invisible z-10 bg-transparent backdrop-blur-none",
       );
 
   return (

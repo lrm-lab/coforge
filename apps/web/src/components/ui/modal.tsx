@@ -148,7 +148,6 @@ function StandardModalOverlay({
         }
         className={(state) =>
           cx(
-            "invisible z-10 bg-transparent backdrop-blur-none",
             instant
               ? "animate-none!"
               : [state.isEntering && "scrim-in", state.isExiting && "scrim-out"],
@@ -156,8 +155,10 @@ function StandardModalOverlay({
             !keyboardMayBeUp &&
               "max-sm:[--visual-viewport-height:var(--app-height,100dvh)]! max-sm:[--visual-viewport-top:0px]!",
             confirmation && "max-sm:px-0 max-sm:[--modal-pb:0px]",
+            !confirmation &&
+              "max-sm:[--modal-pt:max(16px,var(--spacing-safe-top))] max-sm:[--modal-pb:calc(16px+var(--spacing-safe-bottom))]",
             typeof className === "function" ? className(state) : className,
-            "invisible z-10 bg-transparent backdrop-blur-none",
+            "max-sm:visible sm:invisible z-10 bg-transparent backdrop-blur-none",
           )
         }
       />
