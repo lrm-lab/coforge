@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { setAccountPasswordInput } from "#src/features/auth/account-password.functions";
 import {
   accountContactDestination,
+  checkAccountPasswordInput,
   sendAccountPasswordCode,
   setAccountPassword,
 } from "#src/server/auth/account-password.server";
@@ -193,6 +195,7 @@ describe("sendAccountPasswordCode & setAccountPassword", () => {
       contact: "phone",
       passCode: "123456",
       newPassword: "correct-horse-battery",
+      confirmPassword: "correct-horse-battery",
       config,
     });
     expect(setRes).toEqual({ status: "no_contact" });
@@ -248,6 +251,7 @@ describe("sendAccountPasswordCode & setAccountPassword", () => {
       contact: "email",
       passCode: "654321",
       newPassword: "new-strong-password-1",
+      confirmPassword: "new-strong-password-1",
       config,
     });
     expect(setRes).toEqual({ status: "updated" });
@@ -285,6 +289,7 @@ describe("sendAccountPasswordCode & setAccountPassword", () => {
         contact: "email",
         passCode: "654321",
         newPassword: "new-strong-password-1",
+        confirmPassword: "new-strong-password-1",
         config,
       });
       expect(setRes).toEqual({ status: "identity_mismatch" });
@@ -317,6 +322,7 @@ describe("sendAccountPasswordCode & setAccountPassword", () => {
         contact: "email",
         passCode: "654321",
         newPassword: secretPassword,
+        confirmPassword: secretPassword,
         config,
       });
       expect(setRes).toEqual({ status: "updated_unverified" });
@@ -352,6 +358,7 @@ describe("sendAccountPasswordCode & setAccountPassword", () => {
       contact: "phone",
       passCode: "123456",
       newPassword: "new-strong-password-1",
+      confirmPassword: "new-strong-password-1",
       config,
     });
     expect(res).toEqual({ status: "updated" });
@@ -366,5 +373,93 @@ describe("sendAccountPasswordCode & setAccountPassword", () => {
     expect(normalizePasswordAccount("138-0013-8000")).toBe("13800138000");
     expect(normalizePasswordAccount("ada@example.com")).toBe("ada@example.com");
     expect(normalizePasswordAccount("ada_lovelace")).toBe("ada_lovelace");
+  });
+
+  test("rejects mismatched confirmation at input schema, boundary check, and server entry without touching DB or Authing", async () => {
+    expect(
+      setAccountPasswordInput.safeParse({
+        contact: "email",
+        code: "123456",
+        password: "new-strong-password-1",
+      }).success,
+    ).toBe(false);
+    expect(
+      setAccountPasswordInput.safeParse({
+        contact: "email",
+        code: "123456",
+        password: "new-strong-password-1",
+        confirmPassword: "new-strong-password-1",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      checkAccountPasswordInput({
+        code: "123456",
+        password: "new-strong-password-1",
+        confirmPassword: "different-password-1",
+      }),
+    ).toBe("password_mismatch");
+    expect(
+      checkAccountPasswordInput({
+        code: "12",
+        password: "new-strong-password-1",
+        confirmPassword: "different-password-1",
+      }),
+    ).toBe("invalid_input");
+    expect(
+      checkAccountPasswordInput({
+        code: "123456",
+        password: "short",
+        confirmPassword: "short",
+      }),
+    ).toBe("invalid_input");
+    expect(
+      checkAccountPasswordInput({
+        code: "123456",
+        password: "x".repeat(129),
+        confirmPassword: "x".repeat(129),
+      }),
+    ).toBe("invalid_input");
+    expect(
+      checkAccountPasswordInput({
+        code: "123456",
+        password: "new-strong-password-1",
+        confirmPassword: "new-strong-password-1",
+      }),
+    ).toBeNull();
+
+    let dbQueried = false;
+    let authingCalled = false;
+    const { config } = fakeAuthingServer({
+      onVerify: () => {
+        authingCalled = true;
+        return Response.json({ statusCode: 200 });
+      },
+      onReset: () => {
+        authingCalled = true;
+        return Response.json({ statusCode: 200 });
+      },
+    });
+    const db = {
+      user: {
+        findUnique: async () => {
+          dbQueried = true;
+          return null;
+        },
+      },
+    } as unknown as PrismaClient;
+
+    const mismatchRes = await setAccountPassword({
+      db,
+      userId: "u-1",
+      contact: "email",
+      passCode: "123456",
+      newPassword: "new-strong-password-1",
+      confirmPassword: "different-password-1",
+      config,
+    });
+    expect(mismatchRes).toEqual({ status: "password_mismatch" });
+    expect(dbQueried).toBe(false);
+    expect(authingCalled).toBe(false);
   });
 });

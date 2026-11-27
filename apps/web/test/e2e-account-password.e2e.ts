@@ -124,16 +124,37 @@ test("a person with a verified email sets a new password from Settings → Accou
     expect(sent).toMatchObject({ channel: "email", destination: people.alice.email });
     await waitFor(`/^Resend in \\d+s$/.test(${dialogButton("/^Resend in/")}?.textContent.trim())`);
 
-    // The code and a new password; Save is enabled by both and the dialog then closes on a toast.
+    const confirmInputSelector = '[data-account-password-dialog] input[name="confirmPassword"]';
+    const confirmWrapper = `document.querySelector(${JSON.stringify(confirmInputSelector)})?.closest("[data-input-wrapper]")`;
+    const confirmAlert = `(${confirmWrapper}?.querySelector("[role=alert]")?.textContent ?? null)`;
+
     await setInput('[data-account-password-dialog] input[name="code"]', sent.code);
     await setInput('[data-account-password-dialog] input[name="password"]', newPassword);
+    await setInput(confirmInputSelector, "different-new-password");
     await waitFor(`${dialogButton("/^Save$/")}.disabled === false`);
-    await browser("screenshot", join(artifacts, "2-filled.png"));
+    await browser("eval", `${dialogButton("/^Save$/")}.click()`);
+    await waitFor(
+      `${confirmAlert} === "The passwords don't match." && document.activeElement?.getAttribute("name") === "confirmPassword"`,
+    );
+    expect(await evaluate<boolean>(`!!${dialog}`)).toBe(true);
+    expect(
+      await evaluate<string | null>(
+        `document.querySelector(${JSON.stringify(confirmInputSelector)})?.getAttribute("aria-invalid") ?? null`,
+      ),
+    ).toBe("true");
+    expect(await evaluate<boolean>(toastShown)).toBe(false);
+    expect(fake.resets).toEqual([]);
+    await browser("screenshot", join(artifacts, "2-mismatch.png"));
+
+    await setInput(confirmInputSelector, newPassword);
+    await waitFor(
+      `${confirmAlert} === null && document.querySelector(${JSON.stringify(confirmInputSelector)})?.getAttribute("aria-invalid") !== "true"`,
+    );
+    await browser("screenshot", join(artifacts, "3-filled.png"));
     await browser("eval", `${dialogButton("/^Save$/")}.click()`);
     await waitFor(`!${dialog} && ${toastShown}`);
-    await browser("screenshot", join(artifacts, "3-updated.png"));
+    await browser("screenshot", join(artifacts, "4-updated.png"));
 
-    // The password changed at Authing, for this account; the old one no longer signs in.
     expect(fake.resets).toEqual([{ sub: people.alice.sub }]);
     await browser("cookies", "clear");
     await browser("open", `${origin}/login?returnTo=${encodeURIComponent(`/w/${slug}`)}`);

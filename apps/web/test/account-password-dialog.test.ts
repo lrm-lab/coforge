@@ -3,6 +3,7 @@ import {
   accountPasswordProblemText,
   bindArrivalFrom,
   canSavePassword,
+  confirmPasswordProblem,
   defaultContact,
   githubBindPath,
   passwordContacts,
@@ -17,6 +18,7 @@ const PROBLEMS: AccountPasswordProblem[] = [
   "identity_mismatch",
   "rate_limited",
   "invalid_code",
+  "password_mismatch",
   "password_refused",
   "send_failed",
   "invalid_destination",
@@ -123,14 +125,28 @@ describe("githubBindPath", () => {
 });
 
 describe("canSavePassword", () => {
-  test("needs a 4 to 8 digit code and a password of 8 to 128 characters", () => {
-    expect(canSavePassword("123456", "longenough")).toBe(true);
-    expect(canSavePassword(" 1234 ", "12345678")).toBe(true);
-    expect(canSavePassword("123", "longenough")).toBe(false);
-    expect(canSavePassword("123456789", "longenough")).toBe(false);
-    expect(canSavePassword("12a456", "longenough")).toBe(false);
-    expect(canSavePassword("123456", "short")).toBe(false);
-    expect(canSavePassword("123456", "x".repeat(129))).toBe(false);
-    expect(canSavePassword("123456", "x".repeat(128))).toBe(true);
+  test("needs a 4 to 8 digit code and two matching passwords of 8 to 128 characters", () => {
+    expect(canSavePassword("123456", "longenough", "longenough")).toBe(true);
+    expect(canSavePassword(" 1234 ", "12345678", "12345678")).toBe(true);
+    expect(canSavePassword("123456", "longenough", "different")).toBe(false);
+    expect(canSavePassword("123456", "longenough", "")).toBe(false);
+    expect(canSavePassword("123", "longenough", "longenough")).toBe(false);
+    expect(canSavePassword("123456789", "longenough", "longenough")).toBe(false);
+    expect(canSavePassword("12a456", "longenough", "longenough")).toBe(false);
+    expect(canSavePassword("123456", "short", "short")).toBe(false);
+    expect(canSavePassword("123456", "x".repeat(129), "x".repeat(129))).toBe(false);
+    expect(canSavePassword("123456", "x".repeat(128), "x".repeat(128))).toBe(true);
+  });
+});
+
+describe("confirmPasswordProblem", () => {
+  test("ignores empty confirmation on blur and flags mismatch on blur or submit", () => {
+    expect(confirmPasswordProblem("longenough", "", "blur")).toBeUndefined();
+    expect(confirmPasswordProblem("longenough", "different", "blur")).toBe("password_mismatch");
+    expect(confirmPasswordProblem("longenough", "longenough", "blur")).toBeUndefined();
+    expect(confirmPasswordProblem("", "", "submit")).toBeUndefined();
+    expect(confirmPasswordProblem("longenough", "", "submit")).toBe("password_mismatch");
+    expect(confirmPasswordProblem("longenough", "different", "submit")).toBe("password_mismatch");
+    expect(confirmPasswordProblem("longenough", "longenough", "submit")).toBeUndefined();
   });
 });

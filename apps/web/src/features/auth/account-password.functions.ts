@@ -6,14 +6,20 @@ import { declareNoStore } from "#src/features/no-store-response.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { readSignInConfigOrNull } from "#src/server/auth/config.server";
 import { clientAddress } from "#src/server/http/public-origin.server";
-import { isNewPassword } from "#src/features/auth/new-password";
-import { isSignInCode } from "#src/features/auth/code-destination";
 import {
+  checkAccountPasswordInput,
   sendAccountPasswordCode,
   setAccountPassword,
 } from "#src/server/auth/account-password.server";
 
 const contact = z.enum(["email", "phone"]);
+
+export const setAccountPasswordInput = z.object({
+  contact,
+  code: z.string().trim().max(32),
+  password: z.string().max(1_024),
+  confirmPassword: z.string().max(1_024),
+});
 
 export const requestAccountPasswordCode = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -36,12 +42,11 @@ export const requestAccountPasswordCode = createServerFn({ method: "POST" })
 
 export const setAccountPasswordFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ contact, code: z.string().trim().max(32), password: z.string().max(128) }))
+  .validator(setAccountPasswordInput)
   .handler(async ({ data, context }) => {
     declareNoStore();
-    if (!isSignInCode(data.code) || !isNewPassword(data.password)) {
-      return { ok: false, problem: "invalid_input" } as const;
-    }
+    const inputProblem = checkAccountPasswordInput(data);
+    if (inputProblem) return { ok: false, problem: inputProblem } as const;
     const signInConfig = await readSignInConfigOrNull(process.env);
     if (!signInConfig) return { ok: false, problem: "failed" } as const;
     const result = await setAccountPassword({
@@ -50,6 +55,7 @@ export const setAccountPasswordFn = createServerFn({ method: "POST" })
       contact: data.contact,
       passCode: data.code,
       newPassword: data.password,
+      confirmPassword: data.confirmPassword,
       config: signInConfig.config,
       clientAddress: clientAddress(getRequest()),
     });

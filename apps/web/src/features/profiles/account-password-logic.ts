@@ -2,7 +2,6 @@ import { isSignInCode } from "#src/features/auth/code-destination";
 import { isNewPassword } from "#src/features/auth/new-password";
 import { m } from "#src/paraglide/messages";
 
-/** Every way setting a password, or the contact it needs, can go wrong, as a result the dialog says. */
 export type AccountPasswordProblem =
   | "invalid_input"
   | "failed"
@@ -10,13 +9,13 @@ export type AccountPasswordProblem =
   | "identity_mismatch"
   | "rate_limited"
   | "invalid_code"
+  | "password_mismatch"
   | "password_refused"
   | "send_failed"
   | "invalid_destination"
   | "invalid_bind_token"
   | "unavailable"
   | "refused"
-  /** The bind code was spent without the contact being added: the person must verify again. */
   | "bind_failed"
   | "github_denied"
   | "github_failed";
@@ -28,6 +27,7 @@ const problemText: Record<AccountPasswordProblem, () => string> = {
   identity_mismatch: () => m.settings_password_problem_identity_mismatch(),
   rate_limited: () => m.settings_password_problem_rate_limited(),
   invalid_code: () => m.settings_password_problem_invalid_code(),
+  password_mismatch: () => m.settings_password_problem_mismatch(),
   password_refused: () => m.settings_password_problem_password_refused(),
   send_failed: () => m.settings_password_problem_send_failed(),
   invalid_destination: () => m.settings_password_problem_invalid_destination(),
@@ -111,7 +111,15 @@ export function githubBindPath(pathname: string): string {
   return `/auth/github?mode=bind&returnTo=${encodeURIComponent(returnTo)}`;
 }
 
-/** Save is allowed once the code and the password look right; the server judges them again. */
-export function canSavePassword(code: string, password: string): boolean {
-  return isSignInCode(code.trim()) && isNewPassword(password);
+export function canSavePassword(code: string, password: string, confirmPassword: string): boolean {
+  return isSignInCode(code.trim()) && isNewPassword(password) && password === confirmPassword;
+}
+
+export function confirmPasswordProblem(
+  password: string,
+  confirmPassword: string,
+  mode: "blur" | "submit",
+): "password_mismatch" | undefined {
+  if (mode === "blur" && confirmPassword === "") return undefined;
+  return password === confirmPassword ? undefined : "password_mismatch";
 }

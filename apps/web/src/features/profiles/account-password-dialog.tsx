@@ -39,6 +39,7 @@ import {
 import {
   accountPasswordProblemText,
   canSavePassword,
+  confirmPasswordProblem,
   defaultContact,
   githubBindPath,
   passwordContacts,
@@ -204,15 +205,21 @@ function PasswordForm({
       contact: defaultContact(contacts),
       code: "",
       password: "",
+      confirmPassword: "",
     },
     onSubmitInvalid: () => scheduleFocusInvalidField(formRef.current),
     onSubmit: async ({ value }) => {
-      if (!canSavePassword(value.code, value.password)) return;
+      if (!canSavePassword(value.code, value.password, value.confirmPassword)) return;
       await guard(async () => {
         setFormProblem(null);
         try {
           const result = await setPassword({
-            data: { contact: value.contact, code: value.code.trim(), password: value.password },
+            data: {
+              contact: value.contact,
+              code: value.code.trim(),
+              password: value.password,
+              confirmPassword: value.confirmPassword,
+            },
           });
           if (!result.ok) {
             reportProblem(result.problem);
@@ -228,6 +235,16 @@ function PasswordForm({
     },
   });
 
+  function clearConfirmPasswordError() {
+    form.setFieldMeta("confirmPassword", (prev) => {
+      if (!prev.errorMap.onBlur && !prev.errorMap.onSubmit) return prev;
+      return {
+        ...prev,
+        errorMap: { ...prev.errorMap, onBlur: undefined, onSubmit: undefined },
+      };
+    });
+  }
+
   function reportProblem(next: AccountPasswordProblem | null) {
     if (!next) {
       setFormProblem(null);
@@ -241,6 +258,16 @@ function PasswordForm({
     if (next === "password_refused") {
       setFormProblem(null);
       setFieldServerError(form, "password", accountPasswordProblemText(next), formRef.current);
+      return;
+    }
+    if (next === "password_mismatch") {
+      setFormProblem(null);
+      setFieldServerError(
+        form,
+        "confirmPassword",
+        accountPasswordProblemText(next),
+        formRef.current,
+      );
       return;
     }
     setFormProblem(next);
@@ -258,7 +285,11 @@ function PasswordForm({
         className="flex flex-col gap-5 px-6 pt-5 pb-6"
       >
         <form.Subscribe
-          selector={(state) => state.values.code.trim() !== "" || state.values.password !== ""}
+          selector={(state) =>
+            state.values.code.trim() !== "" ||
+            state.values.password !== "" ||
+            state.values.confirmPassword !== ""
+          }
         >
           {(dirty) => <ReportFormState busy={saving} dirty={dirty} onStateChange={onStateChange} />}
         </form.Subscribe>
@@ -350,7 +381,51 @@ function PasswordForm({
               placeholder={m.login_reset_password_placeholder()}
               type="password"
               autoComplete="new-password"
-              onChange={() => setFormProblem(null)}
+              onChange={() => {
+                setFormProblem(null);
+                clearConfirmPasswordError();
+              }}
+              onBlur={() => {
+                if (form.getFieldValue("confirmPassword") !== "") {
+                  form.setFieldMeta("confirmPassword", (prev) => ({ ...prev, isTouched: true }));
+                  void form.validateField("confirmPassword", "blur");
+                }
+              }}
+            />
+          )}
+        </form.AppField>
+        <form.AppField
+          name="confirmPassword"
+          validators={{
+            onBlur: ({ value, fieldApi }) => {
+              const problem = confirmPasswordProblem(
+                fieldApi.form.getFieldValue("password"),
+                value,
+                "blur",
+              );
+              return problem ? accountPasswordProblemText(problem) : undefined;
+            },
+            onSubmit: ({ value, fieldApi }) => {
+              const problem = confirmPasswordProblem(
+                fieldApi.form.getFieldValue("password"),
+                value,
+                "submit",
+              );
+              return problem ? accountPasswordProblemText(problem) : undefined;
+            },
+          }}
+        >
+          {(field) => (
+            <field.Input
+              size={size}
+              label={m.settings_password_confirm()}
+              placeholder={m.login_reset_again_placeholder()}
+              type="password"
+              autoComplete="new-password"
+              onChange={() => {
+                setFormProblem(null);
+                clearConfirmPasswordError();
+              }}
             />
           )}
         </form.AppField>
@@ -359,20 +434,9 @@ function PasswordForm({
           <DialogCancel isDisabled={saving} onPress={requestClose}>
             {m.controls_cancel()}
           </DialogCancel>
-          <form.Subscribe
-            selector={(state) => canSavePassword(state.values.code, state.values.password)}
-          >
-            {(canSave) => (
-              <DialogAction
-                type="submit"
-                isDisabled={!canSave || saving}
-                isLoading={saving}
-                showTextWhileLoading
-              >
-                {m.settings_password_save()}
-              </DialogAction>
-            )}
-          </form.Subscribe>
+          <DialogAction type="submit" isDisabled={saving} isLoading={saving} showTextWhileLoading>
+            {m.settings_password_save()}
+          </DialogAction>
         </DialogActions>
       </form>
     </form.AppForm>

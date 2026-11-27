@@ -1,4 +1,5 @@
-import type { CodeDestination } from "#src/features/auth/code-destination";
+import { isSignInCode, type CodeDestination } from "#src/features/auth/code-destination";
+import { isNewPassword } from "#src/features/auth/new-password";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   createAuthingAuthentication,
@@ -64,8 +65,23 @@ export async function sendAccountPasswordCode(input: {
   });
 }
 
+export function checkAccountPasswordInput(input: {
+  code: string;
+  password: string;
+  confirmPassword: string;
+}): "invalid_input" | "password_mismatch" | null {
+  if (!isSignInCode(input.code) || !isNewPassword(input.password)) {
+    return "invalid_input";
+  }
+  if (input.password !== input.confirmPassword) {
+    return "password_mismatch";
+  }
+  return null;
+}
+
 export type SetAccountPasswordResult =
   | ResetPasswordResult
+  | { status: "password_mismatch" }
   | { status: "updated_unverified" }
   | { status: "no_contact" }
   | { status: "identity_mismatch" };
@@ -76,10 +92,14 @@ export async function setAccountPassword(input: {
   contact: "email" | "phone";
   passCode: string;
   newPassword: string;
+  confirmPassword: string;
   config: AuthingConfig;
   clientAddress?: string;
   authing?: AuthingAuthentication;
 }): Promise<SetAccountPasswordResult> {
+  if (input.newPassword !== input.confirmPassword) {
+    return { status: "password_mismatch" };
+  }
   const account = await input.db.user.findUnique({
     where: { id: input.userId },
     select: {
