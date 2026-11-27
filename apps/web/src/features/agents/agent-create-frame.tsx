@@ -9,22 +9,36 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Heading, Text } from "react-aria-components";
-import { XClose as X } from "@untitledui/icons";
+import { Plus, XClose as X } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
-import { useDialogControlSize } from "#src/components/ui/dialog-actions";
+import {
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+  useDialogControlSize,
+} from "#src/components/ui/dialog-actions";
 import {
   UnsavedChangesDialog,
   useReportDirty,
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
+import {
+  ComputerStatusIcon,
+  computerOptionClassName,
+} from "#src/features/computers/computer-status-icon";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { m } from "#src/paraglide/messages";
+import { localizeHref } from "#src/paraglide/runtime";
 import { useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { cx } from "#src/utils/cx";
 import { AGENT_ILLUSTRATIONS } from "./agent-illustrations";
+
+const ADD_COMPUTER_KEY = "\u0000add-computer";
 
 const AgentCreateGuardContext = createContext<{
   setDirty: (dirty: boolean) => void;
@@ -228,6 +242,115 @@ export function AgentCreateFooter({
       >
         {submitLabel}
       </Button>
+    </div>
+  );
+}
+
+export type AgentCreateComputerItem = {
+  id: string;
+  kind: string;
+  name: string;
+  displayName: string;
+  online?: boolean;
+};
+
+export function AgentCreateEmptyComputers({
+  headless,
+  workspaceSlug,
+  onClose,
+}: {
+  headless: boolean;
+  workspaceSlug: string;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      {headless ? (
+        <p className="px-6 pt-5 text-sm text-tertiary">{m.agent_empty_computer_description()}</p>
+      ) : (
+        <AgentCreateIntro
+          illustration="local"
+          title={m.agent_create_local_title()}
+          description={m.agent_empty_computer_description()}
+          onClose={onClose}
+        />
+      )}
+      <AgentCreatePhoneBar pending={false} onCancel={onClose} />
+      <DialogActions className="mt-6 px-6 pb-6 max-sm:mt-4 max-sm:px-4">
+        <DialogCancel onPress={onClose} className="max-sm:hidden">
+          {m.controls_cancel()}
+        </DialogCancel>
+        <DialogAction
+          href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
+          onPress={onClose}
+        >
+          {m.agent_connect_computer()}
+        </DialogAction>
+      </DialogActions>
+    </>
+  );
+}
+
+export function AgentCreateComputerSelect({
+  computers,
+  computerLocked,
+  computerError,
+  controlSize,
+  selectedKey,
+  onAddComputer,
+  onSelectComputer,
+}: {
+  computers: readonly AgentCreateComputerItem[];
+  computerLocked: boolean;
+  computerError?: string;
+  controlSize: ReturnType<typeof useDialogControlSize>;
+  selectedKey: string;
+  onAddComputer: () => void;
+  onSelectComputer: (computerId: string) => void;
+}) {
+  return (
+    <div data-field="computerId" className="min-w-0">
+      <Select
+        name="computerId"
+        isRequired
+        hideRequiredIndicator
+        isDisabled={computerLocked}
+        isInvalid={Boolean(computerError)}
+        hint={computerError}
+        size={controlSize}
+        label={m.agent_create_computer()}
+        className="min-w-0"
+        selectedKey={selectedKey}
+        onSelectionChange={(key) => {
+          if (key === ADD_COMPUTER_KEY) {
+            onAddComputer();
+            return;
+          }
+          if (key !== null) {
+            onSelectComputer(String(key));
+          }
+        }}
+      >
+        {computers.map((item) => (
+          <Select.Item
+            key={item.id}
+            id={item.id}
+            label={item.displayName.trim() || item.name}
+            aria-label={`${item.displayName.trim() || item.name}, ${item.online ? m.computer_status_online() : m.computer_status_offline()}`}
+            icon={<ComputerStatusIcon computer={item} online={Boolean(item.online)} />}
+            className={computerOptionClassName(Boolean(item.online))}
+          />
+        ))}
+        {!computerLocked && (
+          <Select.Item
+            id={ADD_COMPUTER_KEY}
+            label={m.agent_create_add_computer()}
+            icon={Plus}
+            selectionIndicator="none"
+            className="sticky bottom-0 z-10 -mb-1 mt-1 border-t border-secondary bg-primary pt-1 pb-1"
+          />
+        )}
+      </Select>
     </div>
   );
 }

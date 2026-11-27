@@ -11,22 +11,22 @@ import {
 
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
-import { Select } from "#src/components/base/select/select";
 import { useCodexCompatibleSupport } from "#src/features/computers/use-codex-compatible-support";
 import { fieldHint } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { AgentCodexCompatibleFields } from "./agent-codex-compatible-fields";
 import {
   AgentRuntimeApiKeyField,
+  AgentRuntimeCustomModelField,
+  AgentRuntimeModelProviderField,
   RuntimeCatalogLoadFailure,
 } from "./agent-runtime-fallback-fields";
 import { AgentFastModeField } from "./agent-fast-mode-field";
 import { AgentModelSizeFields } from "./agent-model-size-fields";
 import { initialModelSizes, modelSizesApply } from "./agent-model-sizes";
 import { AgentReasoningField } from "./agent-reasoning-field";
-import { KEYED_MODEL_PROVIDERS, PI_BUILTIN_MODEL_PROVIDERS } from "./agent.schemas";
+import { KEYED_MODEL_PROVIDERS } from "./agent.schemas";
 import { ModelComboBox } from "./model-combobox";
-import { modelProviderDisplayName } from "./model-provider-display";
 import type { ModelChoice } from "./model-search";
 import {
   fastModeFieldState,
@@ -362,68 +362,33 @@ export function AgentRuntimeFields({
           onFieldErrorClear?.("apiKey");
         },
       })}
-      {failed ? (
-        <Input
-          label={m.agent_form_model_provider()}
-          name="modelProvider"
-          size={controlSize}
-          isRequired={provider === RUNTIME_PROVIDER.COFORGE}
-          isInvalid={Boolean(modelProviderError)}
-          hint={fieldHint(modelProviderError)}
-          maxLength={100}
-          defaultValue={modelProvider}
-          onChange={() => {
-            setApiKey("");
-            setManualDirty(true);
-            onFieldErrorClear?.("modelProvider");
-            onFieldErrorClear?.("apiKey");
-          }}
-        />
-      ) : (
-        <input type="hidden" name="modelProvider" value={submittedModelProvider} />
-      )}
-      {!failed && !RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider] && (
-        <div data-field="modelProvider" className="min-w-0">
-          <Select
-            label={m.agent_form_model_provider()}
-            size={controlSize}
-            className="min-w-0"
-            isDisabled={!options}
-            isInvalid={Boolean(modelProviderError)}
-            hint={modelProviderError}
-            selectedKey={isPi ? piProviderChoice : modelProvider}
-            onSelectionChange={(key) => {
-              if (key === null) return;
-              const value = String(key);
-              if (isPi) setPiProviderChoice(value);
-              else setModelProvider(value);
-              resetModelFields();
-              onFieldErrorClear?.("modelProvider");
-              onFieldErrorClear?.("model");
-              onFieldErrorClear?.("apiKey");
-            }}
-          >
-            {isPi ? (
-              <>
-                <Select.Item id="" label={m.agent_form_pi_provider_configured()} />
-                {PI_BUILTIN_MODEL_PROVIDERS.map((value) => (
-                  <Select.Item key={value} id={value} label={modelProviderDisplayName(value)} />
-                ))}
-                {piExtraProvider && (
-                  <Select.Item key={piExtraProvider} id={piExtraProvider} label={piExtraProvider} />
-                )}
-              </>
-            ) : (
-              <>
-                <Select.Item id="" label={m.agent_form_provider_default()} />
-                {modelProviders.map((value) => (
-                  <Select.Item key={value} id={value} label={value} />
-                ))}
-              </>
-            )}
-          </Select>
-        </div>
-      )}
+      <AgentRuntimeModelProviderField
+        failed={failed}
+        provider={provider}
+        controlSize={controlSize}
+        modelProvider={modelProvider}
+        modelProviderError={modelProviderError}
+        submittedModelProvider={submittedModelProvider}
+        optionsLoaded={Boolean(options)}
+        isPi={isPi}
+        piProviderChoice={piProviderChoice}
+        piExtraProvider={piExtraProvider}
+        modelProviders={modelProviders}
+        onManualChange={() => {
+          setApiKey("");
+          setManualDirty(true);
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("apiKey");
+        }}
+        onSelectChange={(value) => {
+          if (isPi) setPiProviderChoice(value);
+          else setModelProvider(value);
+          resetModelFields();
+          onFieldErrorClear?.("modelProvider");
+          onFieldErrorClear?.("model");
+          onFieldErrorClear?.("apiKey");
+        }}
+      />
       {showCodexCompatibleSection && (
         <AgentCodexCompatibleFields
           controlSize={controlSize}
@@ -529,17 +494,11 @@ export function AgentRuntimeFields({
         </>
       ) : null}
       {piConfigured && customModelActive && (
-        <Input
-          label={m.agent_form_model_custom_id()}
-          size={controlSize}
-          className="min-w-0"
-          placeholder="provider/model-id"
+        <AgentRuntimeCustomModelField
+          controlSize={controlSize}
           value={customModelText}
+          invalid={customInvalid}
           onChange={setCustomModelText}
-          isRequired
-          validate={(value) => (splitCustomModel(value) ? null : m.agent_form_model_custom_error())}
-          isInvalid={customInvalid}
-          hint={fieldHint(customInvalid ? m.agent_form_model_custom_error() : undefined)}
         />
       )}
       {showApiKeyField && (

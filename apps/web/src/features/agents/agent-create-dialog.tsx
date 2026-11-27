@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "@tanstack/react-form";
-import { Plus } from "@untitledui/icons";
 import { useRouter } from "@tanstack/react-router";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
@@ -12,18 +11,8 @@ import {
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { localizeHref } from "#src/paraglide/runtime";
-import {
-  DialogAction,
-  DialogActions,
-  DialogCancel,
-  useDialogControlSize,
-} from "#src/components/ui/dialog-actions";
+import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { setFieldServerError, useAppForm, visibleFieldError } from "#src/components/ui/form";
-import { Select } from "#src/components/base/select/select";
-import {
-  ComputerStatusIcon,
-  computerOptionClassName,
-} from "#src/features/computers/computer-status-icon";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
@@ -45,11 +34,12 @@ import { AgentUsernameField, type AgentUsernameDraft } from "./agent-username-fi
 import type { CreateAgentInput } from "./agent.schemas";
 import { preferredRuntimeProvider, runtimeOptionsFromRuntimes } from "./agent-runtime-options";
 import {
+  AgentCreateComputerSelect,
+  AgentCreateEmptyComputers,
   AgentCreateFooter,
   AgentCreateForm,
   AgentCreateIntro,
   AgentCreateModal,
-  AgentCreatePhoneBar,
 } from "./agent-create-frame";
 import type {
   RuntimeAuthProvider,
@@ -70,8 +60,6 @@ type AgentCreateComputerOption = RuntimeSignInComputer & {
     diagnostic?: string | null;
   }[];
 };
-
-const ADD_COMPUTER_KEY = "\u0000add-computer";
 
 const AGENT_FORM_FIELDS: readonly AgentFormField[] = [
   "name",
@@ -255,30 +243,11 @@ export function LocalAgentForm({
 
   if (!computers.length)
     return (
-      <>
-        {headless ? (
-          <p className="px-6 pt-5 text-sm text-tertiary">{m.agent_empty_computer_description()}</p>
-        ) : (
-          <AgentCreateIntro
-            illustration="local"
-            title={m.agent_create_local_title()}
-            description={m.agent_empty_computer_description()}
-            onClose={onClose}
-          />
-        )}
-        <AgentCreatePhoneBar pending={false} onCancel={onClose} />
-        <DialogActions className="mt-6 px-6 pb-6 max-sm:mt-4 max-sm:px-4">
-          <DialogCancel onPress={onClose} className="max-sm:hidden">
-            {m.controls_cancel()}
-          </DialogCancel>
-          <DialogAction
-            href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
-            onPress={onClose}
-          >
-            {m.agent_connect_computer()}
-          </DialogAction>
-        </DialogActions>
-      </>
+      <AgentCreateEmptyComputers
+        headless={headless}
+        workspaceSlug={workspaceSlug}
+        onClose={onClose}
+      />
     );
 
   return (
@@ -328,68 +297,33 @@ export function LocalAgentForm({
               )}
             </form.AppField>
             <form.AppField name="computerId">
-              {(field) => {
-                const computerError = visibleFieldError(
-                  field.state.meta,
-                  field.form.state.submissionAttempts,
-                );
-                return (
-                  <div data-field="computerId" className="min-w-0">
-                    <Select
-                      name="computerId"
-                      isRequired
-                      hideRequiredIndicator
-                      isDisabled={computerLocked}
-                      isInvalid={Boolean(computerError)}
-                      hint={computerError}
-                      size={controlSize}
-                      label={m.agent_create_computer()}
-                      className="min-w-0"
-                      selectedKey={field.state.value}
-                      onSelectionChange={(key) => {
-                        if (key === ADD_COMPUTER_KEY) {
-                          onClose();
-                          void router.navigate({
-                            href: localizeHref(workspacePath(workspaceSlug, "/computers?add=1")),
-                          });
-                          return;
-                        }
-                        if (key !== null) {
-                          clearFieldError("computerId");
-                          clearFieldError("provider");
-                          clearFieldError("modelProvider");
-                          clearFieldError("model");
-                          clearFieldError("baseUrl");
-                          clearFieldError("apiKey");
-                          field.handleChange(String(key));
-                        }
-                      }}
-                    >
-                      {computers.map((item) => (
-                        <Select.Item
-                          key={item.id}
-                          id={item.id}
-                          label={item.displayName.trim() || item.name}
-                          aria-label={`${item.displayName.trim() || item.name}, ${item.online ? m.computer_status_online() : m.computer_status_offline()}`}
-                          icon={
-                            <ComputerStatusIcon computer={item} online={Boolean(item.online)} />
-                          }
-                          className={computerOptionClassName(Boolean(item.online))}
-                        />
-                      ))}
-                      {!computerLocked && (
-                        <Select.Item
-                          id={ADD_COMPUTER_KEY}
-                          label={m.agent_create_add_computer()}
-                          icon={Plus}
-                          selectionIndicator="none"
-                          className="sticky bottom-0 z-10 -mb-1 mt-1 border-t border-secondary bg-primary pt-1 pb-1"
-                        />
-                      )}
-                    </Select>
-                  </div>
-                );
-              }}
+              {(field) => (
+                <AgentCreateComputerSelect
+                  computers={computers}
+                  computerLocked={computerLocked}
+                  computerError={visibleFieldError(
+                    field.state.meta,
+                    field.form.state.submissionAttempts,
+                  )}
+                  controlSize={controlSize}
+                  selectedKey={field.state.value}
+                  onAddComputer={() => {
+                    onClose();
+                    void router.navigate({
+                      href: localizeHref(workspacePath(workspaceSlug, "/computers?add=1")),
+                    });
+                  }}
+                  onSelectComputer={(id) => {
+                    clearFieldError("computerId");
+                    clearFieldError("provider");
+                    clearFieldError("modelProvider");
+                    clearFieldError("model");
+                    clearFieldError("baseUrl");
+                    clearFieldError("apiKey");
+                    field.handleChange(id);
+                  }}
+                />
+              )}
             </form.AppField>
             <form.AppField name="description">
               {(field) => (
