@@ -52,7 +52,7 @@ export function ArtifactPreviewFrame({
       data-artifact-preview=""
       role={full ? "dialog" : "region"}
       aria-modal={full || undefined}
-      className={cn("m-0 max-h-none max-w-none border-0 p-0 text-inherit", className)}
+      className={cn("m-0 h-auto max-h-none max-w-none border-0 p-0 text-inherit", className)}
       onClose={(event) => {
         if (!full && event.target === event.currentTarget) focusExpandButton(event.currentTarget);
       }}

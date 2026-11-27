@@ -104,7 +104,7 @@ function PdfFrame({ url, path, onReload }: { url: string; path: string; onReload
         src={url}
         allow="clipboard-read 'none'; clipboard-write 'none'"
         referrerPolicy="no-referrer"
-        className="min-h-[24rem] w-full flex-1 bg-primary"
+        className="min-h-0 w-full flex-1 bg-primary"
       />
       {blocked && <PageExpiredCard onReload={onReload} />}
     </div>
@@ -203,7 +203,7 @@ function PageFrame({
           sandbox="allow-scripts allow-same-origin"
           allow="clipboard-read 'none'; clipboard-write 'none'"
           referrerPolicy="no-referrer"
-          className="min-h-[24rem] w-full flex-1 bg-primary"
+          className="min-h-0 w-full flex-1 bg-primary"
         />
         {finding && (
           <PageFindBar

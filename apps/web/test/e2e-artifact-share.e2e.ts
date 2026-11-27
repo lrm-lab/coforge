@@ -266,3 +266,127 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     await db.$disconnect();
   }
 }, 180_000);
+
+test("beside-chat artifact pane fills mobile, narrow, short, and desktop viewports without collapsing", async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const session = browserSession(browserPath, `artifact-mobile-height-${process.pid}`);
+  const { browser, evaluate, waitFor } = session;
+  const services = productionArtifacts(db);
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
+  const tail = `${process.pid}-${Date.now()}`.slice(-6);
+  const agent = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `e2e-pane-height-${tail}`,
+      displayName: "Renderer",
+      ownerId: DEV_BROWSER_USER.id,
+      runtimeConfig: {},
+    },
+  });
+  const channel = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: `e2e-pane-height-${tail}`,
+      description: "",
+      visibility: "private",
+      members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
+    },
+  });
+  const measurePane = () =>
+    evaluate<{
+      docWidth: number;
+      preview: { top: number; bottom: number; height: number } | null;
+      body: { bottom: number; height: number } | null;
+      iframe: { top: number; bottom: number; height: number } | null;
+    }>(`(() => {
+      const preview = document.querySelector("[data-artifact-preview]");
+      const split = preview?.querySelector('[class*="@container/artifact"]');
+      const iframe = preview?.querySelector("iframe");
+      const pr = preview?.getBoundingClientRect();
+      const sr = split?.getBoundingClientRect();
+      const ir = iframe?.getBoundingClientRect();
+      return {
+        docWidth: Math.round(document.documentElement.scrollWidth),
+        preview: pr ? { top: Math.round(pr.top), bottom: Math.round(pr.bottom), height: Math.round(pr.height) } : null,
+        body: sr ? { bottom: Math.round(sr.bottom), height: Math.round(sr.height) } : null,
+        iframe: ir ? { top: Math.round(ir.top), bottom: Math.round(ir.bottom), height: Math.round(ir.height) } : null,
+      };
+    })()`);
+  const assertFills = (
+    box: Awaited<ReturnType<typeof measurePane>>,
+    width: number,
+    height: number,
+    tolerance: number,
+    expectHtmlFrame: boolean,
+  ) => {
+    expect(box.docWidth).toBeLessThanOrEqual(width);
+    expect(box.preview).not.toBeNull();
+    expect(box.body).not.toBeNull();
+    expect(Math.abs(box.preview!.bottom - height)).toBeLessThanOrEqual(tolerance);
+    expect(Math.abs(box.body!.bottom - box.preview!.bottom)).toBeLessThanOrEqual(2);
+    expect(box.body!.height).toBeGreaterThan(height - 140);
+    if (expectHtmlFrame && Bun.env.COFORGE_SESSION_SECRET) {
+      expect(box.iframe).not.toBeNull();
+    }
+    if (box.iframe) {
+      expect(Math.abs(box.iframe.bottom - box.preview!.bottom)).toBeLessThanOrEqual(2);
+      expect(
+        Math.abs(box.iframe.height - (box.preview!.bottom - box.iframe.top)),
+      ).toBeLessThanOrEqual(2);
+      expect(box.iframe.height).toBeGreaterThan(height - 140);
+    }
+  };
+  try {
+    const bot = agentWrites(services, workspaceId, agent.id);
+    const md = await bot.create({
+      conversationId: channel.id,
+      title: `Compact notes ${tail}`,
+      files: { "notes.md": `# Summary\n\nBody after heading (run ${tail}).\n` },
+    });
+    const htmlDoc = await bot.create({
+      conversationId: channel.id,
+      title: `HTML report ${tail}`,
+      files: {
+        "index.html": `<!doctype html><html><body style="margin:0"><nav style="height:360px">TOC</nav><main style="height:600px">Report body</main></body></html>`,
+      },
+    });
+    const chatUrl = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
+    const viewports = [
+      [390, 844, 2],
+      [320, 568, 2],
+      [390, 360, 2],
+      [1440, 900, 10],
+    ] as const;
+
+    const cases = [
+      {
+        id: md.id,
+        ready: `${pageHydrated} && document.querySelector("[data-artifact-preview] [data-artifact-markdown]") !== null`,
+        expectHtmlFrame: false,
+      },
+      {
+        id: htmlDoc.id,
+        ready: `${pageHydrated} && (document.querySelector("[data-artifact-preview] iframe") !== null || Boolean(document.querySelector("[data-artifact-preview]")?.textContent?.includes("Try again")))`,
+        expectHtmlFrame: true,
+      },
+    ] as const;
+
+    for (const item of cases) {
+      for (const [w, h, tol] of viewports) {
+        await browser("set", "viewport", String(w), String(h));
+        await browser("open", `${chatUrl}?doc=${item.id}`);
+        await waitFor(item.ready, 60_000);
+        await waitFor(animationsSettled({ allowInfinite: true }));
+        assertFills(await measurePane(), w, h, tol, item.expectHtmlFrame);
+      }
+    }
+  } finally {
+    await browser("close").catch(() => undefined);
+    await db.artifact
+      .deleteMany({ where: { homeKey: `conversation:${channel.id}` } })
+      .catch(() => undefined);
+    await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
+    await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
+    await db.$disconnect();
+  }
+}, 180_000);

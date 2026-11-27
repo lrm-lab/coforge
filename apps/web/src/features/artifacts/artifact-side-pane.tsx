@@ -101,7 +101,7 @@ export function ConversationArtifactSplit({
 
   if (!splitShown) {
     return (
-      <div ref={splitRef} className="@container/page flex min-h-0 min-w-0 flex-1">
+      <div ref={splitRef} className="@container/page flex min-h-0 min-w-0 flex-1 flex-col">
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", open && "hidden")}>{chat}</div>
         {open && <ConversationArtifactPane conversationId={conversationId} search={search} />}
       </div>

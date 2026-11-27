@@ -130,7 +130,7 @@ export function PaneFrame({
       className={cn(
         "@container/doc flex min-h-0 flex-col bg-primary animate-in fade-in slide-in-from-right-3 motion-enter-sm motion-reduce:animate-none",
         "max-md:w-full max-md:min-w-0 max-md:flex-1 max-md:border-l-0",
-        full ? "fixed inset-0 size-full min-w-0" : "relative w-full min-w-0 flex-1",
+        full ? "fixed inset-0 size-full min-w-0" : "relative size-full min-w-0 flex-1",
       )}
     >
       {children}
