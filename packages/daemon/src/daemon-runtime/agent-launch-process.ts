@@ -100,6 +100,7 @@ export async function launchAgentProcess(
       ports.connection.workspaceId,
       agentId,
       managedScope,
+      config,
     ).catch((error: unknown) => {
       throw new AgentAuthorizationError(error);
     });
@@ -176,6 +177,7 @@ export async function launchAgentProcess(
         ...config,
         ...(launchConfig.providerConfig ? { providerConfig: launchConfig.providerConfig } : {}),
         envVars: launchConfig.envVars,
+        codexCompatibleEnvironment: launchConfig.codexCompatibleEnvironment,
       },
       {
         agentWorkspaceDirectory: workspaceDirectory,

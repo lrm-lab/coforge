@@ -1,3 +1,4 @@
+import { CODEX_COMPATIBLE_PROVIDER_CAPABILITY } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { kiroEnterpriseAuthSupported } from "#src/code-agent/kiro/auth-host";
 import {
   REMINDER_CAPABILITY,
@@ -56,6 +57,7 @@ export function readyCapabilities(
     AGENT_CONFIG_CAPABILITY,
     RESET_CREDIT_CAPABILITY,
     DAEMON_AGENT_USAGE_SCAN_CAPABILITY,
+    CODEX_COMPATIBLE_PROVIDER_CAPABILITY,
     ...(runtimeAuth ? [RUNTIME_AUTH_CAPABILITY, RUNTIME_AUTH_STATUS_READ_CAPABILITY] : []),
     ...(runtimeAuth && kiroEnterpriseAuthSupported(platform)
       ? [KIRO_IDENTITY_CENTER_AUTH_CAPABILITY, KIRO_FREE_AUTH_CAPABILITY]

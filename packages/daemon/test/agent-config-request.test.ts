@@ -209,3 +209,31 @@ test("launch config keeps zero and valid revisions, and ignores absent or malfor
       envVars,
     });
 });
+
+test("launch decoder keeps dedicated Codex credentials out of generic environment", () => {
+  const apiKey = `sk_agent_${"x".repeat(43)}`;
+  const compatible = {
+    OPENAI_API_KEY: "fixture-provider-value",
+    OPENAI_BASE_URL: "https://provider.example/v1",
+  };
+  expect(
+    parseAgentLaunchConfig({
+      apiKey,
+      envVars: { FIXTURE: "general" },
+      codexCompatibleEnvironment: compatible,
+    }),
+  ).toEqual({
+    agentApiKey: apiKey,
+    envVars: { FIXTURE: "general" },
+    codexCompatibleEnvironment: compatible,
+  });
+  expect(() =>
+    parseAgentLaunchConfig({
+      apiKey,
+      codexCompatibleEnvironment: {
+        ...compatible,
+        OPENAI_BASE_URL: "https://user@provider.example/v1",
+      },
+    }),
+  ).toThrow("invalid Codex compatible provider environment");
+});

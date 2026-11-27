@@ -66,6 +66,7 @@ export class CodexAgentSession implements AgentSession {
     model?: string,
     readonly readUsage?: AgentSession["readUsage"],
     tokenUsage = new CodexTokenUsageTracker(),
+    private readonly redactCompatibleSecret?: (line: string) => string,
   ) {
     this.#process = process;
     this.#threadId = threadId;
@@ -257,6 +258,14 @@ export class CodexAgentSession implements AgentSession {
     if (typeof record.method === "string" && record.method.startsWith("item/")) {
       if (!this.#acceptsTurnItem(params)) return;
     }
+    if (
+      this.redactCompatibleSecret &&
+      this.hasLiveTurn &&
+      record.method === "thread/status/changed" &&
+      params?.threadId === this.#threadId &&
+      asRecord(params.status)?.type === "systemError"
+    )
+      return;
     const signalEvents = this.#signals.notification(record, params);
     if (signalEvents) {
       this.#emitAll(signalEvents);
@@ -279,6 +288,11 @@ export class CodexAgentSession implements AgentSession {
         });
         return;
       }
+      if (
+        this.redactCompatibleSecret &&
+        codexTurnOutcome({ status: "failed", error }, true).failure?.providerLimit
+      )
+        return;
       this.#emit({ type: "error", message: error.message, occurredAt: eventTime(record) });
       return;
     }
@@ -296,6 +310,7 @@ export class CodexAgentSession implements AgentSession {
         consumePendingInterrupt: () => this.#turns.consumePendingInterrupt(),
         interrupt: () => void this.interrupt().catch(() => {}),
         emit: (event) => this.#emit(event),
+        redact: this.redactCompatibleSecret,
         emitItemEvents: () => this.#emitAll(this.#itemEvents.accept(record, params)),
       })
     ) {
@@ -387,7 +402,7 @@ export class CodexAgentSession implements AgentSession {
       this.#itemEvents.reset();
       this.#lastCompletedTurnId = turn.id;
       this.#completeResumedUsage(turn.id);
-      const { status, failure } = codexTurnOutcome(turn);
+      const { status, failure } = codexTurnOutcome(turn, Boolean(this.redactCompatibleSecret));
       if (failure) {
         // The raw message goes to the Activity (the daemon core redacts and truncates it); this
         // local scrub only bounds what reaches the daemon's own structured log line.
@@ -397,7 +412,9 @@ export class CodexAgentSession implements AgentSession {
           runtime_id: this.#runtimeId,
           turn_status: turn.status,
           error_code: failure.code,
-          error_message: scrubError(failure.message),
+          error_message: scrubError(
+            this.redactCompatibleSecret?.(failure.message) ?? failure.message,
+          ),
           outcome: "error",
         });
         this.#emit({
@@ -407,6 +424,7 @@ export class CodexAgentSession implements AgentSession {
           providerErrorClass: failure.code ?? "CodexTurnError",
           providerErrorReason: "turn_failed",
           ...(failure.sessionRecovery ? { sessionRecovery: failure.sessionRecovery } : {}),
+          ...(failure.providerLimit ? { providerLimit: failure.providerLimit } : {}),
         });
       }
       const signalErrors = this.#signals.finish(record, status, {
@@ -421,8 +439,11 @@ export class CodexAgentSession implements AgentSession {
   }
 
   #emit(event: AgentRuntimeEvent): void {
-    this.#signals.observe(event);
-    for (const listener of this.#listeners) listener(event);
+    const redact = this.redactCompatibleSecret;
+    const published =
+      redact && event.type === "error" ? { ...event, message: redact(event.message) } : event;
+    this.#signals.observe(published);
+    for (const listener of this.#listeners) listener(published);
   }
 
   #emitAll(events: readonly AgentRuntimeEvent[]): void {

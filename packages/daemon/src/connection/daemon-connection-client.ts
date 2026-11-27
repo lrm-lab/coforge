@@ -1,3 +1,4 @@
+import { type CodexCompatibleEnvironment } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import type {
   AgentControlScope,
   AgentMemoryRequest,
@@ -107,6 +108,7 @@ export type AgentLaunchConfig = {
   agentApiKey: string;
   providerConfig?: AgentRuntimeProviderConfig;
   envVars?: Record<string, string>;
+  codexCompatibleEnvironment?: CodexCompatibleEnvironment;
   runtimeConfigRevision?: number;
   assignedSkillPacks?: string[];
   identity?: AgentLaunchIdentity;

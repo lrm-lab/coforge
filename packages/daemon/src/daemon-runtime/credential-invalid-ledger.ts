@@ -1,7 +1,8 @@
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import type { AgentRuntimeConfig } from "@coforge/agent";
 import { isRuntimeAuthProvider } from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
-import type { CredentialReleaseCause } from "@lrm/coforge-sdk/internal";
+import { type CredentialReleaseCause } from "@lrm/coforge-sdk/internal";
 import type { CredentialInvalidReason } from "#src/agent-runtime/credential-invalid";
 import { hasOwnLogin } from "./provider-credentials";
 
@@ -19,6 +20,7 @@ export const isSharedKey = (key: CredentialKey): boolean => key.startsWith("shar
  * credentials (a custom provider, or an environment that relocates the login). */
 export function sharedAuthRuntime(config: AgentRuntimeConfig): string | undefined {
   if (!isRuntimeAuthProvider(config.provider) || config.providerConfig) return undefined;
+  if (selectsCodexCompatible(config.provider, config.modelProvider)) return undefined;
   return hasOwnLogin(config.provider, config.envVars ?? {}) ? undefined : config.provider;
 }
 

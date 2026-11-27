@@ -9,6 +9,7 @@ import type { Principal } from "./runtime-auth.server";
 
 export type AgentUsageReadResult = UsageReadResult & {
   unavailable?: true;
+  billing?: AgentUsageTarget["billing"];
   target?: Pick<AgentUsageTarget, "computerId" | "runtimeConfigRevision">;
 };
 
@@ -26,10 +27,11 @@ export class AgentUsageAccess {
 
   async read(principal: Principal, agentId: string): Promise<AgentUsageReadResult> {
     const { target, scope, includeBalance } = await this.authorize(principal, agentId);
+    const { computerId, runtimeConfigRevision, billing } = target;
+    if (billing) return { state: "fresh", billing, target: { computerId, runtimeConfigRevision } };
     if (!scope) return { state: "fresh", unavailable: true };
     const reading = await this.ports.cache().read({ ...target, workerInstanceId: scope });
     if (!reading) return { state: "fresh", unavailable: true };
-    const { computerId, runtimeConfigRevision } = target;
     return {
       ...(includeBalance ? reading : drawnReading(reading)),
       target: { computerId, runtimeConfigRevision },
@@ -74,7 +76,9 @@ export class AgentUsageAccess {
     if (!runtime || !offered) throw new AppError("NOT_FOUND");
     return {
       target,
-      scope: await this.ports.supportedWorker(target.workspaceId, target.computerId),
+      scope: target.billing
+        ? undefined
+        : await this.ports.supportedWorker(target.workspaceId, target.computerId),
       includeBalance: runtime.ownerId === principal.userId,
     };
   }

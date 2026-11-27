@@ -161,6 +161,7 @@ export function acceptCodexCompactionRecord(
     consumePendingInterrupt: () => boolean;
     interrupt: () => void;
     emit: (event: AgentRuntimeEvent) => void;
+    redact?: (line: string) => string;
     emitItemEvents: () => void;
   },
 ): boolean {
@@ -204,18 +205,19 @@ export function acceptCodexCompactionRecord(
     if (state.turnId !== undefined && state.turnId !== turn.id) return false;
     state.completedTurnIds.add(turn.id);
     hooks.noteCompletedTurn(turn.id);
-    const { failure } = codexTurnOutcome(turn);
+    const { failure } = codexTurnOutcome(turn, Boolean(hooks.redact));
     const { sawCompactionStarted, sawCompactionFinished, settle, fail } = state;
     hooks.beginIdle();
     if (failure) {
+      const message = hooks.redact?.(failure.message) ?? failure.message;
       if (sawCompactionStarted && !sawCompactionFinished) {
         hooks.emit({
           type: "compaction-interrupted",
-          reason: failure.message,
+          reason: message,
           occurredAt: eventTime(record),
         });
       }
-      fail(new Error(failure.message));
+      fail(new Error(message));
       return true;
     }
     settle();

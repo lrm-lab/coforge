@@ -95,3 +95,30 @@ describe("codexTurnOutcome", () => {
       );
   });
 });
+
+test("compatible Codex distinguishes transient 429s from API billing exhaustion", () => {
+  const turn = (codexErrorInfo: unknown) => ({
+    status: "failed",
+    error: { message: "Provider rejected the turn", codexErrorInfo },
+  });
+  for (const info of [
+    "rateLimitExceeded",
+    { responseTooManyFailedAttempts: { httpStatusCode: 429 } },
+    { responseStreamDisconnected: { httpStatusCode: 429 } },
+  ]) {
+    expect(codexTurnOutcome(turn(info), true).failure).toMatchObject({
+      providerLimit: { kind: "transient_rate_limit" },
+    });
+  }
+  expect(codexTurnOutcome(turn("usageLimitExceeded"), true).failure).toEqual({
+    message: "The API provider's quota is exhausted. Check the provider's billing and limits.",
+    providerLimit: { kind: "quota_exhausted" },
+  });
+  expect(codexTurnOutcome(turn("usageLimitExceeded")).failure).toEqual({
+    message: "Provider rejected the turn",
+  });
+  expect(
+    codexTurnOutcome(turn({ responseTooManyFailedAttempts: { httpStatusCode: 503 } }), true)
+      .failure,
+  ).not.toHaveProperty("providerLimit");
+});

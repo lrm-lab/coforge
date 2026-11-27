@@ -110,7 +110,7 @@ export class AgentRuntimeCredentials {
   }
 
   async launchProviderConfig(agentId: string, runtimeConfig: AgentRuntimeConfig) {
-    if (runtimeConfig.provider.kind !== "coforge") return runtimeConfig.provider;
+    if (runtimeConfig.provider.kind !== "coforge") return { kind: "default" as const };
     const encrypted = runtimeConfig.provider.apiKey;
     if (!encrypted)
       return {

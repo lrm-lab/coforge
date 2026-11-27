@@ -56,6 +56,7 @@ export class StderrCapture {
     /** This process's logger, already stamped with the launch identity it was spawned under, so a
      * stderr warning is attributable to one Agent and one launch like every other record. */
     private readonly log: typeof logger = logger,
+    private readonly redact?: (line: string) => string,
   ) {
     this.#routineLine = routineLine;
     this.finished = this.#discard(onDiagnostic);
@@ -95,7 +96,8 @@ export class StderrCapture {
     let diagnostic = "";
     let sawDiagnosticStderr = false;
     /** One reported line: kept for the tail, offered to the log and to every listener. */
-    const report = (reported: string) => {
+    const report = (raw: string) => {
+      const reported = this.redact?.(raw) ?? raw;
       this.#keep(reported);
       if (reported.trim() && !this.#routineLine?.(reported)) {
         sawDiagnosticStderr = true;

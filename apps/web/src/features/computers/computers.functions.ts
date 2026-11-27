@@ -1,10 +1,15 @@
+import { getCodexCompatibleCapabilityLease } from "#src/server/agents/codex-compatible-capability.server";
 import {
   getComputerUpgradeProgressStore,
   latestComputerUpgradeProgressIds,
   readVisibleComputerUpgradeProgress,
 } from "#src/server/computers/computer-upgrade-progress-wire.server";
 import { createServerFn } from "@tanstack/react-start";
-import { requireRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  requireRuntimeProvider,
+  RUNTIME_PROVIDER,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
 import { machineStatusView } from "#src/features/computers/computer-machine-status";
 import { readCloudComputerImages } from "#src/server/hosts/cloud-image-inventory.server";
@@ -323,6 +328,22 @@ export const upgradeComputer = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(upgradeComputerInputSchema)
   .handler(async ({ context, data }) => runUpgradeComputerAction(context, data));
+
+export const getComputerCodexCompatible = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(computerIdInputSchema)
+  .handler(async ({ context, data }) => {
+    declareNoStore();
+    const { user, db, workspaceId } = context;
+    const { computerId } = data;
+    return (
+      (await runtimeVisibility(db).canSelect(
+        { workspaceId, userId: user.id },
+        computerId,
+        RUNTIME_PROVIDER.CODEX,
+      )) && (await getCodexCompatibleCapabilityLease().supports(workspaceId, computerId))
+    );
+  });
 
 export const getComputerRuntimeCatalog = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])

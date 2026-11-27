@@ -96,6 +96,7 @@ export function fixture(options?: {
       },
     }),
     pushed?.apply,
+    async () => new Uint8Array(32),
   );
   return {
     agentManagement,

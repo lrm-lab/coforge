@@ -1,7 +1,11 @@
+import { CODEX_COMPATIBLE_PROVIDER_CAPABILITY } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { mockModuleForFile } from "./helpers/file-module-mock";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
+import {
+  AgentEnvironment,
+  encryptAgentEnvironment,
+} from "#src/server/agents/agent-environment.server";
 import { AgentLaunchRefusalError } from "#src/server/agents/agent-control-receiver.server";
 import type { AgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 
@@ -20,6 +24,7 @@ let mintFailure = false;
  * relaunch has to be able to name (task #14). */
 let launchRefusal: "none" | "plain" | "coded" = "none";
 let runtimeAllowed = true;
+let compatibleCapability = false;
 let lookups = 0;
 let issued = 0;
 let installedApps: unknown[] = [];
@@ -138,6 +143,12 @@ await mockModuleForFile("#src/server/db/repositories/agent-api-key.repositories.
       issued++;
     }
   },
+}));
+await mockModuleForFile("#src/server/agents/codex-compatible-capability.server", () => ({
+  getCodexCompatibleCapabilityLease: () => ({
+    supports: async (workspaceId: string, computerId: string) =>
+      workspaceId === "workspace-1" && computerId === "computer-1" && compatibleCapability,
+  }),
 }));
 const { Route } = await import("#src/routes/api/agent-api-keys");
 const handlers = Route.options.server!.handlers;
@@ -446,4 +457,63 @@ test("the launch identity names the apps installed in the Agent's Workspace, and
   }
   const payload = await ((await request("valid")) as Response).json();
   expect(payload.identity).not.toHaveProperty("apps");
+});
+
+test("compatible launch requires a capable Computer and explicit request before exposing the pair", async () => {
+  const previous = runtimeConfig;
+  const originalKeyCount = issued;
+  const pair = {
+    OPENAI_BASE_URL: "https://fixture-gateway.example/v1",
+    OPENAI_API_KEY: "fixture-provider-value",
+  };
+  runtimeConfig = {
+    runtime: RUNTIME_PROVIDER.CODEX,
+    model: "gateway-model",
+    modelProvider: "openai-compatible",
+    reasoning: "",
+    provider: {
+      kind: "codex-compatible",
+      baseUrl: pair.OPENAI_BASE_URL,
+      environment: await encryptAgentEnvironment("agent-1", pair, new Uint8Array(32).fill(7)),
+    },
+  };
+  const capableRequest = JSON.stringify({
+    agentId: "agent-1",
+    workspaceId: "workspace-1",
+    codexCompatibleProvider: CODEX_COMPATIBLE_PROVIDER_CAPABILITY,
+  });
+  try {
+    const unadvertised = (await request("valid", undefined, undefined, capableRequest)) as Response;
+    expect(unadvertised.status).toBe(403);
+    expect(await unadvertised.json()).toMatchObject({ code: "runtime_unusable" });
+    compatibleCapability = true;
+    const oldRequest = (await request("valid")) as Response;
+    expect(oldRequest.status).toBe(403);
+    expect(await oldRequest.text()).not.toContain(pair.OPENAI_API_KEY);
+    expect(issued).toBe(originalKeyCount);
+    launchRefusal = "coded";
+    const stale = (await request("valid", undefined, undefined, capableRequest)) as Response;
+    expect(stale.status).toBe(403);
+    expect(await stale.text()).not.toContain(pair.OPENAI_API_KEY);
+    launchRefusal = "none";
+    const allowedResponse = (await request(
+      "valid",
+      undefined,
+      undefined,
+      capableRequest,
+    )) as Response;
+    expect(allowedResponse.status).toBe(200);
+    expect(allowedResponse.headers.get("cache-control")).toBe("no-store");
+    expect(await allowedResponse.json()).toMatchObject({
+      envVars: {},
+      providerConfig: { kind: "default" },
+      codexCompatibleEnvironment: pair,
+    });
+    expect(issued).toBe(originalKeyCount + 1);
+  } finally {
+    launchRefusal = "none";
+    compatibleCapability = false;
+    runtimeConfig = previous;
+    issued = originalKeyCount;
+  }
 });

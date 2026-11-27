@@ -58,6 +58,7 @@ export class JsonlProcess {
     onStderrDiagnostic?: (diagnostic: string) => void,
     routineStderrLine?: (line: string) => boolean,
     private readonly drainMs: number = PROCESS_OUTPUT_DRAIN_MS,
+    redactStderr?: (line: string) => string,
   ) {
     const identity = launchLogProperties(environment);
     this.#logger = Object.keys(identity).length > 0 ? logger.with(identity) : logger;
@@ -75,6 +76,7 @@ export class JsonlProcess {
       routineStderrLine,
       onStderrDiagnostic,
       this.#logger,
+      redactStderr,
     );
     this.#stderrPromise = this.#stderr.finished;
     this.#stdoutFinished = this.#readStdout();

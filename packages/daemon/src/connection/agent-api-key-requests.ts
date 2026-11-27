@@ -1,3 +1,4 @@
+import { CODEX_COMPATIBLE_PROVIDER_CAPABILITY } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import type { AgentLaunchConfig } from "./daemon-connection-client";
 import { requestAgentConfig } from "./agent-config-request";
 import { parseAgentApiKey, parseAgentLaunchConfig } from "./agent-launch-response";
@@ -51,7 +52,15 @@ export async function requestAgentLaunchConfig(
   },
 ): Promise<AgentLaunchConfig> {
   return parseAgentLaunchConfig(
-    await (await agentApiKeyRequest(endpoint, "Agent launch config", "POST", input, input)).json(),
+    await (
+      await agentApiKeyRequest(
+        endpoint,
+        "Agent launch config",
+        "POST",
+        { ...input, codexCompatibleProvider: CODEX_COMPATIBLE_PROVIDER_CAPABILITY },
+        input,
+      )
+    ).json(),
   );
 }
 

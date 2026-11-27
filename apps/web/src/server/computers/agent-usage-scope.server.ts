@@ -11,6 +11,7 @@ export type AgentUsageTarget = {
   provider: typeof RUNTIME_PROVIDER.CODEX;
   agentId: string;
   runtimeConfigRevision: number;
+  billing?: "provider-api-key";
 };
 
 export async function resolveAgentUsageTarget(
@@ -35,16 +36,17 @@ export async function resolveAgentUsageTarget(
     },
     select: { computerId: true, runtimeConfigRevision: true, runtimeConfig: true },
   });
-  if (
-    !agent?.computerId ||
-    readableRuntimeConfig(agent.runtimeConfig)?.runtime !== RUNTIME_PROVIDER.CODEX
-  )
-    return undefined;
+  if (!agent?.computerId) return undefined;
+  const config = readableRuntimeConfig(agent.runtimeConfig);
+  if (config?.runtime !== RUNTIME_PROVIDER.CODEX) return undefined;
   return {
     workspaceId: input.workspaceId,
     computerId: agent.computerId,
     provider: RUNTIME_PROVIDER.CODEX,
     agentId: input.agentId,
     runtimeConfigRevision: agent.runtimeConfigRevision,
+    ...(config.provider.kind === "codex-compatible"
+      ? { billing: "provider-api-key" as const }
+      : {}),
   };
 }

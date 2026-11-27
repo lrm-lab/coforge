@@ -1,3 +1,4 @@
+import { selectsCodexCompatible } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 import {
   RUNTIME_PROVIDER,
   RUNTIME_PROVIDER_SUPPORTS_FAST_MODE,
@@ -21,6 +22,7 @@ export type AgentRuntimeAvailability = {
   connected: boolean;
   providers: ReadonlySet<RuntimeProvider>;
   models: readonly unknown[];
+  codexCompatible?: boolean;
 };
 
 export function agentRuntimeSelectionIsAvailable(
@@ -31,6 +33,8 @@ export function agentRuntimeSelectionIsAvailable(
   if (!inventory.connected) return false;
   if (!providerIsSelectable(config.provider, inventory.providers)) return false;
   if (fastModeUnsupported(config)) return false;
+  if (codexCompatibleSelection(config))
+    return Boolean(inventory.codexCompatible && config.hasApiKey && config.model);
   // CoForge/keyed Pi may authorize a provider before the catalog model is chosen.
   if (
     config.modelProvider &&
@@ -98,6 +102,7 @@ export function agentRuntimeSelectionRefusal(
   if (!providerIsSelectable(config.provider, inventory.reported)) return "runtime_missing";
   if (providerIsSelectable(config.provider, inventory.unusable)) return "runtime_unusable";
   if (!providerIsSelectable(config.provider, inventory.providers)) return "runtime_not_shared";
+  if (codexCompatibleSelection(config) && !inventory.codexCompatible) return "runtime_unusable";
   // Provider and sharing are settled; a Fast request this runtime cannot apply, or the model.
   // Every check that does not need the model runs first: a move that does not read catalogs must
   // not let a stale one hide a refusal that the target Computer's own page would report.
@@ -135,4 +140,10 @@ function modelMatches(value: unknown, config: AgentRuntimeSelection): boolean {
       config.provider === RUNTIME_PROVIDER.DEVIN ||
       (Array.isArray(efforts) && efforts.includes(config.reasoning)))
   );
+}
+
+export function codexCompatibleSelection(
+  config: Pick<AgentRuntimeSelection, "provider" | "modelProvider">,
+) {
+  return selectsCodexCompatible(config.provider, config.modelProvider);
 }
