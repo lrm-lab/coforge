@@ -110,6 +110,7 @@ test("CI validates every pull request and every push to main; a newer PR update 
   // workflow_dispatch runs full coverage on a chosen ref so a workflow change can be
   // exercised on its branch before it reaches main (task #38).
   expect(Object.keys(ci.on).sort()).toEqual([
+    "merge_group",
     "pull_request",
     "push",
     "workflow_call",
@@ -117,6 +118,7 @@ test("CI validates every pull request and every push to main; a newer PR update 
   ]);
   expect(ci.on.push.branches).toEqual(["main"]);
   expect(ci.on.pull_request).toBeNull();
+  expect(ci.on.merge_group).toEqual({ types: ["checks_requested"] });
   // A shared group keeps one pending run and cancels the rest even without cancel-in-progress
   // (https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency),
   // so each push gets its own. A caller's gates (workflow_dispatch) are never cancelled.
@@ -350,7 +352,10 @@ test("the workflow diffs PRs from their merge base and includes both sides of a 
     git("switch", "feature");
     git("mv", "apps/web/page.ts", "docs.md");
     git("commit", "-m", "move web source to documentation");
-    expect(select("push", head, git("rev-parse", "HEAD"))).toContain('checks=["web"]\n');
+    const renamed = git("rev-parse", "HEAD");
+    const push = select("push", head, renamed);
+    expect(push).toContain('checks=["web"]\n');
+    expect(select("merge_group", head, renamed)).toBe(push);
     expect(select("push", "0".repeat(40), head)).toContain(
       'contracts=["cdn-certs","ci","deploy","docs-site","oss-cdn","reference-computer","release"]\n',
     );
@@ -388,7 +393,7 @@ test("a push diffs from the last successful run of its workflow, so superseded p
     BRANCH: "${{ github.ref_name }}",
   });
   expect(steps.find((step) => step.id === "select")!.env!.BASE).toBe(
-    "${{ github.event.pull_request.base.sha || steps.base.outputs.sha || steps.dispatch-base.outputs.sha }}",
+    "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || steps.base.outputs.sha || steps.dispatch-base.outputs.sha }}",
   );
   const dir = await mkdtemp(join(tmpdir(), "coforge-ci-base-"));
   try {

@@ -12,6 +12,8 @@ on:
       - "**/AGENTS.md"
       - "**/README.md"
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_call:
     inputs:
       track:
@@ -98,7 +100,7 @@ jobs:
           TRACK: ${{ inputs.track || 'changes' }}
           EVENT: ${{ github.event_name }}
           DISPATCH_FULL: ${{ inputs.full }}
-          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha || steps.dispatch-base.outputs.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || steps.base.outputs.sha || steps.dispatch-base.outputs.sha }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           # A push's own commits, for the author rule; a PR's are all of BASE...HEAD.
           BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
@@ -110,7 +112,7 @@ jobs:
           elif [ "$EVENT" = pull_request ]; then
             git diff --check "$BASE...$HEAD"
             git diff --name-only --no-renames -z "$BASE...$HEAD" > "$files"
-          elif [ "$EVENT" = push ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+          elif [ "$EVENT" = merge_group ] || { [ "$EVENT" = push ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; }; then
             git diff --check "$BASE" "$HEAD"
             git diff --name-only --no-renames -z "$BASE" "$HEAD" > "$files"
           elif [ "$EVENT" = workflow_dispatch ] && [ "$TRACK" = changes ] && [ "${DISPATCH_FULL:-}" != true ] && [ -n "$BASE" ] && [ "$BASE" != "$HEAD" ]; then
