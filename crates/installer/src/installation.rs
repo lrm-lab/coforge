@@ -95,7 +95,8 @@ fn with_ports<T>(
     .map_err(|error| error.to_string())?;
     let store = setup.store();
     let agent = fetch::agent(setup.feed.transport);
-    let feed = Feed::new(&setup.feed.base_url, agent, Rc::new(clock));
+    let feed = Feed::new(&setup.feed.base_url, agent, Rc::new(clock))
+        .with_resume_cache(&setup.paths.install_root);
     let directory;
     let release: &dyn ReleaseSource = match origin {
         ReleaseOrigin::Feed => &feed,

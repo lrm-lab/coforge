@@ -9,7 +9,7 @@
 //! version store places them.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -34,8 +34,7 @@ pub(crate) const COMPUTER_BINARY: &str = "coforge-computer";
 pub(crate) const COMPUTER_GZIP: &str = "coforge-computer.gz";
 pub(crate) const PHOTON_WASM: &str = "photon_rs_bg.wasm";
 
-/// The waits before the second and the third attempt at one object. Only a transient failure
-/// ([`is_transient`]) is retried, and each attempt starts the object from scratch.
+/// The waits before the second and the third attempt at one object.
 const RETRY_WAITS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
 /// Every request the feed makes, at most.
 const ATTEMPTS: usize = RETRY_WAITS.len() + 1;
@@ -43,6 +42,7 @@ const ATTEMPTS: usize = RETRY_WAITS.len() + 1;
 pub struct Feed {
     base: String,
     agent: ureq::Agent,
+    resume_root: Option<PathBuf>,
     /// What the waits between attempts sleep on; shared, not borrowed, so a fixture can own a feed.
     clock: Rc<dyn Clock>,
 }
@@ -55,8 +55,14 @@ impl Feed {
         Self {
             base: base_url.trim_end_matches('/').to_owned(),
             agent,
+            resume_root: None,
             clock,
         }
+    }
+
+    pub(crate) fn with_resume_cache(mut self, root: &Path) -> Self {
+        self.resume_root = Some(root.to_owned());
+        self
     }
 
     /// `latest` (or an empty selection) resolves through the feed's pointer file. Anything else
@@ -108,7 +114,14 @@ impl Feed {
     ) -> Result<ArtifactIdentity, UpdateError> {
         let url = self.version_url(version, &format!("{target}/{COMPUTER_GZIP}"))?;
         let request = computer_request(artifact, url, out)?;
-        let receipt = self.fetch_retrying(&request)?;
+        let receipt = match &self.resume_root {
+            Some(root) => self
+                .with_retries(&request.url, || {
+                    fetch::resume::fetch(&self.agent, &request, root)
+                })
+                .map_err(|error| transfer_error(error, COMPUTER_GZIP))?,
+            None => self.fetch_retrying(&request)?,
+        };
         computer_result(receipt, artifact, out)
     }
 
@@ -146,7 +159,7 @@ impl Feed {
         let mut waits = RETRY_WAITS.iter().enumerate();
         loop {
             let error = match attempt() {
-                Err(error) if is_transient(&error) => error,
+                Err(error) if error.is_transient() => error,
                 result => return result,
             };
             let Some((index, wait)) = waits.next() else {
@@ -323,24 +336,7 @@ fn retry_line(object: &str, attempt: usize, wait: Duration, error: &FetchError) 
     )
 }
 
-/// Whether asking again could succeed: the transfer itself failed, or the server answered 408,
-/// 429, or 5xx. A rejected request, another status, an object that arrived wrong, or a local
-/// failure is final.
-fn is_transient(error: &FetchError) -> bool {
-    match error.code {
-        FetchErrorCode::Download => true,
-        FetchErrorCode::HttpStatus(status) => matches!(status, 408 | 429 | 500..=599),
-        FetchErrorCode::Rejected
-        | FetchErrorCode::SizeLimit
-        | FetchErrorCode::ChecksumMismatch
-        | FetchErrorCode::GzipInvalid
-        | FetchErrorCode::Write => false,
-    }
-}
-
-/// A metadata object the feed could not deliver is a download failure; one that arrived larger
-/// than its ceiling is a feed that breaks its rules.
-pub(crate) fn feed_error(error: FetchError) -> UpdateError {
+fn feed_error(error: FetchError) -> UpdateError {
     match error.code {
         FetchErrorCode::Download | FetchErrorCode::Rejected | FetchErrorCode::HttpStatus(_) => {
             UpdateError::DownloadFailed(error.message)
@@ -377,6 +373,8 @@ pub(crate) fn transfer_error(error: FetchError, object: &str) -> UpdateError {
 
 #[cfg(test)]
 mod download_failure_tests;
+#[cfg(test)]
+mod resume_tests;
 #[cfg(test)]
 mod retry_tests;
 #[cfg(test)]

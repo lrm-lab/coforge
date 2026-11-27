@@ -24,6 +24,8 @@ use crate::digest::hex;
 use crate::idle_timeout;
 use crate::private_fs::{self, FileMode, PendingFile};
 
+pub(crate) mod resume;
+
 /// How long a transfer may receive nothing before it fails. It is not a limit on the whole
 /// download: a slow link that keeps delivering is never cut off.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -98,6 +100,13 @@ impl FetchError {
             code,
             message: message.into(),
         }
+    }
+
+    pub(crate) fn is_transient(&self) -> bool {
+        matches!(
+            self.code,
+            FetchErrorCode::Download | FetchErrorCode::HttpStatus(408 | 429 | 500..=599)
+        )
     }
 
     fn http_status(url: &str, status: u16) -> Self {

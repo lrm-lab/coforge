@@ -59,6 +59,10 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   downloads one version's binary and Pi image library through `fetch`, checked against the
   manifest, retrying transient failures on the clock port. Shared caps and checks with
   `release_directory` are `pub(crate)` helpers; retry tests in `src/feed/retry_tests.rs`.
+- `src/fetch/resume.rs`: the machine-locked, private cache retains the compressed artifact
+  across interrupted feed transfers. The manifest identifies the object and caps the cache. A
+  resumed response must supply the expected wire range, and the entire object still passes
+  the ordinary compressed and expanded verification before installation.
 - `src/release_directory.rs`: a release read from a local directory (`--from-directory`), the
   same objects in the flat local-package layout, through the same caps and checks as `feed`.
   Tests in `src/release_directory/tests.rs`.

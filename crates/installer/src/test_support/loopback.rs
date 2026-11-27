@@ -96,6 +96,17 @@ impl Response {
         Self::with(status, Vec::new(), b"not the object you asked for".to_vec())
     }
 
+    pub(crate) fn partial(start: usize, total: usize, body: Vec<u8>) -> Self {
+        Self::with(
+            "206 Partial Content",
+            vec![(
+                "Content-Range",
+                format!("bytes {start}-{}/{total}", start + body.len() - 1),
+            )],
+            body,
+        )
+    }
+
     pub(crate) fn redirect(location: &str) -> Self {
         Self::with(
             "302 Found",
@@ -107,7 +118,7 @@ impl Response {
 
 pub(crate) struct Server {
     address: SocketAddr,
-    requests: Arc<Mutex<Vec<String>>>,
+    requests: Arc<Mutex<Vec<Request>>>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -173,8 +184,28 @@ impl Server {
 
     /// The paths requested so far, in order.
     pub(crate) fn requests(&self) -> Vec<String> {
-        self.requests.lock().unwrap().clone()
+        self.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|request| request.path.clone())
+            .collect()
     }
+
+    pub(crate) fn requested_ranges(&self, path: &str) -> Vec<Option<String>> {
+        self.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|request| request.path == path)
+            .map(|request| request.range.clone())
+            .collect()
+    }
+}
+
+struct Request {
+    path: String,
+    range: Option<String>,
 }
 
 impl Drop for Server {
@@ -194,14 +225,20 @@ type Scripts = Mutex<BTreeMap<String, VecDeque<Response>>>;
 fn respond(
     mut stream: TcpStream,
     (routes, first): &(BTreeMap<String, Response>, Scripts),
-    requests: &Mutex<Vec<String>>,
+    requests: &Mutex<Vec<Request>>,
     stop: &AtomicBool,
 ) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
     reader.read_line(&mut request_line)?;
     let mut header = String::new();
+    let mut range = None;
     while reader.read_line(&mut header)? > 0 && header != "\r\n" {
+        if let Some((name, value)) = header.split_once(':')
+            && name.eq_ignore_ascii_case("range")
+        {
+            range = Some(value.trim().to_owned());
+        }
         header.clear();
     }
     let path = request_line
@@ -209,7 +246,10 @@ fn respond(
         .nth(1)
         .unwrap_or_default()
         .to_owned();
-    requests.lock().unwrap().push(path.clone());
+    requests.lock().unwrap().push(Request {
+        path: path.clone(),
+        range,
+    });
     let scripted = first
         .lock()
         .unwrap()
