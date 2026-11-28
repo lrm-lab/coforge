@@ -39,6 +39,92 @@ impl Layout {
 }
 
 #[test]
+fn the_agent_cli_on_path_follows_activation_and_rollback() {
+    let layout = layout("agent-cli", &["0.1.0", "0.2.0"]);
+    let cli = layout.binary_directory.join("coforge");
+    for version in ["0.1.0", "0.2.0"] {
+        let directory = layout.install_root.join("versions").join(version);
+        fs::write(
+            directory.join("coforge"),
+            crate::contract::agent_cli_launcher(false),
+        )
+        .unwrap();
+        let computer = directory.join("coforge-computer");
+        fs::write(
+            &computer,
+            format!("#!/bin/sh\nprintf '%s %s %s\\n' '{version}' \"$1\" \"$2\"\n"),
+        )
+        .unwrap();
+        for executable in [directory.join("coforge"), computer] {
+            fs::set_permissions(executable, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+    }
+
+    for (version, previous) in [
+        ("0.1.0", None),
+        ("0.2.0", Some("0.1.0")),
+        ("0.1.0", Some("0.2.0")),
+    ] {
+        layout.activate(&state(version, previous)).unwrap();
+        assert_eq!(
+            fs::read_link(&cli).unwrap(),
+            layout.install_root.join("active/coforge")
+        );
+        let output = std::process::Command::new(&cli)
+            .arg("--version")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{:?}", output.stderr);
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!("{version} __agent-cli --version\n")
+        );
+    }
+}
+
+#[test]
+fn the_agent_cli_migrates_a_copied_launcher_and_leaves_other_commands_alone() {
+    let layout = layout("agent-cli-migration", &["0.1.0", "0.2.0"]);
+    let cli = layout.binary_directory.join("coforge");
+    let launcher = crate::contract::agent_cli_launcher(false);
+    for version in ["0.1.0", "0.2.0"] {
+        fs::write(
+            layout
+                .install_root
+                .join("versions")
+                .join(version)
+                .join("coforge"),
+            launcher,
+        )
+        .unwrap();
+    }
+    layout.activate(&state("0.1.0", None)).unwrap();
+    if cli.is_symlink() {
+        fs::remove_file(&cli).unwrap();
+    }
+    fs::write(&cli, launcher).unwrap();
+
+    layout.activate(&state("0.2.0", Some("0.1.0"))).unwrap();
+    assert_eq!(
+        fs::read_link(&cli).unwrap(),
+        layout.install_root.join("active/coforge")
+    );
+
+    fs::remove_file(&cli).unwrap();
+    let external = "x".repeat(launcher.len());
+    fs::write(&cli, &external).unwrap();
+    layout.activate(&state("0.2.0", Some("0.1.0"))).unwrap();
+    assert!(!cli.is_symlink());
+    assert_eq!(fs::read_to_string(&cli).unwrap(), external);
+
+    fs::remove_file(&cli).unwrap();
+    let target = Path::new("/other/coforge");
+    symlink(target, &cli).unwrap();
+    layout.activate(&state("0.2.0", Some("0.1.0"))).unwrap();
+    assert_eq!(fs::read_link(&cli).unwrap(), target);
+}
+
+#[test]
 fn active_is_the_fixed_link_to_current_and_the_shim_goes_through_it() {
     let layout = layout("links", &["0.2.0"]);
     let next = state("0.2.0", Some("0.1.0"));

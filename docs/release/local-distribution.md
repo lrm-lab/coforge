@@ -126,7 +126,8 @@ against the manifest's `cli` checksum and the expanded binary against both, then
 install `coforge` atomically into `${COFORGE_BIN_DIR:-$HOME/.local/bin}`
 (`%LOCALAPPDATA%\CoForge\bin` on Windows, added to the user PATH). They never
 touch the Computer install root, services or launchers, and a rerun upgrades in
-place. On macOS the publisher applies an ad-hoc signature to the standalone
+place. On macOS and Linux, the CLI-only bootstrap preserves the Computer-managed
+`coforge` link. Set `COFORGE_BIN_DIR` to install a separate CLI. On macOS the publisher applies an ad-hoc signature to the standalone
 CLI with Apple's `codesign`, using identifier `cn.coforge.cli`. It verifies
 the signature strictly before reading the bytes to package. The Computer uses
 its existing certificate and designated requirement.

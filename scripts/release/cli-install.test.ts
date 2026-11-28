@@ -1,5 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -103,6 +113,26 @@ async function runScript(baseUrl: string, args: string[], binDirectory: string, 
 function flipFirstHexCharacter(hex: string): string {
   return (hex[0] === "0" ? "1" : "0") + hex.slice(1);
 }
+
+test("leaves the Computer-managed CLI link in place", async () => {
+  const { root } = await publishedFeed();
+  const { baseUrl, requested } = serve(root);
+  const bin = await tempDir("coforge-cli-bin-");
+  const install = await tempDir("coforge-cli-install-");
+  const active = join(install, "active");
+  await mkdir(active);
+  const managedCli = join(active, "coforge");
+  await writeFile(managedCli, "managed");
+  await symlink(managedCli, join(bin, "coforge"));
+  await symlink(join(active, "coforge-computer"), join(bin, "coforge-computer"));
+
+  const { exitCode, stderr } = await runScript(baseUrl, [], bin);
+
+  expect(exitCode).toBe(1);
+  expect(stderr).toContain("COFORGE_BIN_DIR");
+  expect(await readlink(join(bin, "coforge"))).toBe(managedCli);
+  expect(requested).toEqual([]);
+});
 
 test("installs the standalone cli from latest into the bin directory and touches nothing else", async () => {
   const { root } = await publishedFeed();

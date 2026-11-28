@@ -59,6 +59,19 @@ case "$(uname -s)-$(uname -m)" in
   *) echo "cli-install.sh: unsupported platform" >&2; exit 1 ;;
 esac
 bin_directory=${COFORGE_BIN_DIR:-$HOME/.local/bin}
+refuse_computer_managed_path() {
+  computer_path=$(readlink "$bin_directory/coforge-computer" 2>/dev/null) || return 0
+  case "$computer_path" in
+    /*/active/coforge-computer)
+      cli_path=$(readlink "$bin_directory/coforge" 2>/dev/null) || return 0
+      if [ "$cli_path" = "${computer_path%/*}/coforge" ]; then
+        echo "cli-install.sh: this coforge command is managed by CoForge Computer. Set COFORGE_BIN_DIR to install a separate CLI." >&2
+        exit 1
+      fi
+      ;;
+  esac
+}
+refuse_computer_managed_path
 max_pointer_bytes=4096
 max_manifest_bytes=1048576
 max_binary_bytes=536870912
@@ -136,6 +149,7 @@ mkdir -p "$bin_directory"
 staged_path=$(mktemp "$bin_directory/.coforge.XXXXXX")
 cp "$temporary_directory/coforge" "$staged_path"
 chmod 755 "$staged_path"
+refuse_computer_managed_path
 mv -f "$staged_path" "$bin_directory/coforge"
 staged_path=
 echo "coforge $version installed to $bin_directory/coforge" >&2

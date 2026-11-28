@@ -20,6 +20,9 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   resolves and before anything changes; a version that is not SemVer cannot be ordered and is refused
   the same way. The same or a newer version and a machine with nothing installed are never gated.
   The flag is not in the request record, so a replay ignores it. Settling an unfinished upgrade and rollback are not gated.
+- On macOS and Linux, activation links `coforge` and `coforge-computer` on PATH to the active
+  Computer. It replaces copied launchers and standalone CLI binaries that match the published
+  size and SHA-256 for a stable 0.1.31–0.1.38 release. Other existing `coforge` paths are kept.
 - Before waiting for workspaces or stopping a running Linux Computer under a self-managed systemd
   unit, the installer reads the effective `ExecStart`, including drop-ins. If it can confirm
   that the executable is a fixed copy of a Computer release, it refuses the upgrade

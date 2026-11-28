@@ -29,6 +29,9 @@ use crate::private_fs::{self, FileMode};
 use crate::store::VersionStore;
 use crate::version::is_valid_release_version;
 
+#[cfg(unix)]
+mod agent_cli;
+
 /// The state file, relative to the install root.
 pub const ACTIVE_FILE: &str = "active.json";
 
@@ -232,6 +235,7 @@ fn switch_posix_links(
         &active.join(current::EXECUTABLE),
         &binary_directory.join(current::EXECUTABLE),
     )?;
+    agent_cli::sync(&active, binary_directory)?;
     Ok(activation)
 }
 
@@ -261,6 +265,7 @@ fn posix_is_activated(
             .ok()
             .as_deref()
             == Some(active.join(current::EXECUTABLE).as_path())
+        && agent_cli::is_ready(&active, binary_directory)
 }
 
 #[cfg(not(unix))]
