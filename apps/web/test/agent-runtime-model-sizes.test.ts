@@ -53,7 +53,11 @@ test("only Pi on the Computer's own providers or OpenRouter reads the sizes (tas
   expect(modelSizesApply("pi", "openrouter")).toBe(true);
   expect(modelSizesApply("pi", "deepseek")).toBe(false);
   expect(modelSizesApply("claude-code", "")).toBe(false);
+  expect(modelSizesApply("claude-code", "openrouter")).toBe(false);
   expect(modelSizesApply("codex", "")).toBe(false);
+  expect(modelSizesApply("codex", "openrouter")).toBe(false);
+  expect(modelSizesApply("coforge", "")).toBe(false);
+  expect(modelSizesApply("opencode", "")).toBe(false);
 });
 
 test("sizes for a runtime that does not read them are neither kept nor sent (task #124)", () => {

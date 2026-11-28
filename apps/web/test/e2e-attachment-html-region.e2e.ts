@@ -8,16 +8,6 @@ import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { deleteAttachmentRows } from "#src/server/db/repositories/attachment-deletion.repositories.server";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
-/** Opt-in HTML region comments E2E, on the same private stack as e2e-attachment-comment-anchors:
- * local built Web with development skip-auth, PostgreSQL, Redis, Centrifugo and ego-browser.
- * DATABASE_URL, COFORGE_E2E_WEB_URL, COFORGE_E2E_CENTRIFUGO_URL and COFORGE_FILE_STORAGE_DIR must
- * name that stack. Creates one channel with one HTML file and deletes them afterwards.
- *
- * The file is hostile on purpose: an inline script, an `onerror` attribute, a `javascript:` link,
- * a meta refresh, a `<noscript>` built to turn into a refresh if it were ever re-serialized, and a
- * nested frame with its own refresh. Each would write `PWNED` into the page or take the frame
- * away from the bridge; the region quotes read back from the database show neither happened.
- * Screenshots: .artifacts/e2e/attachment-html-region/. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
 const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;

@@ -1,6 +1,8 @@
 import {
   findPaneHeaderMisalignments,
   isInsideViewportScroller,
+  isTextEntryElement,
+  isTouchZoomRiskFontSize,
   resolveHorizontalDividerRule,
 } from "./ui-sweep-helpers.mjs";
 
@@ -25,6 +27,8 @@ export const CHECKS_EXPR = `
   const isInsideViewportScroller = ${isInsideViewportScroller.toString()};
   const findPaneHeaderMisalignments = ${findPaneHeaderMisalignments.toString()};
   const resolveHorizontalDividerRule = ${resolveHorizontalDividerRule.toString()};
+  const isTextEntryElement = ${isTextEntryElement.toString()};
+  const isTouchZoomRiskFontSize = ${isTouchZoomRiskFontSize.toString()};
 
   function locator(el) {
     if (!el) return null;
@@ -182,6 +186,26 @@ export const CHECKS_EXPR = `
     if (inlineStyle && /#[0-9a-fA-F]{3,8}\\b/.test(inlineStyle) && hexCount < 10) {
       findings.push({ check: "hex-color-in-style", detail: inlineStyle.slice(0, 120), locator: locator(el) });
       hexCount++;
+    }
+  }
+
+  if (window.matchMedia("(pointer: coarse)").matches) {
+    let smallInputCount = 0;
+    for (const el of all) {
+      if (!isTextEntryElement(el)) continue;
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      const fontSize = parseFloat(style.fontSize);
+      if (isTouchZoomRiskFontSize(fontSize) && smallInputCount < 10) {
+        findings.push({
+          check: "touch-input-font-size",
+          detail: \`fontSize=\${fontSize}px (must be >= 16px on touch to avoid iOS zoom)\`,
+          locator: locator(el),
+        });
+        smallInputCount++;
+      }
     }
   }
 

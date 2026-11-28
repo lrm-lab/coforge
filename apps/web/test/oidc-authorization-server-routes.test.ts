@@ -4,23 +4,29 @@ import { exportJWK, generateKeyPair } from "jose";
 import { Route as DeviceFlowDiscoveryRoute } from "#src/routes/[.]well-known.oauth-authorization-server";
 import { Route as AuthorizationServerMetadataRoute } from "#src/routes/[.]well-known.oauth-authorization-server_.oidc";
 import { Route as OpenIdConfigurationRoute } from "#src/routes/oidc.[.]well-known.openid-configuration";
+import { Route as AuthorizeRoute } from "#src/routes/oidc.auth";
 import { Route as JwksRoute } from "#src/routes/oidc.jwks";
 import { Route as UserInfoRoute } from "#src/routes/oidc.me";
 import { Route as TokenRoute } from "#src/routes/oidc.token";
+import { AUTHORIZATION_PAGE_STATUS } from "#src/features/app-authorization/app-authorization.functions";
+import { isNonLocalizedPath, isRawHttpPath } from "#src/lib/non-localized-path";
 import { isNonLocalizedRequest } from "#src/server";
 import {
   readAuthorizationServerConfiguration,
   rememberAuthorizationServerConfiguration,
 } from "#src/server/authorization-server/configuration.server";
 
-// The device flow's discovery and the router build read process.env; the host's values, absence
-// included, are restored afterwards.
-const VARIABLES = ["COFORGE_E2E_ALLOW_DEVICE_AUTH", "DATABASE_URL", "REDIS_URL"] as const;
+const VARIABLES = [
+  "COFORGE_E2E_ALLOW_DEVICE_AUTH",
+  "COFORGE_SESSION_SECRET",
+  "DATABASE_URL",
+  "REDIS_URL",
+] as const;
 const saved = Object.fromEntries(VARIABLES.map((name) => [name, Bun.env[name]]));
 
 beforeAll(async () => {
   for (const name of VARIABLES) delete Bun.env[name];
-  // The routes serve what the boot remembered (startup-config.server.ts).
+  Bun.env.COFORGE_SESSION_SECRET = "test-session-secret-at-least-32-characters";
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   rememberAuthorizationServerConfiguration(
     await readAuthorizationServerConfiguration({
@@ -50,6 +56,10 @@ const get = (route: { options: { server?: unknown } }, path: string) =>
 
 test("the CoForge OIDC issuer's paths bypass Paraglide localization", () => {
   expect(isNonLocalizedRequest(new Request("http://localhost/oidc/jwks"))).toBe(true);
+  expect(isNonLocalizedRequest(new Request("http://localhost/oidc/token"))).toBe(true);
+  expect(isNonLocalizedRequest(new Request("http://localhost/oidc/me"))).toBe(true);
+  expect(isNonLocalizedPath("/oidc/auth")).toBe(true);
+  expect(isRawHttpPath("/oidc/auth")).toBe(false);
 });
 
 test("the issuer's metadata is served at its OIDC and RFC 8414 locations alike", async () => {
@@ -66,6 +76,9 @@ test("the issuer's metadata is served at its OIDC and RFC 8414 locations alike",
   const document = await openIdConfiguration.json();
   expect(document).toMatchObject({
     issuer: "https://coforge.example/oidc",
+    authorization_endpoint: "https://coforge.example/oidc/auth",
+    token_endpoint: "https://coforge.example/oidc/token",
+    userinfo_endpoint: "https://coforge.example/oidc/me",
     jwks_uri: "https://coforge.example/oidc/jwks",
   });
   expect(await metadata.json()).toEqual(document);
@@ -94,6 +107,9 @@ test("the token and UserInfo endpoints answer at their paths, before any databas
     }),
   });
   expect(token.status).toBe(401);
+  expect(token.headers.get("cache-control")).toBe("no-store");
+  expect(token.headers.get("pragma")).toBe("no-cache");
+  expect(token.headers.get("www-authenticate")).toBe('Basic realm="https://coforge.example/oidc"');
   expect(await token.json()).toMatchObject({ error: "invalid_client" });
 
   for (const method of ["GET", "POST"]) {
@@ -146,4 +162,63 @@ test("the RFC 8414 issuer path is its own route, not a child of the device flow'
     expect(routes[id]?.fullPath).toBe(fullPath);
     expect(routes[id]?.parentRoute?.id).toBe("__root__");
   }
+});
+
+test("the authorization route declares framing and status semantics and seals form POST and rewritable GET queries", async () => {
+  expect(AUTHORIZATION_PAGE_STATUS).toEqual({
+    invalid_client: 400,
+    expired: 400,
+    unavailable: 403,
+    consent: 200,
+  });
+  const headersFn = (AuthorizeRoute.options as { headers?: unknown }).headers as () => Record<
+    string,
+    string
+  >;
+  expect(headersFn()).toEqual({
+    "content-security-policy": "frame-ancestors 'none'",
+    "x-frame-options": "DENY",
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+  });
+
+  type AuthHandlers = {
+    GET: (context: {
+      request: Request;
+      next: () => Promise<Response>;
+    }) => Response | Promise<Response>;
+    POST: (context: { request: Request }) => Response | Promise<Response>;
+  };
+  const authHandlers = (
+    (AuthorizeRoute.options as { server?: unknown }).server as { handlers: AuthHandlers }
+  ).handlers;
+
+  const query = "client_id=acme-notes&response_type=code&scope=openid&state=s-1";
+  const postResponse = await authHandlers.POST({
+    request: new Request("https://coforge.example/oidc/auth", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: query,
+    }),
+  });
+  expect(postResponse.status).toBe(303);
+  expect(postResponse.headers.get("location")).toBe(`/oidc/auth?${query}`);
+  expect(postResponse.headers.get("cache-control")).toBe("no-store");
+  expect(postResponse.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+  expect(postResponse.headers.get("x-frame-options")).toBe("DENY");
+
+  const sealedResponse = await authHandlers.GET({
+    request: new Request("https://coforge.example/oidc/auth?client_id=acme-notes&state=%22x%22"),
+    next: async () => new Response("rendered"),
+  });
+  expect(sealedResponse.status).toBe(302);
+  expect(sealedResponse.headers.get("cache-control")).toBe("no-store");
+  expect(sealedResponse.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+  expect(sealedResponse.headers.get("x-frame-options")).toBe("DENY");
+  const sealedLocation = new URL(
+    sealedResponse.headers.get("location")!,
+    "https://coforge.example",
+  );
+  expect(sealedLocation.pathname).toBe("/oidc/auth");
+  expect([...sealedLocation.searchParams.keys()]).toEqual(["coforge_request"]);
 });

@@ -167,6 +167,13 @@ describe("a text preview reads up to 5 MB and shows only UTF-8 text", () => {
     expect(takesComments(typed("report.md", "text/markdown", 164 * 1024), APP_ORIGIN)).toBe(true);
     expect(takesComments(typed("photo.png", "image/png", 20 * MB), APP_ORIGIN)).toBe(true);
     expect(takesComments(typed("clip.mp4", "video/mp4"), APP_ORIGIN)).toBe(true);
+    expect(takesComments(typed("app.ts", "video/mp2t"), APP_ORIGIN)).toBe(true);
+    expect(
+      previewKindFor(
+        { fileName: "big.log", contentType: "text/plain", sizeBytes: 96 * 1024 + 1 },
+        APP_ORIGIN,
+      ),
+    ).toBe("text");
     // As on Raft, a PDF takes none, by its name or its type, wherever it previews from.
     expect(takesComments(typed("brief.pdf", "application/pdf"), APP_ORIGIN)).toBe(false);
     expect(takesComments(typed("brief.pdf", "application/octet-stream"), undefined)).toBe(false);

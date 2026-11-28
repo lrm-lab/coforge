@@ -93,6 +93,35 @@ describe("CdpClient and pageCtx failure handling", () => {
     expect(cdp.pending.size).toBe(0);
   });
 
+  test("setViewport enables touch emulation only on phone widths", async () => {
+    const ws = new FakeWebSocket();
+    const cdp = new CdpClient(ws);
+    ws.onSend = (payload) => {
+      queueMicrotask(() => ws.emitMessage({ id: payload.id, result: {} }));
+    };
+    const page = pageCtx(cdp, "s1");
+    await page.setViewport(390, 844);
+    await page.setViewport(1440, 900);
+    expect(ws.sent.map(({ method, params }) => ({ method, params }))).toEqual([
+      {
+        method: "Emulation.setDeviceMetricsOverride",
+        params: { width: 390, height: 844, deviceScaleFactor: 1, mobile: true },
+      },
+      {
+        method: "Emulation.setTouchEmulationEnabled",
+        params: { enabled: true, maxTouchPoints: 5 },
+      },
+      {
+        method: "Emulation.setDeviceMetricsOverride",
+        params: { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false },
+      },
+      {
+        method: "Emulation.setTouchEmulationEnabled",
+        params: { enabled: false },
+      },
+    ]);
+  });
+
   test("runSurfaceLoop aborts immediately on CdpConnectionError without logging captured or continuing", async () => {
     const visited: string[] = [];
     const captured: string[] = [];

@@ -28,6 +28,8 @@ test("each previewable kind stores its own anchor, read back on the comment", as
     const html = await sibling("page.html", "text/html");
     const video = await sibling("demo.mp4", "video/mp4");
     const audio = await sibling("call.mp3", "audio/mpeg");
+    const tsSource = await sibling("app.ts", "video/mp2t", 1024);
+    const largeLog = await sibling("big.log", "text/plain", 96 * 1024 + 1);
     const cases: [string, AttachmentCommentAnchor][] = [
       [f.attachment.id, { type: "lines", data: { start: 3, end: 5, quote: "three to five" } }],
       [markdown.id, { type: "md-section", data: { headingId: "setup", headingTitle: "Setup" } }],
@@ -50,6 +52,11 @@ test("each previewable kind stores its own anchor, read back on the comment", as
       ],
       [video.id, { type: "video-timestamp", data: { time: 83.417 } }],
       [audio.id, { type: "video-timestamp", data: { time: 12.5 } }],
+      [
+        tsSource.id,
+        { type: "lines", data: { start: 30, end: 30, quote: "export const value30 = 30;" } },
+      ],
+      [largeLog.id, { type: "lines", data: { start: 1, end: 1 } }],
     ];
     for (const [attachmentId, anchor] of cases) {
       const posted = await comments.post(f.actor, { attachmentId, body: "Here", anchor });
@@ -136,6 +143,27 @@ test("an anchor of another file kind is refused and nothing is written", async (
       }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect((await comments.list(f.actor, { attachmentId: f.attachment.id })).comments).toEqual([]);
+
+    const tsSource = await f.db.attachment.create({
+      data: {
+        workspaceId: f.workspace.id,
+        conversationId: f.conversation.id,
+        messageId: f.message.id,
+        uploaderId: f.owner.id,
+        objectKey: `test/comments/${crypto.randomUUID()}`,
+        fileName: "app.ts",
+        contentType: "video/mp2t",
+        sizeBytes: 1024,
+      },
+    });
+    await expect(
+      comments.post(f.actor, {
+        attachmentId: tsSource.id,
+        body: "Wrong kind",
+        anchor: { type: "video-timestamp", data: { time: 5 } },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect((await comments.list(f.actor, { attachmentId: tsSource.id })).comments).toEqual([]);
   } finally {
     await f.close();
   }

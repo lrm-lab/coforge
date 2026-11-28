@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
+import type { CommentDraftView } from "#src/features/artifacts/artifact-comment-drafts-queries";
 import {
   DRAFT_HISTORY_MAX,
   EMPTY_HISTORY,
   historyReducer,
+  snapshotOf,
   type DraftHistory,
   type DraftStep,
 } from "#src/features/artifacts/artifact-draft-history";
@@ -86,4 +88,66 @@ test("an edit step retains optional anchor and path transitions across undo, red
   const redone = historyReducer(undone, { type: "redone", key: "k1" });
   const rebound = historyReducer(redone, { type: "rebind", from: "d1", to: "d2" });
   expect(rebound.past[0]).toEqual({ ...step, id: "d2" });
+});
+
+test("snapshotOf omits null optionals, keeps present ones, and delete/rebind/clear preserve order", () => {
+  const createdAt = new Date("2026-11-28T08:00:00.000Z");
+  const expiresAt = new Date("2026-12-28T08:00:00.000Z");
+  const bareDraft: CommentDraftView = {
+    id: "d-bare",
+    version: 2,
+    path: null,
+    anchor: null,
+    replyTo: null,
+    body: "Whole note",
+    images: [],
+    createdAt,
+    expiresAt,
+  };
+  expect(snapshotOf(bareDraft)).toEqual({ version: 2, body: "Whole note", createdAt });
+
+  const anchoredDraft: CommentDraftView = {
+    id: "d-anchored",
+    version: 3,
+    path: "index.md",
+    anchor: { type: "text", data: { quote: "Launch plan" } },
+    replyTo: "root-1",
+    body: "Check heading",
+    images: [],
+    createdAt,
+    expiresAt,
+  };
+  const snapshot = snapshotOf(anchoredDraft);
+  expect(snapshot).toEqual({
+    version: 3,
+    path: "index.md",
+    anchor: { type: "text", data: { quote: "Launch plan" } },
+    replyTo: "root-1",
+    body: "Check heading",
+    createdAt,
+  });
+
+  const deleted: DraftStep = { key: "del-1", kind: "delete", id: "d-anchored", snapshot };
+  const undone = run(
+    EMPTY_HISTORY,
+    { type: "record", step: deleted },
+    { type: "undone", key: "del-1" },
+  );
+  const reboundAfterUndo = historyReducer(undone, {
+    type: "rebind",
+    from: "d-anchored",
+    to: "d-restored-1",
+  });
+  expect(reboundAfterUndo.future[0]?.id).toBe("d-restored-1");
+
+  const redone = historyReducer(reboundAfterUndo, { type: "redone", key: "del-1" });
+  expect(redone.past[0]?.id).toBe("d-restored-1");
+  const undoneAgain = historyReducer(redone, { type: "undone", key: "del-1" });
+  const reboundAgain = historyReducer(undoneAgain, {
+    type: "rebind",
+    from: "d-restored-1",
+    to: "d-restored-2",
+  });
+  expect(reboundAgain.future[0]?.id).toBe("d-restored-2");
+  expect(historyReducer(reboundAgain, { type: "clear" })).toEqual(EMPTY_HISTORY);
 });

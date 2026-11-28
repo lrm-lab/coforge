@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { CONVERSATION_TASK_NUMBERS_MAX } from "#src/features/tasks/conversation-task-subset";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { legacyMessageTask } from "./fixtures/legacy-message-task";
@@ -220,4 +221,17 @@ test("a message window reads the Tasks made from its top-level messages, by thei
     sequenceTo: messages[1]!.sequence,
   });
   expect(pinned.tasks.map((task) => task.title)).toEqual(["Sourced"]);
+});
+
+test("a read by number accepts up to 200 numbers and refuses anything larger", async () => {
+  const { alice, channel, board, as } = await fixture();
+  const maxNumbers = Array.from({ length: CONVERSATION_TASK_NUMBERS_MAX }, (_, index) => index + 1);
+  expect(
+    (await board.conversationTasks(as(alice.id), channel.id, { numbers: maxNumbers })).tasks,
+  ).toEqual([]);
+  await expect(
+    board.conversationTasks(as(alice.id), channel.id, {
+      numbers: [...maxNumbers, CONVERSATION_TASK_NUMBERS_MAX + 1],
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
 });

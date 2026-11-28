@@ -27,8 +27,18 @@ test("a refusal it does not know says nothing, so the caller says only that it f
 
 test("a known refusal has no retry, anything else keeps it", () => {
   const retry = () => {};
-  expect(reportSaveFailure(refusal("NOT_FOUND"), retry).retry).toBeUndefined();
-  expect(reportSaveFailure(refusal("ACCESS_DENIED"), retry).retry).toBeUndefined();
+  expect(reportSaveFailure(refusal("NOT_FOUND"), retry)).toEqual({
+    message: m.records_report_save_not_found(),
+    retry: undefined,
+  });
+  expect(reportSaveFailure(refusal("ACCESS_DENIED"), retry)).toEqual({
+    message: m.records_report_save_access_denied(),
+    retry: undefined,
+  });
+  expect(reportSaveFailure(refusal("INVALID_INPUT"), retry)).toEqual({
+    message: m.records_report_save_invalid(),
+    retry: undefined,
+  });
   expect(reportSaveFailure(new TypeError("Failed to fetch"), retry)).toEqual({
     message: undefined,
     retry,
@@ -40,6 +50,5 @@ test("a conflict is worded and keeps its retry", () => {
   const failure = reportSaveFailure(refusal("CONFLICT"), retry);
   expect(failure.message).toBe(m.records_report_conflict_reloaded());
   expect(failure.retry).toBe(retry);
-  // Only a save can conflict.
   expect(recordsErrorMessage(refusal("CONFLICT"), "collect")).toBeUndefined();
 });

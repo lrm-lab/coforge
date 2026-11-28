@@ -165,3 +165,34 @@ export function findPaneHeaderMisalignments(
 
   return findings;
 }
+
+export function isTextEntryElement(element) {
+  const nonTextInputTypes = new Set([
+    "checkbox",
+    "radio",
+    "range",
+    "color",
+    "file",
+    "button",
+    "submit",
+    "reset",
+    "image",
+    "hidden",
+  ]);
+  const tag = String(element?.tagName ?? "").toLowerCase();
+  if (tag === "textarea" || tag === "select") return true;
+  if (tag === "input") {
+    const type = String(
+      (element.getAttribute ? element.getAttribute("type") : undefined) ?? element.type ?? "text",
+    ).toLowerCase();
+    return !nonTextInputTypes.has(type);
+  }
+  const contentEditable = element?.getAttribute
+    ? element.getAttribute("contenteditable")
+    : element?.contenteditable;
+  return contentEditable !== null && contentEditable !== undefined && contentEditable !== "false";
+}
+
+export function isTouchZoomRiskFontSize(fontSizePx) {
+  return Number.isFinite(fontSizePx) && fontSizePx < 16;
+}

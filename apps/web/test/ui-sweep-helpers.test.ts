@@ -3,6 +3,8 @@ import {
   filterSweepOptions,
   findPaneHeaderMisalignments,
   isInsideViewportScroller,
+  isTextEntryElement,
+  isTouchZoomRiskFontSize,
   resolveHorizontalDividerRule,
 } from "../scripts/ui-sweep-helpers.mjs";
 import { buildSurfaces } from "../scripts/ui-sweep-surfaces.mjs";
@@ -76,6 +78,26 @@ describe("UI sweep viewport checks", () => {
     expect(filterSweepOptions([{ name: "390" }, { name: "1440" }], "390", "viewport")).toEqual([
       { name: "390" },
     ]);
+  });
+
+  test("identifies text-entry elements subject to touch zoom and flags sub-16px sizes", () => {
+    expect(isTextEntryElement({ tagName: "INPUT", type: "search" })).toBe(true);
+    expect(isTextEntryElement({ tagName: "INPUT" })).toBe(true);
+    expect(isTextEntryElement({ tagName: "TEXTAREA" })).toBe(true);
+    expect(isTextEntryElement({ tagName: "SELECT" })).toBe(true);
+    expect(isTextEntryElement({ tagName: "DIV", contenteditable: "true" })).toBe(true);
+    expect(isTextEntryElement({ tagName: "DIV", contenteditable: "" })).toBe(true);
+    expect(isTextEntryElement({ tagName: "DIV", contenteditable: "false" })).toBe(false);
+    expect(isTextEntryElement({ tagName: "DIV" })).toBe(false);
+    for (const nonTextType of ["checkbox", "radio", "file", "hidden", "button", "submit"]) {
+      expect(isTextEntryElement({ tagName: "INPUT", type: nonTextType })).toBe(false);
+    }
+
+    expect(isTouchZoomRiskFontSize(14)).toBe(true);
+    expect(isTouchZoomRiskFontSize(15.9)).toBe(true);
+    expect(isTouchZoomRiskFontSize(16)).toBe(false);
+    expect(isTouchZoomRiskFontSize(20)).toBe(false);
+    expect(isTouchZoomRiskFontSize(Number.NaN)).toBe(false);
   });
 });
 

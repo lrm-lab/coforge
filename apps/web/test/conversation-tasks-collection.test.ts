@@ -5,12 +5,14 @@ import { and, createLiveQueryCollection, eq, gte, inArray, lte } from "@tanstack
 import {
   createConversationTasks,
   DEMAND_GC_TIME_MS,
+  messageWindowTasks,
   type ConversationTasksApi,
 } from "#src/features/tasks/conversation-tasks-collection";
 import { UNFINISHED_STATUSES } from "#src/features/tasks/finished-tasks";
-import type {
-  ConversationTask,
-  ConversationTaskSubset,
+import {
+  CONVERSATION_TASK_NUMBERS_MAX,
+  type ConversationTask,
+  type ConversationTaskSubset,
 } from "#src/features/tasks/conversation-task-subset";
 
 /**
@@ -396,4 +398,40 @@ test("the Tasks made from one message are held in number order, and a change kee
   expect(numbers()).toEqual([8, 9]);
   expect(tasks.store.state.bySource.get("message-80")![0]!.status).toBe("in_progress");
   expect(tasks.store.state.bySource.get("message-80")![1]).toBe(other);
+});
+
+test("a window naming more than 200 Tasks splits reads by the server limit and populates every referenced Task", async () => {
+  const allTasks = Array.from({ length: 230 }, (_, index) => task(index + 1, { sequence: 10 }));
+  const { tasks, reads } = fixture(allTasks);
+  const messages = [
+    {
+      sequence: 1,
+      body: Array.from({ length: 220 }, (_, index) => `<@task:${index + 1}>`).join(" "),
+    },
+    {
+      sequence: 2,
+      body: `Status: ${Array.from({ length: 10 }, (_, index) => `<@task:${221 + index}>`).join(", ")}`,
+    },
+  ];
+  const plan = messageWindowTasks(messages, false, "conversation-1");
+  expect(plan?.reads.map((read) => ({ key: read.key, count: read.numbers.length }))).toEqual([
+    { key: "0.0", count: CONVERSATION_TASK_NUMBERS_MAX },
+    { key: "0.1", count: 30 },
+  ]);
+
+  await Promise.all(
+    plan!.reads.map((read) =>
+      createLiveQueryCollection((q) =>
+        q.from({ task: tasks.collection }).where(({ task }) => inArray(task.number, read.numbers)),
+      ).preload(),
+    ),
+  );
+
+  expect(
+    reads.every((subset) => (subset.numbers?.length ?? 0) <= CONVERSATION_TASK_NUMBERS_MAX),
+  ).toBe(true);
+  expect(tasks.store.state.byNumber.size).toBe(230);
+  for (let number = 221; number <= 230; number++) {
+    expect(tasks.store.state.byNumber.get(number)?.title).toBe(`Task ${number}`);
+  }
 });

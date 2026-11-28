@@ -308,6 +308,11 @@ export function pageCtx(cdp, sessionId) {
       { width, height, deviceScaleFactor: 1, mobile: width < 500 },
       sessionId,
     );
+    await cdp.send(
+      "Emulation.setTouchEmulationEnabled",
+      width < 500 ? { enabled: true, maxTouchPoints: 5 } : { enabled: false },
+      sessionId,
+    );
   }
 
   async function setTheme(theme) {

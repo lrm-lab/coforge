@@ -26,12 +26,13 @@ type AuthorizationPageResult =
       query: string;
     };
 
-/** A request the page cannot go on with: a bad link is the request's fault (400), an app the person
- * has no Workspace for theirs to ask about (403). */
-const PAGE_STATUS = { invalid_client: 400, expired: 400, unavailable: 403, consent: 200 } as const;
+export const AUTHORIZATION_PAGE_STATUS = {
+  invalid_client: 400,
+  expired: 400,
+  unavailable: 403,
+  consent: 200,
+} as const;
 
-/** The one pass over the authorization request in `search`, the query of `/oidc/auth` (sealed when
- * the router would have rewritten it, `authorization-query.server.ts`). */
 export const getAuthorizationPage = createServerFn({ method: "GET" })
   .validator(authorizationPageInputSchema)
   .handler(async ({ data }): Promise<AuthorizationPageResult> => {
@@ -40,7 +41,7 @@ export const getAuthorizationPage = createServerFn({ method: "GET" })
     if (!endpoint) return { kind: "not_found" };
     const query = await requestedAuthorizationQuery(data.search);
     if (query === undefined) {
-      setResponseStatus(PAGE_STATUS.expired);
+      setResponseStatus(AUTHORIZATION_PAGE_STATUS.expired);
       return { kind: "page", page: { view: "expired" }, account: null, query: "" };
     }
     const signIn = await optionalBrowserSignIn(getRequest().headers.get("cookie") ?? undefined);
@@ -49,7 +50,7 @@ export const getAuthorizationPage = createServerFn({ method: "GET" })
       signIn && { userId: signIn.user.id, authTime: signIn.authTime },
     );
     if (outcome.kind === "redirect") return outcome;
-    setResponseStatus(PAGE_STATUS[outcome.page.view]);
+    setResponseStatus(AUTHORIZATION_PAGE_STATUS[outcome.page.view]);
     const account = signIn
       ? (await signedInAccount(requireDatabaseClient(), signIn.user)).account
       : null;

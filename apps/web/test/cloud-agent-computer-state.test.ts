@@ -51,4 +51,25 @@ describe("the cloud computer's state for a new cloud Agent", () => {
   test("placed, connected before, nothing pending and not online is offline", () => {
     expect(cloudAgentComputerState(settled, { online: false, runsPi: false }, now)).toBe("offline");
   });
+
+  test("honors the 3-minute daemon connect grace boundary and null lastReportedAt", () => {
+    const offline = { online: false, runsPi: false };
+    expect(
+      cloudAgentComputerState(
+        { ...settled, lastReportedAt: new Date(now.getTime() - 179_999) },
+        offline,
+        now,
+      ),
+    ).toBe("starting");
+    expect(
+      cloudAgentComputerState(
+        { ...settled, lastReportedAt: new Date(now.getTime() - 180_000) },
+        offline,
+        now,
+      ),
+    ).toBe("offline");
+    expect(cloudAgentComputerState({ ...settled, lastReportedAt: null }, offline, now)).toBe(
+      "offline",
+    );
+  });
 });

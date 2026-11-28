@@ -13,17 +13,13 @@ e2e-agent-codex-compatible.e2e.ts awaits three clean private runs and Linux runn
 e2e-agent-create-refreshes-members.e2e.ts 待分拣
 e2e-agent-direct-message.e2e.ts daemon+WSS system e2e run via scripts/e2e/run-agent-direct-message.sh; not browser CI
 e2e-agent-introduction.e2e.ts daemon+WSS system e2e run via scripts/e2e/run-agent-introduction.sh; not browser CI
-e2e-agent-model-size-fields.e2e.ts 待分拣
 e2e-artifact-comment-anchors.e2e.ts 待分拣
-e2e-artifact-comment-drafts.e2e.ts 待分拣
 e2e-artifact-comments.e2e.ts 待分拣
 e2e-artifact-page.e2e.ts 待分拣
 e2e-artifact-public-link.e2e.ts 待分拣
 e2e-artifact-send.e2e.ts 待分拣
-e2e-attachment-comment-anchors.e2e.ts 待分拣
 e2e-attachment-html-region.e2e.ts drives ego-browser; opt-in HTML attachment region annotation e2e
 e2e-channel-thread.e2e.ts daemon+WSS+Agent HTTP system e2e; no browser
-e2e-cloud-agent-create-state.e2e.ts 待分拣
 e2e-codex-compatible-browser.e2e.ts requires two native Computer installs and offline Chromium
 e2e-codex-compatible-native.e2e.ts requires two native Computer installs and a real Codex app-server
 e2e-composer-send-during-upload.e2e.ts 待 Linux runner 准入
@@ -32,19 +28,14 @@ e2e-dm-agent-unread-realtime.e2e.ts 待分拣
 e2e-dm-agent-unread.e2e.ts 待分拣
 e2e-hidden-tab-read.e2e.ts 待分拣
 e2e-link-landing.e2e.ts 待分拣
-e2e-many-task-references.e2e.ts 待分拣
 e2e-members-create-agent-lands-in-dm.e2e.ts 待分拣
 e2e-mention-delivery.e2e.ts daemon+WSS system e2e run via scripts/e2e/run-mention-delivery.sh; not browser CI
 e2e-message-link-gone.e2e.ts 待分拣
 e2e-message-share-image.e2e.ts 待分拣
 e2e-new-agent-dm-listed.e2e.ts 待分拣
-e2e-oidc-authorize.e2e.ts 待分拣
-e2e-oidc-token.e2e.ts 待分拣
 e2e-openrouter-live.e2e.ts live paid OpenRouter API test run via scripts/e2e/run-openrouter-live.sh; requires OPENROUTER_API_KEY
 e2e-people-direct-message.e2e.ts 待分拣
-e2e-phone-input-no-zoom.e2e.ts 待分拣
 e2e-project-board.e2e.ts 待分拣
-e2e-report-autosave-failure.e2e.ts 待分拣
 e2e-search-shortcut.e2e.ts 待分拣
 e2e-search-tasks.e2e.ts 待分拣
 e2e-task-detail-escape.e2e.ts 待 Linux runner 准入
