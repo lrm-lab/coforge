@@ -63,7 +63,7 @@ export function SettingsCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-secondary bg-primary",
+        "@container/settings-card rounded-xl border border-secondary bg-primary",
         divided && "divide-y divide-secondary",
         className,
       )}
@@ -77,18 +77,29 @@ export function PreferenceRow({
   title,
   description,
   children,
+  stackWhenNarrow = false,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
+  stackWhenNarrow?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 p-3.5">
+    <div
+      className={cn(
+        "flex p-3.5",
+        stackWhenNarrow
+          ? "flex-col gap-2.5 @[19rem]/settings-card:flex-row @[19rem]/settings-card:items-center @[19rem]/settings-card:justify-between @[19rem]/settings-card:gap-3"
+          : "flex-wrap items-center justify-between gap-x-3 gap-y-2",
+      )}
+    >
       <div className="min-w-0">
         <p className="text-sm font-medium text-primary">{title}</p>
         {description && <p className="mt-0.5 text-sm text-tertiary">{description}</p>}
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className={cn("shrink-0", stackWhenNarrow && "w-full @[19rem]/settings-card:w-auto")}>
+        {children}
+      </div>
     </div>
   );
 }

@@ -18,6 +18,77 @@ export function isInsideViewportScroller(element, viewportWidth, getStyle) {
   return false;
 }
 
+export function isHiddenOffscreenLayer(element, viewportWidth, getStyle) {
+  const readStyle = getStyle ?? getComputedStyle;
+  let hiddenEl = null;
+  for (let cur = element; cur; cur = cur.parentElement) {
+    const tag = cur.tagName?.toLowerCase();
+    if (cur.inert || (cur.getAttribute?.("aria-hidden") === "true" && tag !== "svg")) {
+      hiddenEl = cur;
+      break;
+    }
+  }
+  if (!hiddenEl) return false;
+  for (let parent = hiddenEl.parentElement; parent; parent = parent.parentElement) {
+    const overflowX = readStyle(parent).overflowX;
+    if (overflowX === "hidden" || overflowX === "clip") {
+      const rect = parent.getBoundingClientRect();
+      if (rect.left >= -2 && rect.right <= viewportWidth + 2) return true;
+    }
+  }
+  return false;
+}
+
+export function hasCompleteDialogOverlay(
+  dialog,
+  allElements,
+  viewportWidth,
+  viewportHeight,
+  getStyle,
+) {
+  const readStyle = getStyle ?? getComputedStyle;
+  const coversViewport = (el) => {
+    const style = readStyle(el);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      parseFloat(style.opacity) === 0
+    ) {
+      return false;
+    }
+    const r = el.getBoundingClientRect();
+    return (
+      r.left <= 1 && r.top <= 1 && r.right >= viewportWidth - 1 && r.bottom >= viewportHeight - 1
+    );
+  };
+  let pageFlow = null;
+  if (typeof dialog.closest === "function") {
+    pageFlow = dialog.closest("[data-phone-page-flow]");
+  } else {
+    for (let cur = dialog; cur; cur = cur.parentElement) {
+      if (
+        cur.hasAttribute?.("data-phone-page-flow") ||
+        Boolean(cur.dataset && "phonePageFlow" in cur.dataset)
+      ) {
+        pageFlow = cur;
+        break;
+      }
+    }
+  }
+  if (pageFlow && coversViewport(pageFlow)) return true;
+  for (const el of allElements) {
+    if (el === dialog || (typeof dialog.contains === "function" && dialog.contains(el))) continue;
+    const style = readStyle(el);
+    const isScrim =
+      style.position === "fixed" ||
+      (style.position === "absolute" &&
+        (el.hasAttribute?.("data-page-scrim") || Boolean(el.dataset && "pageScrim" in el.dataset)));
+    if (!isScrim) continue;
+    if (coversViewport(el)) return true;
+  }
+  return false;
+}
+
 export function filterSweepOptions(values, filter, label) {
   if (!filter) return values;
   const requested = new Set(

@@ -81,7 +81,7 @@ export function SidebarSectionSelect({
     <Select
       aria-label={m.conversation_sidebar_section()}
       size="sm"
-      className="w-44"
+      className="w-full @[19rem]/settings-card:w-44"
       selectedKey={selectedKey}
       isDisabled={isDisabled || pending}
       onSelectionChange={(key) => {

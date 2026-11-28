@@ -1,5 +1,7 @@
 import {
   findPaneHeaderMisalignments,
+  hasCompleteDialogOverlay,
+  isHiddenOffscreenLayer,
   isInsideViewportScroller,
   isTextEntryElement,
   isTouchZoomRiskFontSize,
@@ -25,6 +27,8 @@ export const CHECKS_EXPR = `
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const isInsideViewportScroller = ${isInsideViewportScroller.toString()};
+  const isHiddenOffscreenLayer = ${isHiddenOffscreenLayer.toString()};
+  const hasCompleteDialogOverlay = ${hasCompleteDialogOverlay.toString()};
   const findPaneHeaderMisalignments = ${findPaneHeaderMisalignments.toString()};
   const resolveHorizontalDividerRule = ${resolveHorizontalDividerRule.toString()};
   const isTextEntryElement = ${isTextEntryElement.toString()};
@@ -67,6 +71,7 @@ export const CHECKS_EXPR = `
       rect.width > 0 &&
       rect.right > vw + 2 &&
       !isInsideViewportScroller(el, vw) &&
+      !isHiddenOffscreenLayer(el, vw) &&
       oversizedCount < 8
     ) {
       findings.push({ check: "element-exceeds-viewport", detail: \`right=\${Math.round(rect.right)} viewport=\${vw}\`, locator: locator(el) });
@@ -79,6 +84,7 @@ export const CHECKS_EXPR = `
       el.clientWidth > 8 &&
       el.scrollWidth > el.clientWidth + 2 &&
       style.textOverflow !== "ellipsis" &&
+      !isHiddenOffscreenLayer(el, vw) &&
       clippedCount < 8
     ) {
       findings.push({ check: "clipped-text", detail: \`scrollWidth=\${el.scrollWidth} clientWidth=\${el.clientWidth}\`, locator: locator(el) });
@@ -147,17 +153,8 @@ export const CHECKS_EXPR = `
       }
       continue;
     }
-    let coveringOverlay = null;
-    for (const el of all) {
-      if (el === dialog || dialog.contains(el)) continue;
-      const style = getComputedStyle(el);
-      if (style.position !== "fixed") continue;
-      if (style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0) continue;
-      const r = el.getBoundingClientRect();
-      if (r.left <= 1 && r.top <= 1 && r.right >= vw - 1 && r.bottom >= vh - 1) { coveringOverlay = el; break; }
-    }
-    if (!coveringOverlay) {
-      findings.push({ check: "dialog-overlay-incomplete", detail: "no fixed element found covering the full viewport behind this dialog", locator: locator(dialog) });
+    if (!hasCompleteDialogOverlay(dialog, all, vw, vh)) {
+      findings.push({ check: "dialog-overlay-incomplete", detail: "no visible overlay element found covering the full viewport behind this dialog", locator: locator(dialog) });
     }
   }
 

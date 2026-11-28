@@ -348,11 +348,15 @@ function PreferencesSection({
     <section>
       <SectionEyebrow icon={User01} title={m.channel_settings_preferences()} />
       <SettingsCard divided>
-        <PreferenceRow title={m.channel_notify()} description={notificationLevelDescription(level)}>
+        <PreferenceRow
+          title={m.channel_notify()}
+          description={notificationLevelDescription(level)}
+          stackWhenNarrow
+        >
           <Select
             aria-label={m.channel_notify()}
             size="sm"
-            className="w-44"
+            className="w-full @[19rem]/settings-card:w-44"
             selectedKey={level}
             isDisabled={pending !== null}
             onSelectionChange={(key) => {
@@ -366,7 +370,7 @@ function PreferencesSection({
             ))}
           </Select>
         </PreferenceRow>
-        <PreferenceRow title={m.conversation_sidebar_section()}>
+        <PreferenceRow title={m.conversation_sidebar_section()} stackWhenNarrow>
           <SidebarSectionSelect
             target={{ kind: "channel", channelId }}
             fallbackPinned={conversation.pinned}

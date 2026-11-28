@@ -9,7 +9,7 @@ export function TerminalCommand({ command }: { command: string }) {
     <div className="flex min-w-0 items-center gap-2 rounded-lg bg-primary py-2 pe-2 ps-3 ring-1 ring-secondary ring-inset">
       <code
         dir="ltr"
-        className="min-w-0 flex-1 overflow-x-auto font-mono text-sm whitespace-nowrap text-secondary"
+        className="min-w-0 flex-1 font-mono text-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-secondary"
       >
         {command}
       </code>

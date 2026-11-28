@@ -112,7 +112,7 @@ function DirectPreferences({
     <section>
       <SectionEyebrow icon={User01} title={m.direct_settings_preferences()} />
       <SettingsCard divided>
-        <PreferenceRow title={m.conversation_sidebar_section()}>
+        <PreferenceRow title={m.conversation_sidebar_section()} stackWhenNarrow>
           <SidebarSectionSelect
             target={{ kind: "direct", conversationId }}
             isDisabled={pending !== null}

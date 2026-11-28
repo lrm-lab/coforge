@@ -23,7 +23,7 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       key: "channel-tasks-tab",
       url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
-        const ok = await page.clickText("^Tasks", { within: '[aria-label="Chat / Tasks"]' });
+        const ok = await page.clickText("^Tasks", { within: "[data-pane-header-subbar]" });
         if (!ok) return "could not find the channel Tasks tab";
       },
     },
@@ -111,7 +111,11 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       key: "settings-account-edit-form",
       url: url("/settings?section=account"),
       prepare: async (page) => {
-        const ok = await page.clickText("^Edit$");
+        let ok = await page.clickText("^Edit$");
+        if (!ok && (await page.clickText("^Account$"))) {
+          await sleepScript(200);
+          ok = await page.clickText("^Edit$");
+        }
         if (!ok) return "could not find the profile Edit button";
       },
     },
@@ -119,7 +123,9 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       key: "dialog-create-channel",
       url: url(""),
       prepare: async (page) => {
-        const ok = await page.clickText("Create Channel");
+        if (!(await page.clickText("^New$", { within: "[data-chat-list]" })))
+          return "could not find the New conversation menu trigger";
+        const ok = await page.clickText("^Create channel$");
         if (!ok) return "could not find the Create channel trigger";
       },
       postEscape: true,
@@ -158,7 +164,7 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       key: "dialog-create-task",
       url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
-        if (!(await page.clickText("^Tasks", { within: '[aria-label="Chat / Tasks"]' })))
+        if (!(await page.clickText("^Tasks", { within: "[data-pane-header-subbar]" })))
           return "could not find the channel Tasks tab";
         await sleepScript(500);
         const ok = await page.clickText("New task");
@@ -168,6 +174,7 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
     },
     {
       key: "menu-workspace-switcher",
+      minWidth: 1024,
       url: url("/members"),
       prepare: async (page) => {
         const opened = await page.clickText("Current workspace");
@@ -177,6 +184,7 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
     },
     {
       key: "menu-user-menu",
+      minWidth: 1024,
       url: url("/members"),
       prepare: async (page) => {
         const ok = await page.clickText("Current user");
@@ -186,16 +194,21 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
     },
     {
       key: "sidebar-collapsed-tooltip",
+      minWidth: 1024,
       url: url("/members"),
       prepare: async (page) => {
-        const collapsed = await page.clickText("Hide Sidebar");
+        const collapsed = await page.clickText("Collapse sidebar");
         if (!collapsed) return "could not find the sidebar collapse control";
-        const hovered = await page.hoverText("Show sidebar");
+        const hovered = await page.hoverText("Expand sidebar");
         if (!hovered) return "collapsed sidebar, but could not hover its expand tooltip";
+      },
+      cleanup: async (page) => {
+        await page.clickText("Expand sidebar");
       },
     },
     {
       key: "sidebar-mid-resize",
+      minWidth: 1024,
       url: url("/members"),
       prepare: async (page) => {
         const rect = await page.findRectBySelector('[aria-label="Resize sidebar"]');

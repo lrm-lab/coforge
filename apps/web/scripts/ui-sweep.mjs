@@ -150,6 +150,7 @@ export async function runSurfaceLoop({
 }) {
   const results = [];
   for (const surface of surfaces) {
+    if (surface.minWidth && viewport.width < surface.minWidth) continue;
     visited++;
     const name = `${surface.key}--${theme}--${viewport.name}`;
     const screenshotPath = path.join(outDir, `${name}.png`);
@@ -261,7 +262,14 @@ async function main() {
     }
 
     let visited = 0;
-    const total = surfaces.length * THEMES.length * VIEWPORTS.length;
+    const total = surfaces.reduce(
+      (sum, surface) =>
+        sum +
+        THEMES.length *
+          VIEWPORTS.filter((viewport) => !surface.minWidth || viewport.width >= surface.minWidth)
+            .length,
+      0,
+    );
 
     for (const theme of THEMES) {
       for (const viewport of VIEWPORTS) {
@@ -310,7 +318,9 @@ async function main() {
       };
       try {
         await page.navigate(url_messages());
-        const opened = await page.clickText("Create Channel");
+        const opened =
+          (await page.clickText("^New$", { within: "[data-chat-list]" })) &&
+          (await page.clickText("^Create channel$"));
         if (!opened) record.note = "could not find the Create channel trigger";
         await page.setViewport(1920, 900);
         await sleep(400);

@@ -19,7 +19,7 @@ export function TaskProperty({
   return (
     <div
       className={cn(
-        "flex min-h-8 min-w-0 items-center gap-3",
+        "relative flex min-h-8 min-w-0 items-center gap-3",
         "[[data-layout=chips]_&]:min-h-8 [[data-layout=chips]_&]:max-w-56 [[data-layout=chips]_&]:shrink-0 [[data-layout=chips]_&]:gap-0 [[data-layout=chips]_&]:rounded-lg [[data-layout=chips]_&]:bg-secondary [[data-layout=chips]_&]:px-2.5 [[data-layout=chips]_&]:ring-1 [[data-layout=chips]_&]:ring-secondary [[data-layout=chips]_&]:ring-inset",
         "[[data-layout=create]_&]:min-h-8 [[data-layout=create]_&]:max-w-56 [[data-layout=create]_&]:shrink-0 [[data-layout=create]_&]:gap-0 [[data-layout=create]_&]:rounded-lg [[data-layout=create]_&]:bg-secondary [[data-layout=create]_&]:ring-1 [[data-layout=create]_&]:ring-secondary [[data-layout=create]_&]:ring-inset",
         className,
