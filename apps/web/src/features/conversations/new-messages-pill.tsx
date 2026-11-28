@@ -38,10 +38,10 @@ export function NewMessagesPill({
         color="secondary"
         iconLeading={count > 0 ? <UnreadDot className="size-1.5 max-md:hidden" /> : undefined}
         iconTrailing={ArrowDown}
-        onClick={onShowLatest}
+        onPress={onShowLatest}
         className={cx(
           COMPOSER_EDGE_PILL_CLASS,
-          "py-0 font-medium whitespace-nowrap max-md:w-8 max-md:p-0 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1.5 max-md:after:content-['']",
+          "py-0 font-medium whitespace-nowrap shadow-none max-md:w-8 max-md:p-0 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1.5 max-md:after:content-['']",
           count > 0 && "text-primary tabular-nums hover:text-primary",
         )}
       >

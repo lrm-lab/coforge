@@ -359,10 +359,10 @@ function ExpandableAgentsPill({
           }
         }}
         className={cx(
-          "pointer-events-auto overflow-hidden",
+          "pointer-events-auto",
           active
             ? cx(
-                "replying-morph-shell absolute start-0 bottom-0 z-20",
+                "replying-morph-shell absolute start-0 bottom-0 z-20 overflow-hidden",
                 COMPOSER_EDGE_PILL_SURFACE_CLASS,
                 expanded && "shadow-lg",
               )

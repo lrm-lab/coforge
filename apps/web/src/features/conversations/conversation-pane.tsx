@@ -298,7 +298,7 @@ export function ConversationPane({
                 onTouchMove={bottomPin.read}
                 onPointerDown={bottomPin.read}
                 onKeyDown={bottomPin.read}
-                className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
+                className="h-full overflow-y-auto scroll-pb-11 pb-9 [scrollbar-width:thin]"
               >
                 <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
                   {lead && <div data-scroll-lead>{lead}</div>}
