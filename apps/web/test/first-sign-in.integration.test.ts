@@ -275,7 +275,11 @@ test.skipIf(!connectionString)(
         locale: "en",
       });
 
-      expect(result).toEqual({ ok: true, workspaceId: existing });
+      expect(result).toEqual({
+        ok: true,
+        workspaceId: existing,
+        workspaceSlug: user.username,
+      });
       expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).displayName).toBe(
         "Ada Lovelace",
       );

@@ -16,12 +16,18 @@ import {
   nameToWorkspaceSlug,
 } from "#src/features/workspaces/workspace-slug";
 import { renameFallbackUsername } from "#src/server/auth/fallback-username-rename.server";
-import { isFallbackUsername } from "#src/server/auth/username-allocation.server";
+import {
+  displayNameUsernameBase,
+  isFallbackUsername,
+  smallestFree,
+  takenUsernamesAround,
+} from "#src/server/auth/username-allocation.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isWorkspaceSlugFree } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { ensureWeeklyReportAssistantIfEnabled } from "#src/server/records/weekly-reports-gate.server";
 import {
+  fallbackWorkspaceSlug,
   PrismaWorkspaceEnrollmentStore,
   WorkspaceEnrollment,
   provisionWorkspaceEnrollment,
@@ -47,6 +53,7 @@ export type FirstSignInInput = {
 
 export type ConfirmedEnrollment = {
   workspaceId: string;
+  workspaceSlug?: string;
   displayName: string;
   ownsWorkspace: boolean;
 };
@@ -94,7 +101,7 @@ export type WorkspaceSlugProblem = "slug_invalid" | "slug_taken";
  * a member, so no personal Workspace is made). `invite_unavailable`: a name-only submit found its
  * invite no longer works; nothing was saved. */
 export type FirstSignInResult =
-  | { ok: true; workspaceId: string | null }
+  | { ok: true; workspaceId: string | null; workspaceSlug?: string }
   | { ok: false; problem: PersonNameProblem | WorkspaceSlugProblem | "invite_unavailable" };
 
 /** The username as a Workspace URL to start from, or "" when it is only the fallback name (`user`,
@@ -235,7 +242,11 @@ export class FirstSignIn {
         computerId,
         locale: input.locale,
       });
-    return { ok: true, workspaceId };
+    return {
+      ok: true,
+      workspaceId,
+      ...(enrolled.workspaceSlug ? { workspaceSlug: enrolled.workspaceSlug } : {}),
+    };
   }
 }
 
@@ -303,8 +314,13 @@ class PrismaFirstSignInStore implements FirstSignInStore {
         title,
         chosenAvatar(input.avatarPresetId),
       );
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { slug: true },
+      });
       return {
         workspaceId,
+        workspaceSlug: workspace?.slug,
         displayName,
         ownsWorkspace: await names.ownsWorkspace(input.user.id, workspaceId),
       };
@@ -362,4 +378,41 @@ export async function workspaceSlugAvailable(input: {
   const slug = input.slug.trim();
   if (!isValidWorkspaceSlug(slug) || isReservedWorkspaceSlug(slug)) return { available: false };
   return { available: await isWorkspaceSlugFree(input.db, slug) };
+}
+
+export async function suggestWorkspaceSlugForName(input: {
+  user: { id: string; username: string };
+  displayName: string;
+  takenUsernames: (base: string) => Promise<string[]>;
+  isSlugFree: (slug: string) => Promise<boolean>;
+}): Promise<string> {
+  const base = isFallbackUsername(input.user.username)
+    ? await displayNameUsernameBase(input.displayName)
+    : undefined;
+  const username = base
+    ? smallestFree(base, await input.takenUsernames(base))
+    : input.user.username;
+  const candidate = nameToWorkspaceSlug(username);
+  if (
+    isValidWorkspaceSlug(candidate) &&
+    !isReservedWorkspaceSlug(candidate) &&
+    (await input.isSlugFree(candidate))
+  ) {
+    return candidate;
+  }
+  return fallbackWorkspaceSlug(candidate, input.user.id);
+}
+
+export async function suggestWorkspaceSlug(input: {
+  db: PrismaClient;
+  user: { id: string; username: string };
+  displayName: string;
+}): Promise<{ slug: string }> {
+  const slug = await suggestWorkspaceSlugForName({
+    user: input.user,
+    displayName: input.displayName,
+    takenUsernames: (base) => takenUsernamesAround(input.db, base),
+    isSlugFree: (candidate) => isWorkspaceSlugFree(input.db, candidate),
+  });
+  return { slug };
 }

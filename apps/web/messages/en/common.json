@@ -111,6 +111,8 @@
   "welcome_workspace_url_label": "Workspace URL",
   "welcome_workspace_url_invalid": "Use lowercase letters, digits and single hyphens, up to 48 characters.",
   "welcome_workspace_url_taken": "That URL is taken.",
+  "welcome_workspace_url_customize": "Customize workspace URL",
+  "welcome_workspace_url_hint": "Leave blank to generate automatically. Use lowercase letters, digits, and single hyphens.",
   "welcome_invite_unavailable": "This invite link is no longer available. You can still create your own workspace.",
   "welcome_continue": "Continue",
   "welcome_error_empty": "Enter your display name.",

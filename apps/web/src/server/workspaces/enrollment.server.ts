@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { WORKSPACE_SLUG_MAX_LENGTH } from "@lrm/coforge-sdk/internal";
 import { isDatabaseClient, type DatabaseScope } from "#src/server/db/transaction.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { AppError } from "#src/lib/app-error";
@@ -11,6 +12,13 @@ import {
   isValidWorkspaceSlug,
   nameToWorkspaceSlug,
 } from "#src/features/workspaces/workspace-slug";
+
+export function fallbackWorkspaceSlug(slug: string, userId: string): string {
+  const suffix = userId.replaceAll("-", "").slice(0, 8);
+  const maxBase = WORKSPACE_SLUG_MAX_LENGTH - suffix.length - 1;
+  const base = slug.slice(0, maxBase).replace(/-+$/, "");
+  return base ? `${base}-${suffix}` : `w-${suffix}`;
+}
 export type EnrollmentUser = {
   id: string;
   username: string;
@@ -59,8 +67,7 @@ export class WorkspaceEnrollment {
         if (!isUniqueViolation(error)) throw error;
       }
     }
-    const suffix = userId.replaceAll("-", "").slice(0, 8);
-    return this.create({ slug: `${slug}-${suffix}`, name, userId, locale });
+    return this.create({ slug: fallbackWorkspaceSlug(slug, userId), name, userId, locale });
   }
   private async create(input: {
     slug: string;

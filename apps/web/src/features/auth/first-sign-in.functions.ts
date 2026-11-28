@@ -4,12 +4,12 @@ import { z } from "zod";
 
 import { extractLocaleFromRequest } from "#src/paraglide/runtime";
 import { authMiddleware } from "#src/features/auth/function-auth";
-import { joinTokenFromReturnTo } from "#src/features/auth/return-to";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { isAvatarPresetId } from "#src/features/profiles/avatar-presets";
 import {
   completeFirstSignIn,
   readNameStep,
+  suggestWorkspaceSlug as resolveSuggestedWorkspaceSlug,
   workspaceSlugAvailable,
 } from "#src/server/auth/first-sign-in.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
@@ -30,9 +30,10 @@ export const getNameStep = createServerFn({ method: "GET" })
     });
   });
 
-/** Makes the personal Workspace at the chosen URL and saves the display name; `{ ok: false }` names
- * why a name or URL was not accepted. Without a URL and with a working invite's join page as
- * `returnTo`, it saves the name only; the server alone decides that, from `returnTo`. */
+/** Makes the personal Workspace at the chosen or auto-derived URL and saves the display name;
+ * `{ ok: false }` names why a name or URL was not accepted. With a working invite's join page as
+ * `returnTo` and no `workspaceSlug`, it saves the name only; the server alone decides that, from
+ * `returnTo`. */
 export const submitDisplayName = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
@@ -44,10 +45,6 @@ export const submitDisplayName = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context }) => {
-    // The URL is required for a personal Workspace; only an invite's join page may go without one
-    // (`complete` then decides whether the link works), so nothing else gets a derived URL.
-    if (data.workspaceSlug === undefined && joinTokenFromReturnTo(data.returnTo) === undefined)
-      return { ok: false, problem: "slug_invalid" } as const;
     return completeFirstSignIn({
       db: requireDatabaseClient(),
       user: context.user,
@@ -58,6 +55,17 @@ export const submitDisplayName = createServerFn({ method: "POST" })
       locale: extractLocaleFromRequest(getRequest()),
     });
   });
+
+export const suggestWorkspaceSlug = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ displayName: z.string().max(200) }))
+  .handler(({ data, context }) =>
+    resolveSuggestedWorkspaceSlug({
+      db: requireDatabaseClient(),
+      user: context.user,
+      displayName: data.displayName,
+    }),
+  );
 
 /** Whether the Workspace URL the person is typing is free; the submit decides for good. */
 export const checkWorkspaceSlug = createServerFn({ method: "GET" })

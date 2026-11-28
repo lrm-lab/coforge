@@ -20,6 +20,7 @@ await mockModuleForFile("#src/features/auth/first-sign-in.functions", () => ({
   getNameStep: async () => step,
   submitDisplayName: async () => ({ ok: true }),
   checkWorkspaceSlug: async () => ({ available: true }),
+  suggestWorkspaceSlug: async () => ({ slug: "suggested" }),
 }));
 
 const { Route } = await import("#src/routes/welcome");

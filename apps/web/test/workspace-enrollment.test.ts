@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
+import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import {
+  fallbackWorkspaceSlug,
   WorkspaceEnrollment,
   type WorkspaceEnrollmentStore,
 } from "#src/server/workspaces/enrollment.server";
@@ -134,6 +136,27 @@ test("a membership failure does not leave a Workspace", async () => {
     "missing user",
   );
   expect(store.created).toEqual([]);
+});
+
+test("fallbackWorkspaceSlug yields a bounded, valid slug even when the base is empty or maxed out", () => {
+  expect(fallbackWorkspaceSlug("", ada.id)).toBe("w-11111111");
+  const maxed = fallbackWorkspaceSlug("a".repeat(48), ada.id);
+  expect(maxed.length).toBeLessThanOrEqual(48);
+  expect(maxed.endsWith("-11111111")).toBe(true);
+  expect(isValidWorkspaceSlug(maxed)).toBe(true);
+  const boundaryHyphen = fallbackWorkspaceSlug(`${"a".repeat(38)}-b`, ada.id);
+  expect(boundaryHyphen).not.toContain("--");
+  expect(isValidWorkspaceSlug(boundaryHyphen)).toBe(true);
+});
+
+test("ensureForUser produces a valid slug even when a fallback username has no ASCII letters", async () => {
+  const store = memoryStore();
+  const result = await new WorkspaceEnrollment(store).ensureForUser(
+    { id: ada.id, username: "小白", displayName: "小白" },
+    "zh-CN",
+  );
+  expect(result).toEqual({ workspaceId: "workspace-w-11111111", created: true });
+  expect(store.created).toEqual([{ slug: "w-11111111", name: "小白的工作区" }]);
 });
 
 function memoryStore(): WorkspaceEnrollmentStore & {

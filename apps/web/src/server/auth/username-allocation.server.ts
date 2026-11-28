@@ -222,14 +222,17 @@ function isReserved(base: string): boolean {
   return RESERVED_USERNAMES.has(base) || isReservedWorkspaceSlug(base);
 }
 
+/** Stored usernames equal to `base` or starting with `base-`. */
+export async function takenUsernamesAround(db: DatabaseScope, base: string): Promise<string[]> {
+  return (
+    await db.user.findMany({
+      where: { OR: [{ username: base }, { username: { startsWith: `${base}-` } }] },
+      select: { username: true },
+    })
+  ).map((row) => row.username);
+}
+
 /** The allocator over the stored usernames: the ones equal to a base or starting with `base-`. */
 export function prismaUsernameAllocator(db: DatabaseScope): UsernameAllocator {
-  return new UsernameAllocator(async (base) =>
-    (
-      await db.user.findMany({
-        where: { OR: [{ username: base }, { username: { startsWith: `${base}-` } }] },
-        select: { username: true },
-      })
-    ).map((row) => row.username),
-  );
+  return new UsernameAllocator((base) => takenUsernamesAround(db, base));
 }

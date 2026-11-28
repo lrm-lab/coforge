@@ -168,8 +168,7 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
       "Enter your display name",
       "Display name",
       "Avatar",
-      "Workspace URL",
-      "/w/",
+      "Customize workspace URL",
       "Continue",
     ]);
     expect(await overflowsSideways()).toBe(false);
@@ -248,11 +247,12 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     await shoot("07-too-long-error-zh-CN-390.png");
     await submitName("@安栋", "继续");
     await waitFor(`${fieldError} === "不能使用这个名字。"`);
-    // A Chinese name has no Latin letters to make a Workspace URL from, so the person types one.
-    await setInput('main input[name="workspaceSlug"]', "an-dong-e2e");
+    // A pure-Chinese display name gets a valid pinyin Workspace URL without expanding or typing one.
     await submitName("安栋", "继续");
     await waitFor(inAppAt("/w/"));
     expect((await userOf("phone")).displayName).toBe("安栋");
+    const [phoneWorkspace] = await membershipsOf("phone");
+    expect(phoneWorkspace?.workspace.slug).toMatch(/^andong(?:-|$)/);
     passed("the page and its errors are in Chinese under /zh-CN, and fit a phone");
 
     // ── An existing person with no display name: asked once, and keeps their Workspace ─────────────

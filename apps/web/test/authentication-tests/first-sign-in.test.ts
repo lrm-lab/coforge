@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   FirstSignIn,
+  suggestWorkspaceSlugForName,
   type FirstSignInStore,
   type WeeklyReportAssistantBind,
 } from "#src/server/auth/first-sign-in.server";
@@ -60,6 +61,9 @@ function setup(
   const users = new Set(input.userExists === false ? [] : [ada.id]);
   const names = new Map(Object.entries(input.named ?? {}));
   const memberships = new Map(Object.entries(input.memberships ?? {}));
+  const slugs = new Map(
+    Object.values(input.memberships ?? {}).map((id) => [id, id.replace(/^workspace-/, "")]),
+  );
   const created: Parameters<WorkspaceEnrollmentStore["createForUser"]>[0][] = [];
   const taken = new Set(input.takenSlugs ?? []);
   const enrollmentStore: WorkspaceEnrollmentStore = {
@@ -71,6 +75,7 @@ function setup(
       taken.add(workspace.slug);
       created.push(workspace);
       const workspaceId = `workspace-${workspace.slug}`;
+      slugs.set(workspaceId, workspace.slug);
       memberships.set(workspace.userId, workspaceId);
       return workspaceId;
     },
@@ -95,7 +100,12 @@ function setup(
           input.workspaceSlug,
         );
         if (!names.has(input.user.id)) names.set(input.user.id, displayName);
-        return { workspaceId, displayName, ownsWorkspace: !alreadyMember };
+        return {
+          workspaceId,
+          workspaceSlug: slugs.get(workspaceId),
+          displayName,
+          ownsWorkspace: !alreadyMember,
+        };
       });
       turn = accepted.then(
         () => undefined,
@@ -137,7 +147,7 @@ test("completing first sign-in assigns the default cloud computer to the persona
     locale: "en",
   });
 
-  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
+  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada", workspaceSlug: "ada" });
   expect(started).toEqual([
     { userId: ada.id, workspaceId: "workspace-ada", displayName: "Ada Lovelace" },
   ]);
@@ -164,7 +174,7 @@ test("completing first sign-in binds the weekly-report assistant to the default 
     locale: "en",
   });
 
-  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
+  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada", workspaceSlug: "ada" });
   expect(bound).toEqual([
     { userId: ada.id, workspaceId: "workspace-ada", computerId: "cloud-1", locale: "en" },
   ]);
@@ -179,7 +189,7 @@ test("a display name is saved, and the personal Workspace is titled with it", as
     locale: "en",
   });
 
-  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
+  expect(result).toEqual({ ok: true, workspaceId: "workspace-ada", workspaceSlug: "ada" });
   expect(names.get(ada.id)).toBe("Ada Lovelace");
   // The store also gets the language, so the assistant it makes is named in it.
   expect(created).toEqual([
@@ -244,7 +254,7 @@ test("someone already in a Workspace keeps it: the name is saved and their membe
     locale: "en",
   });
 
-  expect(result).toEqual({ ok: true, workspaceId: "workspace-team" });
+  expect(result).toEqual({ ok: true, workspaceId: "workspace-team", workspaceSlug: "team" });
   expect(names.get(ada.id)).toBe("Ada Lovelace");
   expect(created).toEqual([]);
 });
@@ -349,7 +359,11 @@ test("the personal Workspace gets the URL the person chose", async () => {
     locale: "en",
   });
 
-  expect(result).toEqual({ ok: true, workspaceId: "workspace-lovelace-lab" });
+  expect(result).toEqual({
+    ok: true,
+    workspaceId: "workspace-lovelace-lab",
+    workspaceSlug: "lovelace-lab",
+  });
   expect(created.map((workspace) => workspace.slug)).toEqual(["lovelace-lab"]);
 });
 
@@ -364,7 +378,11 @@ test("a URL that is malformed, reserved or taken saves nothing, so the person ca
   expect(names.size).toBe(0);
   expect(created).toEqual([]);
 
-  expect(await ask("ada-2")).toEqual({ ok: true, workspaceId: "workspace-ada-2" });
+  expect(await ask("ada-2")).toEqual({
+    ok: true,
+    workspaceId: "workspace-ada-2",
+    workspaceSlug: "ada-2",
+  });
   expect(names.get(ada.id)).toBe("Ada");
 });
 
@@ -441,7 +459,7 @@ test("a submit with a Workspace URL, or with a returnTo that is no join page, st
       returnTo: "/join/good",
       locale: "en",
     }),
-  ).toEqual({ ok: true, workspaceId: "workspace-ada-lab" });
+  ).toEqual({ ok: true, workspaceId: "workspace-ada-lab", workspaceSlug: "ada-lab" });
   expect(withUrl.created).toHaveLength(1);
 
   for (const returnTo of ["/w/acme/join/good", "https://evil.com/join/good", "/join/good/extra"]) {
@@ -452,7 +470,115 @@ test("a submit with a Workspace URL, or with a returnTo that is no join page, st
       returnTo,
       locale: "en",
     });
-    expect(result).toEqual({ ok: true, workspaceId: "workspace-ada" });
+    expect(result).toEqual({ ok: true, workspaceId: "workspace-ada", workspaceSlug: "ada" });
     expect(forged.created).toHaveLength(1);
   }
+});
+
+test("suggestWorkspaceSlugForName derives pinyin and falls back cleanly on collisions and non-ASCII names", async () => {
+  const fallbackUser = { id: ada.id, username: "user-1a2b3c4d" };
+
+  expect(
+    await suggestWorkspaceSlugForName({
+      user: fallbackUser,
+      displayName: "小白",
+      takenUsernames: async () => [],
+      isSlugFree: async () => true,
+    }),
+  ).toBe("xiaobai");
+
+  expect(
+    await suggestWorkspaceSlugForName({
+      user: fallbackUser,
+      displayName: "吕布",
+      takenUsernames: async () => [],
+      isSlugFree: async () => true,
+    }),
+  ).toBe("lvbu");
+
+  expect(
+    await suggestWorkspaceSlugForName({
+      user: fallbackUser,
+      displayName: "小白 AI",
+      takenUsernames: async () => [],
+      isSlugFree: async () => true,
+    }),
+  ).toBe("xiaobai-ai");
+
+  expect(
+    await suggestWorkspaceSlugForName({
+      user: fallbackUser,
+      displayName: "小白",
+      takenUsernames: async () => ["xiaobai"],
+      isSlugFree: async () => true,
+    }),
+  ).toBe("xiaobai-2");
+
+  expect(
+    await suggestWorkspaceSlugForName({
+      user: fallbackUser,
+      displayName: "小白",
+      takenUsernames: async () => [],
+      isSlugFree: async () => false,
+    }),
+  ).toBe("xiaobai-11111111");
+
+  for (const name of ["✨", "さくら", "admin", "13800138000"]) {
+    expect(
+      await suggestWorkspaceSlugForName({
+        user: fallbackUser,
+        displayName: name,
+        takenUsernames: async () => [],
+        isSlugFree: async () => true,
+      }),
+    ).toBe("user-1a2b3c4d");
+
+    expect(
+      await suggestWorkspaceSlugForName({
+        user: fallbackUser,
+        displayName: name,
+        takenUsernames: async () => [],
+        isSlugFree: async () => false,
+      }),
+    ).toBe("user-1a2b3c4d-11111111");
+  }
+
+  expect(
+    await suggestWorkspaceSlugForName({
+      user: ada,
+      displayName: "小白",
+      takenUsernames: async () => [],
+      isSlugFree: async () => true,
+    }),
+  ).toBe("ada");
+
+  expect(
+    await suggestWorkspaceSlugForName({
+      user: ada,
+      displayName: "小白",
+      takenUsernames: async () => [],
+      isSlugFree: async () => false,
+    }),
+  ).toBe("ada-11111111");
+});
+
+test("omitting workspaceSlug creates a personal Workspace when returnTo is absent and returns invite_unavailable for stale invites", async () => {
+  const normal = setup();
+  expect(
+    await normal.firstSignIn.complete({
+      user: ada,
+      displayName: "小白",
+      locale: "zh-CN",
+    }),
+  ).toEqual({ ok: true, workspaceId: "workspace-ada", workspaceSlug: "ada" });
+
+  const staleInvite = setup({ activeInvites: [] });
+  expect(
+    await staleInvite.firstSignIn.complete({
+      user: ada,
+      displayName: "小白",
+      returnTo: "/join/expired",
+      locale: "zh-CN",
+    }),
+  ).toEqual({ ok: false, problem: "invite_unavailable" });
 });
