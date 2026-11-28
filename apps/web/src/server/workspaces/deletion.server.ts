@@ -17,6 +17,7 @@ import { assertCanDeleteWorkspace } from "./member-role.server";
 import { workspaceMemberRole } from "./workspace-membership.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
+import { revokeComputerTerminalBestEffort } from "#src/server/computers/computer-terminal-production.server";
 export type WorkspaceDeletionSignals = {
   workspaceDeleted(workspaceId: string): Promise<void>;
   reconnectDaemons(workspaceId: string, computerIds: readonly string[]): Promise<void>;
@@ -33,7 +34,10 @@ export function centrifugoWorkspaceDeletionSignals(
     async reconnectDaemons(workspaceId, computerIds) {
       const api = centrifugo();
       await Promise.all(
-        computerIds.map((computerId) => reconnectDaemon(api, workspaceId, computerId)),
+        computerIds.map(async (computerId) => {
+          await revokeComputerTerminalBestEffort({ workspaceId, computerId, closeShell: true });
+          await reconnectDaemon(api, workspaceId, computerId);
+        }),
       );
     },
   };

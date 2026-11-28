@@ -81,6 +81,10 @@ export type DaemonRuntimeReadyPorts = {
       identity: { workerInstanceId: string; startedAt: number },
     ): Promise<unknown>;
   };
+  terminalReplaced?: (
+    scope: { workspaceId: string; computerId: string },
+    workerInstanceId: string,
+  ) => Promise<void>;
 };
 
 export const createDaemonRuntimeReadyMethod =
@@ -100,6 +104,7 @@ export const createDaemonRuntimeReadyMethod =
     latestComputerVersion,
     releaseState,
     attachReady,
+    terminalReplaced,
   }: DaemonRuntimeReadyPorts = {}): CentrifugoRpcMethod =>
   async (payload, metadata) => {
     const request = decodeDaemonRuntimeReadyRequest(payload);
@@ -139,6 +144,10 @@ export const createDaemonRuntimeReadyMethod =
       });
       if (current && current.workerInstanceId !== request.workerInstanceId)
         return { code: 409, message: "daemon runtime was superseded" };
+      await terminalReplaced?.(
+        { workspaceId: request.workspaceId, computerId: request.computerId },
+        request.workerInstanceId,
+      ).catch(() => {});
       stage = "capability_record";
       await capabilities?.record(
         request.workspaceId,

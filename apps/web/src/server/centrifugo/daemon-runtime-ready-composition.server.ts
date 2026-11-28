@@ -1,4 +1,5 @@
 import { markComputerAttachReady } from "#src/server/computers/computer-attach-ready.server";
+import { revokeComputerTerminalOnDaemonReplaced } from "#src/server/computers/computer-terminal-production.server";
 import { installerRecoveryRpc } from "./installer-recovery-rpc.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -123,5 +124,7 @@ export function daemonRuntimeReadyPorts(input: {
     lifecycle: input.computerLifecycle,
     attachReady: (scope) => markComputerAttachReady(db, scope),
     releaseState: getComputerReleaseState(),
+    terminalReplaced: (scope, workerInstanceId) =>
+      revokeComputerTerminalOnDaemonReplaced(scope, workerInstanceId),
   };
 }

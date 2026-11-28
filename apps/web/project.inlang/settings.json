@@ -57,6 +57,7 @@
       "./messages/{locale}/computer-attach.json",
       "./messages/{locale}/computer-overview.json",
       "./messages/{locale}/computer-desktop.json",
+      "./messages/{locale}/computer-terminal.json",
       "./messages/{locale}/computer-upgrade-progress.json",
       "./messages/{locale}/workspace.json",
       "./messages/{locale}/landing.json",

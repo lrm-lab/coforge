@@ -17,6 +17,7 @@ export function createDaemonRuntimeShutdownMethod(
     computerId: string;
   }) => Promise<string | undefined>,
   closeInstallerRecovery?: ReturnType<typeof installerRecoveryRpc>["close"],
+  closeTerminal?: (scope: { workspaceId: string; computerId: string }) => Promise<void>,
 ): CentrifugoRpcMethod {
   const refuse = (
     error: CentrifugoRpcError,
@@ -59,6 +60,7 @@ export function createDaemonRuntimeShutdownMethod(
         );
       await lifecycle.shutdown(scope, { requestId: notice.requestId, reason: notice.reason });
       await closeInstallerRecovery?.(notice, metadata).catch(() => {});
+      await closeTerminal?.(scope).catch(() => {});
       return new Uint8Array();
     } catch (error) {
       console.error(

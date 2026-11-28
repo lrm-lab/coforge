@@ -29,6 +29,7 @@ model User {
   avatarObjectKey             String?
   avatarContentType           String?
   createdAt                   DateTime                        @default(now())
+  webLoginGeneration          Int                             @default(1) @map("web_login_generation")
   preferences                 UserPreference?
   notificationSettings        UserNotificationSettings?
   identities                  UserIdentity[]

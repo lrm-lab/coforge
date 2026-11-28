@@ -139,6 +139,7 @@ model WorkspaceComputer {
   readyWorkerInstanceId String?
   readyStartedAt BigInt?
   attachMachinePublicKey Bytes? @map("attach_machine_public_key")
+  terminalEnabled        Boolean @default(false) @map("terminal_enabled")
 
   @@unique([workspaceId, computerId])
   @@map("workspace_computers")

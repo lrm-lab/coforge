@@ -12,13 +12,10 @@ export type WorkspaceUserContext = {
   user: BrowserUser;
   db: ReturnType<typeof requireDatabaseClient>;
   workspaceId: string;
+  loginGeneration?: number;
+  devSkipAuth?: boolean;
 };
 
-/**
- * Authentication boundary for server functions. Route guards are not enough. A signed-out caller
- * is redirected to /login with the page being opened as `returnTo`: the browser sends its
- * location with each call, and during SSR the page request is the request itself.
- */
 export const authMiddleware = createMiddleware({ type: "function" })
   .client(async ({ next }) =>
     next({
@@ -33,12 +30,11 @@ export const authMiddleware = createMiddleware({ type: "function" })
   .server(async ({ next, context }) => {
     const request = getRequest();
     const page = typeof context.page === "string" ? context.page : ssrPage(request);
-    // When the person signed in (`authTime`) comes from the same session read.
-    const { user, authTime } = await requireBrowserSignIn(
+    const { user, authTime, loginGeneration, devSkipAuth } = await requireBrowserSignIn(
       request.headers.get("cookie") ?? undefined,
       page === undefined ? undefined : deLocalizeHref(page),
     );
-    return next({ context: { user, authTime } });
+    return next({ context: { user, authTime, loginGeneration, devSkipAuth } });
   });
 
 /** The page an SSR render is for; a call from the browser (`/_serverFn/…`) is not a page. */

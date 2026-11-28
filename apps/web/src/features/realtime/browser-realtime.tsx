@@ -329,6 +329,79 @@ export function subscribeToSharedRealtime(
   };
 }
 
+export type TokenizedRealtimeOptions = {
+  channel: string;
+  token: string;
+  getToken: () => Promise<string>;
+  onSubscribed?: () => void;
+  onSubscribing?: () => void;
+  onPublication?: (publication: RealtimePublication) => void;
+  onError?: (error: RealtimeSubscriptionError) => void;
+  onUnsubscribed?: (event: { code: number; reason: string }) => void;
+};
+
+export function subscribeToTokenizedRealtime(
+  client: SharedRealtimeClient,
+  {
+    channel,
+    token,
+    getToken,
+    onSubscribed,
+    onSubscribing,
+    onPublication,
+    onError,
+    onUnsubscribed,
+  }: TokenizedRealtimeOptions,
+): () => void {
+  const subscription = client.newSubscription(channel, {
+    token,
+    getToken: () => getToken(),
+    recoverable: false,
+    positioned: false,
+  });
+  let released = false;
+  subscription.on("subscribed", () => {
+    if (!released && onSubscribed) runHandler(channel, onSubscribed, undefined);
+  });
+  subscription.on("subscribing", () => {
+    if (!released && onSubscribing) runHandler(channel, onSubscribing, undefined);
+  });
+  subscription.on("publication", (publication) => {
+    if (!released && onPublication) {
+      runHandler(channel, onPublication, { channel, data: publication.data });
+    }
+  });
+  subscription.on("error", (event) => {
+    if (!released && onError) {
+      runHandler(channel, onError, {
+        channel,
+        code: event.error.code,
+        message: event.error.message,
+      });
+    }
+  });
+  subscription.on("unsubscribed", (event) => {
+    if (released) return;
+    if (onUnsubscribed) {
+      runHandler(channel, onUnsubscribed, { code: event.code, reason: event.reason });
+    }
+    if (event.code !== 0 && event.code !== 2 && onError) {
+      runHandler(channel, onError, {
+        channel,
+        code: event.code,
+        message: event.reason,
+      });
+    }
+  });
+  subscription.subscribe();
+  return () => {
+    if (released) return;
+    released = true;
+    subscription.unsubscribe();
+    client.removeSubscription(subscription);
+  };
+}
+
 export function useRealtimeSubscription({
   channel,
   recoverable,

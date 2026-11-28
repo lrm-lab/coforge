@@ -5,6 +5,7 @@ import {
   reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
+import { revokeComputerTerminalBestEffort } from "#src/server/computers/computer-terminal-production.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
 import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
 import { HostJobError } from "#src/server/hosts/host-jobs.server";
@@ -83,9 +84,14 @@ export const deleteComputer = createServerFn({ method: "POST" })
     const api = createCentrifugoServerApi();
     getWorkspaceComputerInvalidation().notify(computer.id);
     await Promise.all(
-      computer.workspaces.map(({ workspaceId: boundWorkspaceId }) =>
-        reconnectDaemon(api, boundWorkspaceId, computer.id),
-      ),
+      computer.workspaces.map(async ({ workspaceId: boundWorkspaceId }) => {
+        await revokeComputerTerminalBestEffort({
+          workspaceId: boundWorkspaceId,
+          computerId: computer.id,
+          closeShell: true,
+        });
+        await reconnectDaemon(api, boundWorkspaceId, computer.id);
+      }),
     );
     return { deleted: true as const };
   });

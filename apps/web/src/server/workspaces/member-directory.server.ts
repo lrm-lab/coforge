@@ -21,6 +21,7 @@ import { errorType } from "#src/server/errors/error-type.server";
 import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 import type { AgentVisibilityViewer } from "#src/server/agents/agent-visibility.server";
 import type { DepartingMemberComputer } from "#src/server/computers/computer-membership.server";
+import { revokeComputerTerminalBestEffort } from "#src/server/computers/computer-terminal-production.server";
 
 export type WorkspaceMemberRecord = {
   workspaceId: string;
@@ -80,7 +81,10 @@ const centrifugoMemberDaemons: WorkspaceMemberDaemons = {
   async reconnectDaemons(workspaceId, computerIds) {
     const api = createCentrifugoServerApi();
     await Promise.all(
-      computerIds.map((computerId) => reconnectDaemon(api, workspaceId, computerId)),
+      computerIds.map(async (computerId) => {
+        await revokeComputerTerminalBestEffort({ workspaceId, computerId, closeShell: true });
+        await reconnectDaemon(api, workspaceId, computerId);
+      }),
     );
   },
 };

@@ -7,6 +7,7 @@ import {
   reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { removeComputerFromWorkspace } from "#src/server/computers/computer-membership.server";
+import { revokeComputerTerminalBestEffort } from "#src/server/computers/computer-terminal-production.server";
 import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 import { computerIdInputSchema } from "./computer.schemas";
 
@@ -21,6 +22,11 @@ export const removeComputer = createServerFn({ method: "POST" })
       computerId: data.computerId,
     });
     getWorkspaceComputerInvalidation().notify(data.computerId);
+    await revokeComputerTerminalBestEffort({
+      workspaceId,
+      computerId: data.computerId,
+      closeShell: true,
+    });
     try {
       await reconnectDaemon(createCentrifugoServerApi(), workspaceId, data.computerId);
     } catch (error) {

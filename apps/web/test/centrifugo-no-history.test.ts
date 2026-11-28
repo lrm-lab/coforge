@@ -14,7 +14,7 @@ const CONFIGS = [
   "infra/staging/centrifugo/config.yaml",
   "infra/production/centrifugo/config.yaml",
 ];
-const NO_HISTORY = ["daemon", "runtimeauth"];
+const NO_HISTORY = ["daemon", "runtimeauth", "terminal"];
 
 /** The lines of one namespace under the top-level `channel:` block. */
 function namespaceBlock(config: string, name: string): string[] {

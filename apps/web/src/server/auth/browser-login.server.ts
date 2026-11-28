@@ -38,14 +38,14 @@ export type InternalUserResolver = (input: {
   username: string;
   /** The person's stored display name; every account has one. */
   displayName: string;
-  /** When the person finished first sign-in; null sends them to it. */
   welcomedAt: Date | null;
+  webLoginGeneration?: number;
 }>;
 
 const SESSION_COOKIE = "coforge_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
 
-type SignedSession = BrowserUser & { exp: number; authTime?: number };
+type SignedSession = BrowserUser & { exp: number; authTime?: number; loginGeneration?: number };
 
 /** Normalizes the email, E.164 phone, and verification flags from an Authing profile. */
 export function extractProfileContacts(profile: AuthingProfile): {
@@ -128,11 +128,17 @@ export async function completeBrowserLogin(input: {
     name: profile.name?.trim() || profile.nickname?.trim() || "",
     authingSub: profile.sub,
   };
+  const loginGeneration =
+    typeof resolved.webLoginGeneration === "number" &&
+    Number.isInteger(resolved.webLoginGeneration) &&
+    resolved.webLoginGeneration >= 1
+      ? resolved.webLoginGeneration
+      : 1;
   const session: SignedSession = {
     ...user,
-    // The password was just checked: the sign-in is now.
     authTime: Math.floor(now() / 1000),
     exp: Math.floor(now() / 1000) + SESSION_TTL_SECONDS,
+    loginGeneration,
   };
   return {
     user,
@@ -157,8 +163,12 @@ function testOnlyStableInternalUserId(provider: string, subject: string): string
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-/** A signed-in person and when they signed in (epoch seconds, OIDC `auth_time`). */
-export type BrowserSignIn = { user: BrowserUser; authTime: number };
+export type BrowserSignIn = {
+  user: BrowserUser;
+  authTime: number;
+  loginGeneration: number;
+  devSkipAuth?: boolean;
+};
 
 export function readBrowserSession(input: {
   sessionSecret: string;
@@ -168,8 +178,6 @@ export function readBrowserSession(input: {
   return readBrowserSignIn(input)?.user ?? null;
 }
 
-/** The session's person and sign-in time, or null without a valid session. A session signed
- * before sign-in times were kept counts from when it was issued. */
 export function readBrowserSignIn(input: {
   sessionSecret: string;
   cookieHeader: string;
@@ -182,10 +190,16 @@ export function readBrowserSignIn(input: {
     input.sessionSecret,
   );
   if (!isSignedSession(session) || session.exp * 1000 <= now()) return null;
-  const { id, email, name, authingSub, username, authTime } = session;
+  const { id, email, name, authingSub, username, authTime, loginGeneration } = session;
   return {
     user: { id, email, name, authingSub, username },
     authTime: typeof authTime === "number" ? authTime : session.exp - SESSION_TTL_SECONDS,
+    loginGeneration:
+      typeof loginGeneration === "number" &&
+      Number.isInteger(loginGeneration) &&
+      loginGeneration >= 1
+        ? loginGeneration
+        : 1,
   };
 }
 

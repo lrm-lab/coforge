@@ -77,8 +77,9 @@ export async function optionalBrowserSignIn(
   }
 }
 
-/** The dev user (`COFORGE_DEV_SKIP_AUTH`) never signed in, so counts as signing in now. */
 function devSignIn(): BrowserSignIn | null {
   const user = devBrowserUser();
-  return user ? { user, authTime: Math.floor(Date.now() / 1000) } : null;
+  return user
+    ? { user, authTime: Math.floor(Date.now() / 1000), loginGeneration: 0, devSkipAuth: true }
+    : null;
 }

@@ -42,6 +42,7 @@ import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
 import type { RuntimeCatalogRefreshResult } from "./runtime-catalog-refresh-poll";
 import { RuntimeRescanFeedback } from "./runtime-rescan-feedback";
 import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
+import { ComputerTerminalSection } from "./terminal/computer-terminal-section";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
 export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
@@ -381,6 +382,16 @@ export function ComputerDetail({
           runtimesAction={runtimesAction}
           runtimes={runtimesNode}
         />
+
+        {computer.ownedByCurrentUser ? (
+          <ComputerTerminalSection
+            computerId={computer.id}
+            computerName={label}
+            computerOnline={computer.online}
+            initialEnabled={computer.terminalEnabled ?? false}
+            platform={computer.platform ?? null}
+          />
+        ) : null}
 
         <ComputerDetailAdvanced
           key={computer.id}

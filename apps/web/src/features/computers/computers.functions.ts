@@ -87,6 +87,7 @@ export const listComputers = createServerFn({ method: "GET" })
         select: {
           id: true,
           createdAt: true,
+          terminalEnabled: true,
           computer: {
             select: {
               id: true,
@@ -204,7 +205,7 @@ export const listComputers = createServerFn({ method: "GET" })
     );
     const readCredentialKey = lazyRuntimeCredentialKeyReader();
     return Promise.all(
-      connections.map(async ({ id: bindingId, computer, createdAt }, index) => {
+      connections.map(async ({ id: bindingId, computer, createdAt, terminalEnabled }, index) => {
         const computerRuntimes = runtimes.filter((runtime) => runtime.computerId === computer.id);
         const agents = await Promise.all(
           computer.agents.map(async (agent) => {
@@ -255,6 +256,7 @@ export const listComputers = createServerFn({ method: "GET" })
           connectedAt: createdAt,
           ownedByCurrentUser: computer.ownerId === user.id,
           canManageAgents: canManage,
+          ...(computer.ownerId === user.id ? { terminalEnabled } : {}),
           runtimeAuth: runtimeAuthView(computer.runtimeAuth, {
             showAccount: computer.ownerId === user.id || canManage,
             runtimes: computerRuntimes,

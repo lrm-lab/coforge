@@ -16,6 +16,10 @@ import {
 import { PI_CHAT_FRAME_METHOD } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { createPiChatFrameMethod } from "#src/server/pi-chat/pi-chat-frame-receiver.server";
 import { canUsePiChat, getPiChatResults } from "#src/server/pi-chat/pi-chat-production.server";
+import {
+  computerTerminalRpcMethods,
+  revokeComputerTerminalOnShutdown,
+} from "./computer-terminal-rpc.server";
 import { workspaceQueryResultMethods } from "./workspace-query-result-methods.server";
 
 import {
@@ -278,6 +282,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           results: getPiChatResults(),
           publish: (channel, bytes) => centrifugo.publish(channel, bytes),
         }),
+        ...computerTerminalRpcMethods(centrifugo, unavailableMethod),
         [AGENT_SESSION_METHOD]: createAgentSessionMethod(
           sessions,
           sessionReceiver,
@@ -311,6 +316,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           computerLifecycle,
           async (scope) => (await getComputerRestartStore().identity?.(scope))?.workerInstanceId,
           installerRecoveryRpc().close,
+          revokeComputerTerminalOnShutdown,
         ),
         ...reminderCallbackMethods(
           createReminderFireMethod(reminders),
@@ -401,6 +407,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       ...daemonReportMethods(null),
       [AGENT_SESSION_METHOD]: unavailableMethod,
       [AGENT_SESSION_INVALIDATE_METHOD]: unavailableMethod,
+      ...computerTerminalRpcMethods(null, unavailableMethod),
       [AGENT_CONTEXT_USAGE_METHOD]: unavailableMethod,
       [AGENT_TOKEN_USAGE_METHOD]: unavailableMethod,
       [AGENT_SERVICE_TIER_METHOD]: unavailableMethod,

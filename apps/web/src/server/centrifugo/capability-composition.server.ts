@@ -23,6 +23,7 @@ import { getResetCreditCapabilityLease } from "#src/server/computers/reset-credi
 import { getAgentUsageCapabilityLease } from "#src/server/computers/agent-usage-capability.server";
 import { getAgentContextViewCapabilityLease } from "#src/server/computers/agent-context-view-capability.server";
 import { getAgentSideAskCapabilityLease } from "#src/server/computers/agent-side-ask-capability.server";
+import { getComputerTerminalCapabilityLease } from "#src/server/computers/computer-terminal-capability.server";
 import { getRuntimeManageCapabilityLease } from "#src/server/computers/runtime-manage-capability.server";
 
 export function daemonCapabilityLeases() {
@@ -50,6 +51,7 @@ export function daemonCapabilityLeases() {
     getAgentSideAskCapabilityLease(),
     getRuntimeManageCapabilityLease(),
     getResetCreditCapabilityLease(),
+    getComputerTerminalCapabilityLease(),
   ];
   return {
     reminderLease,

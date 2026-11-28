@@ -6,6 +6,7 @@ import {
   type CentrifugoConnections,
 } from "#src/server/centrifugo/server-api.server";
 import { removeComputerFromWorkspace } from "#src/server/computers/computer-membership.server";
+import { revokeComputerTerminalBestEffort } from "#src/server/computers/computer-terminal-production.server";
 
 type Db =
   | Prisma.TransactionClient
@@ -119,6 +120,11 @@ export async function detachComputer(
     computerId: principal.computerId,
   });
   notify(principal.computerId);
+  await revokeComputerTerminalBestEffort({
+    workspaceId: principal.workspaceId,
+    computerId: principal.computerId,
+    closeShell: true,
+  });
   audit({
     action: "detached",
     actor: "computer",

@@ -49,6 +49,7 @@ e2e-codex-compatible-browser.e2e.ts requires two native Computer installs and of
 e2e-codex-compatible-native.e2e.ts requires two native Computer installs and a real Codex app-server
 e2e-composer-send-during-upload.e2e.ts 待 Linux runner 准入
 e2e-computer-refusal.e2e.ts 待分拣
+e2e-computer-terminal.e2e.ts awaits three clean private runs and Linux runner admission
 e2e-departure-impact.e2e.ts 待分拣
 e2e-dm-agent-unread-realtime.e2e.ts 待分拣
 e2e-dm-agent-unread.e2e.ts 待分拣

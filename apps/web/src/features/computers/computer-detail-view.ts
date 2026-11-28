@@ -18,6 +18,7 @@ export type ComputerDetailView = ComputerIdentity & {
   id: string;
   ownedByCurrentUser: boolean;
   canManageAgents: boolean;
+  terminalEnabled?: boolean;
   online: boolean;
   connectRefusal?: { reason: DaemonConnectRejectionReason; at: string } | null;
   runtimeDetecting?: boolean;

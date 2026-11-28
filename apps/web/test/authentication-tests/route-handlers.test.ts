@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { currentUserHandler, logoutHandler } from "#src/server/auth/route-handlers.server";
 
-test("logout signs out without any Authing config: it needs none", () => {
+test("logout signs out without any Authing config: it needs none", async () => {
   const previous = {
     AUTHING_APP_ID: process.env.AUTHING_APP_ID,
     AUTHING_APP_SECRET: process.env.AUTHING_APP_SECRET,
@@ -15,7 +15,7 @@ test("logout signs out without any Authing config: it needs none", () => {
   delete process.env.COFORGE_SESSION_SECRET;
 
   try {
-    const response = logoutHandler({
+    const response = await logoutHandler({
       request: new Request("http://localhost:3000/auth/logout"),
     });
     expect(response.status).toBe(302);
