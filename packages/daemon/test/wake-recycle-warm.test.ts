@@ -201,15 +201,16 @@ test("TurnEndCompaction triggers native compaction at Working->Idle when context
   expect(compaction.maybeCompact("agent-a")).toBe(false);
 });
 
-test("DaemonRuntime triggers proactive session.compact() at Working->Idle when context usage exceeds 250k", async () => {
+test.each(["pi", "codex"] as const)("marks %s idle compaction", async (providerId) => {
   let compactCalls = 0;
   let listener: Parameters<AgentSession["subscribe"]>[0] = () => undefined;
   let live = false;
+  const compacted = Promise.withResolvers<void>();
   const provider: CodeAgentProvider = {
-    provider: "pi",
+    provider: providerId,
     reportsCompaction: true,
     async createAgentSession(options) {
-      await options.onSessionId?.("native-pi-1");
+      await options.onSessionId?.(`native-${providerId}-1`);
       return {
         get hasLiveTurn() {
           return live;
@@ -225,12 +226,15 @@ test("DaemonRuntime triggers proactive session.compact() at Working->Idle when c
         },
         async compact() {
           compactCalls += 1;
+          live = true;
           listener({ type: "compaction-started" });
-          listener({
-            type: "compaction-finished",
-            tokensBefore: 270_000,
-            tokensAfter: 45_000,
-          });
+          listener(
+            providerId === "pi"
+              ? { type: "compaction-finished", tokensBefore: 270_000, tokensAfter: 45_000 }
+              : { type: "compaction-finished" },
+          );
+          live = false;
+          compacted.resolve();
         },
         subscribe(next) {
           listener = next;
@@ -275,20 +279,42 @@ test("DaemonRuntime triggers proactive session.compact() at Working->Idle when c
     );
     await runtime.start(connection);
     try {
-      await runtime.startAgent("agent-a", {
-        provider: "pi",
-        model: "default",
-        modelProvider: "anthropic",
-        reasoning: "balanced",
-      });
+      await runtime.startAgent(
+        "agent-a",
+        {
+          provider: providerId,
+          model: "default",
+          modelProvider: "anthropic",
+          reasoning: "balanced",
+        },
+        `native-${providerId}-1`,
+      );
 
-      // Simulate a heavy turn that ends idle at 270k input tokens.
       live = true;
-      listener({ type: "context-usage", usedTokens: 270_000, windowTokens: 400_000 });
+      listener({ type: "compaction-started" });
+      listener({ type: "compaction-finished", tokensAfter: 30_000 });
+      live = false;
+      listener({ type: "completed", status: "completed" });
+
+      live = true;
+      listener({
+        type: "context-usage",
+        usedTokens: 270_000,
+        windowTokens: 400_000,
+        occurredAt: new Date(Date.now() - 100).toISOString(),
+      });
       listener({ type: "text-delta", text: "finished heavy turn" });
       live = false;
       listener({ type: "completed", status: "completed" });
-      await new Promise((resolve) => setTimeout(resolve, 15));
+      await compacted.promise;
+
+      if (providerId === "codex") {
+        listener({
+          type: "context-usage",
+          usedTokens: 45_000,
+          windowTokens: 400_000,
+        });
+      }
 
       expect(compactCalls).toBe(1);
     } finally {
@@ -299,6 +325,18 @@ test("DaemonRuntime triggers proactive session.compact() at Working->Idle when c
   expect(
     records.some((record) => record.properties.event === "agent.runtime.idle_compaction_started"),
   ).toBe(true);
+  const compactions = records
+    .map((record) => record.properties)
+    .filter((properties) => properties.event === "agent.runtime.compaction_tokens");
+  expect(compactions).toHaveLength(2);
+  expect(compactions[0]).toMatchObject({ tokens_after: 30_000, tokens_source: "runtime" });
+  expect(compactions[0]).not.toHaveProperty("idle_compaction");
+  expect(compactions[1]).toMatchObject({
+    idle_compaction: true,
+    tokens_before: 270_000,
+    tokens_after: 45_000,
+    tokens_source: providerId === "pi" ? "runtime" : "reading_after_more_work",
+  });
 });
 
 test("TurnEndCompaction logs 5m progress and releases buffered deliveries at 10m timeout without canceling", async () => {

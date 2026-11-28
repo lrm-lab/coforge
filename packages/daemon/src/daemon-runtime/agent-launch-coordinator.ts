@@ -191,13 +191,18 @@ export class AgentLaunchCoordinator {
       },
       compact: async (agentId) => {
         const session = this.ports.agentProcessManager.session(agentId);
-        if (!session) return;
+        const launch = this.ports.currentActivityLaunches.get(agentId);
+        if (!session || !launch) return;
         if (session.compact) {
-          await session.compact();
+          launch.idleCompaction = true;
+          try {
+            await session.compact();
+          } finally {
+            launch.idleCompaction = undefined;
+          }
           return;
         }
-        const launch = this.ports.currentActivityLaunches.get(agentId);
-        if (launch?.provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
+        if (launch.provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
           const turnFinished = this.turnEndCompaction.waitForTurnFinish(agentId);
           launch.turnEvidence?.markExempt();
           launch.idleCompaction = true;
