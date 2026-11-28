@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { XClose } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PANE_HEADER_ATTR } from "#src/components/layout/pane-header";
 import { PANEL_HEADER_CLASS, PANEL_TITLE_CLASS } from "./review-chrome";
 
 export function ReviewPanelHeader({
@@ -14,7 +15,7 @@ export function ReviewPanelHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className={PANEL_HEADER_CLASS}>
+    <header {...PANE_HEADER_ATTR} className={PANEL_HEADER_CLASS}>
       <h2 className={PANEL_TITLE_CLASS}>{title}</h2>
       {children}
       {close && (

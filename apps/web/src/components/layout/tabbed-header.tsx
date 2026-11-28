@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
+import { PANE_HEADER_ATTR, PANE_SUBBAR_ATTR } from "#src/components/layout/pane-header";
 import { cx } from "#src/utils/cx";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -45,14 +46,21 @@ export function TabbedHeader({
   return (
     <div className="shrink-0">
       <header
+        {...PANE_HEADER_ATTR}
         className={cx(
           "relative grid grid-cols-[minmax(0,1fr)_auto] border-b border-secondary px-4 md:px-6",
+          !hasTabs && "h-pane-header",
           hasTabs &&
-            "before:pointer-events-none before:absolute before:inset-x-0 before:top-[calc(--spacing(12)-1px)] before:border-t before:border-secondary",
+            "before:pointer-events-none before:absolute before:inset-x-0 before:top-[calc(var(--pane-header-height)-1px)] before:border-t before:border-secondary",
           className,
         )}
       >
-        <div className="col-start-1 row-start-1 flex h-[calc(--spacing(12)-1px)] min-w-0 items-center gap-2 md:gap-3">
+        <div
+          className={cx(
+            "col-start-1 row-start-1 flex min-w-0 items-center gap-2 md:gap-3",
+            hasTabs ? "h-pane-header" : "h-full",
+          )}
+        >
           {identity}
         </div>
         {actions && (
@@ -63,14 +71,13 @@ export function TabbedHeader({
         {tabs && (
           <div
             ref={tabsScrollRef}
+            {...PANE_SUBBAR_ATTR}
             className={cx(
               "col-span-2 row-start-2 -mx-2 -mb-px flex min-w-0 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
               !tabsOverflow && "[touch-action:pan-y_pinch-zoom]",
             )}
           >
-            <div className="flex min-h-9 w-max shrink-0 items-center any-pointer-coarse:min-h-11">
-              {tabs}
-            </div>
+            <div className="flex min-h-pane-subbar w-max shrink-0 items-center">{tabs}</div>
           </div>
         )}
       </header>

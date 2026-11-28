@@ -6,6 +6,7 @@
 @import "./styles/floating-foot-bar.css";
 @import "./styles/button-loading.css";
 @import "./styles/hover-motion.css";
+@import "./styles/pane-header.css";
 
 @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-react-aria-components";

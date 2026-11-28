@@ -3,14 +3,16 @@ import { Plus, SearchLg as Search, UsersPlus } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { PageBackButton } from "#src/components/layout/page-back-button";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 export function AgentsPending() {
   return (
     <main className="flex h-full min-w-0">
       <section className="@container/members flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
+        <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-3 px-page")}>
           <PageBackButton />
           <h1 className="truncate text-lg font-semibold text-primary">
             {m.member_directory_title()}

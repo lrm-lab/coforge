@@ -66,7 +66,7 @@ export function ConversationPending({ label = m.conversation_loading() }: { labe
               {status}
             </>
           }
-          tabs={<div aria-hidden="true" className="h-9" />}
+          tabs={<div aria-hidden="true" className="h-pane-subbar" />}
         />
       )}
       <div

@@ -2,10 +2,12 @@ import { AlertCircle, ArrowLeft, XClose as X } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 export function AgentProfileUnavailable({
   notVisible,
@@ -26,7 +28,7 @@ export function AgentProfileUnavailable({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-secondary px-2">
+      <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "justify-between px-2")}>
         {back ? (
           <ButtonUtility
             icon={ArrowLeft}

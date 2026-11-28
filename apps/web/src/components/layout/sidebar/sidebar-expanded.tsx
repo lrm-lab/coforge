@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from "react";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
+import { PANE_HEADER_ATTR } from "#src/components/layout/pane-header";
 import { cx } from "#src/utils/cx";
 
 type ExpandedItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
@@ -45,7 +46,12 @@ export const SidebarExpanded = ({
   footer,
 }: SidebarExpandedProps) => (
   <aside data-sidebar className="flex h-full w-full max-w-full flex-col bg-transparent">
-    <div className="mt-2 flex h-12 shrink-0 items-center gap-2 pe-3 ps-4.5">{header}</div>
+    <div
+      {...PANE_HEADER_ATTR}
+      className="mt-2 flex h-pane-header shrink-0 items-center gap-2 pe-3 ps-4.5"
+    >
+      {header}
+    </div>
     <div className="shrink-0 px-3 pt-1">{search}</div>
     <div className="scroll-fade-y min-h-0 flex-1 overflow-y-auto scroll-py-6">
       <ul className="mt-3 flex flex-col gap-0.5 px-3">

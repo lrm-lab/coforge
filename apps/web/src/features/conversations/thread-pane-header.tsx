@@ -11,8 +11,10 @@ import {
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { ConversationFocusButton } from "./conversation-focus-button";
 
 export type ThreadFollow = { followed: boolean; onChange: (followed: boolean) => void };
@@ -51,7 +53,7 @@ export function ThreadPaneHeader({
   const closeClass =
     showBack === true ? "hidden" : showBack === false ? "inline-flex" : "hidden md:inline-flex";
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-4 md:px-6">
+    <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-2 px-4 md:px-6")}>
       <ButtonUtility
         icon={ArrowLeft}
         size="sm"

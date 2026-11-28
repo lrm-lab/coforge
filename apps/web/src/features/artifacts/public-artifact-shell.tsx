@@ -14,6 +14,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
+import { PANE_HEADER_ATTR } from "#src/components/layout/pane-header";
 import { EmptyState } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { LockedWireframe } from "#src/components/ui/empty-wireframes";
@@ -157,7 +158,10 @@ export function PublicArtifactShell({
         </div>
       )}
 
-      <header className="flex min-h-12 shrink-0 items-center justify-between gap-2.5 border-b border-secondary bg-primary px-3 py-1.5 sm:h-12 sm:px-4 sm:py-0">
+      <header
+        {...PANE_HEADER_ATTR}
+        className="flex min-h-pane-header shrink-0 items-center justify-between gap-2.5 border-b border-secondary bg-primary px-3 py-1.5 sm:h-pane-header sm:px-4 sm:py-0"
+      >
         <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
           <Link
             to="/"

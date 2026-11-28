@@ -1,0 +1,15 @@
+:root {
+  --pane-header-height: 3rem;
+  --pane-subbar-height: 2.25rem;
+}
+
+@media (any-pointer: coarse) {
+  :root {
+    --pane-subbar-height: 2.75rem;
+  }
+}
+
+@theme inline {
+  --spacing-pane-header: var(--pane-header-height);
+  --spacing-pane-subbar: var(--pane-subbar-height);
+}

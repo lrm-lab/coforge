@@ -8,6 +8,7 @@ import {
 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { AgentProfileActionsMenu } from "./agent-profile-actions-menu";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
@@ -16,6 +17,7 @@ import { DELETED_AGENT_NAME_CLASS, DeletedAgentLabel } from "#src/features/agent
 import { cn } from "#src/lib/utils";
 import { type AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 
@@ -52,8 +54,14 @@ export function AgentProfileHeader({
   const openDirectConversation = useOpenDirectConversation();
   const message = () => void openDirectConversation({ agentId: agent.id });
   const Name = pageHeading ? "h1" : "p";
-  const header = (
-    <header className="@container/agent-header flex h-12 shrink-0 items-center gap-2 px-5 py-0 any-pointer-coarse:gap-3">
+  return (
+    <header
+      {...PANE_HEADER_ATTR}
+      className={cx(
+        PANE_HEADER_CLASS,
+        "@container/agent-header gap-2 px-5 py-0 any-pointer-coarse:gap-3",
+      )}
+    >
       {back && (
         <ButtonUtility
           icon={ArrowLeft}
@@ -147,22 +155,24 @@ export function AgentProfileHeader({
       )}
     </header>
   );
+}
+
+export function AgentProfileControlNotice({ controls }: { controls: AgentRuntimeControls }) {
   const statusLine = controls?.controlPendingLabel ?? controls?.controlFailureDetail;
   const submitError = controls?.startStopError ?? controls?.restartSubmitError;
-  if (!submitError && !statusLine) return header;
+  if (!submitError && !statusLine) return null;
   return (
-    <>
-      {header}
+    <div className="shrink-0 space-y-1 border-b border-secondary px-5 py-2">
       {statusLine && (
-        <p className="px-5 pb-2 text-sm text-tertiary" role="status">
+        <p className="text-sm text-tertiary" role="status">
           {statusLine}
         </p>
       )}
       {submitError && (
-        <p role="alert" className="px-5 pb-2 text-sm text-error-primary">
+        <p role="alert" className="text-sm text-error-primary">
           {submitError}
         </p>
       )}
-    </>
+    </div>
   );
 }

@@ -23,6 +23,7 @@ import { Heading } from "react-aria-components";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { PANE_HEADER_ATTR } from "#src/components/layout/pane-header";
 import { MemberDirectory } from "#src/features/conversations/member-directory";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useMediaQuery } from "#src/hooks/use-media-query";
@@ -262,9 +263,10 @@ export function useTaskDetailModel({
 
   const header = (
     <div
+      {...(!isSheet ? PANE_HEADER_ATTR : {})}
       className={cn(
         "flex shrink-0 items-center gap-1",
-        isSheet ? "w-full min-w-0" : "h-12 border-b border-secondary pe-3 ps-2 sm:ps-3",
+        isSheet ? "w-full min-w-0" : "h-pane-header border-b border-secondary pe-3 ps-2 sm:ps-3",
       )}
     >
       {navigation && !isSheet && (

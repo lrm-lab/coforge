@@ -8,6 +8,7 @@ import {
   UserCircle as UserRound,
 } from "@untitledui/icons";
 
+import { PANE_SUBBAR_ATTR } from "#src/components/layout/pane-header";
 import { ReorderableTabStrip } from "#src/components/ui/reorderable-tab-strip";
 import { usePanelTabOrder } from "#src/features/panel-tabs/panel-tab-order-context";
 import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH, useScrollEdges } from "#src/hooks/use-scroll-edges";
@@ -61,11 +62,14 @@ export function AgentProfileTabs({
 }) {
   const fade = useScrollEdges("x", { observe: '[role="tab"]', key: tabs.join(" ") });
   return (
-    <div className="relative shrink-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary">
+    <div
+      {...PANE_SUBBAR_ATTR}
+      className="relative shrink-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary"
+    >
       <div
         ref={fade.ref}
         style={edgeFadeStyle(fade, { end: TAB_BAR_END_FADE_WIDTH })}
-        className="scrollbar-hide flex h-9 items-center overflow-x-auto overflow-y-hidden px-3 scroll-ps-3 scroll-pe-14 any-pointer-coarse:h-11"
+        className="scrollbar-hide flex h-pane-subbar items-center overflow-x-auto overflow-y-hidden px-3 scroll-ps-3 scroll-pe-14"
       >
         <ReorderableTabStrip
           aria-label={m.agent_profile_panel_tabs()}

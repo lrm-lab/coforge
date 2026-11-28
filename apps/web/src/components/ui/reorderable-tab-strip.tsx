@@ -37,7 +37,7 @@ import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
 export const PAGE_TAB_CLASS =
-  "relative z-10 h-9 any-pointer-coarse:h-11 shrink-0 select-none [-webkit-touch-callout:none] gap-1.5 rounded-none border-b-2 border-transparent px-2 py-0 text-sm font-medium text-tertiary transition-colors duration-150 *:data-icon:size-3.5 *:data-icon:text-fg-quaternary before:pointer-events-none before:absolute before:inset-x-0.5 before:inset-y-1.5 before:-z-10 before:rounded-md before:bg-transparent before:transition-colors before:duration-150 hover:not-aria-selected:text-primary hover:not-aria-selected:*:data-icon:text-fg-secondary hover:before:bg-primary_hover aria-selected:font-semibold aria-selected:text-primary aria-selected:*:data-icon:text-fg-primary";
+  "relative z-10 h-pane-subbar shrink-0 select-none [-webkit-touch-callout:none] gap-1.5 rounded-none border-b-2 border-transparent px-2 py-0 text-sm font-medium text-tertiary transition-colors duration-150 *:data-icon:size-3.5 *:data-icon:text-fg-quaternary before:pointer-events-none before:absolute before:inset-x-0.5 before:inset-y-1.5 before:-z-10 before:rounded-md before:bg-transparent before:transition-colors before:duration-150 hover:not-aria-selected:text-primary hover:not-aria-selected:*:data-icon:text-fg-secondary hover:before:bg-primary_hover aria-selected:font-semibold aria-selected:text-primary aria-selected:*:data-icon:text-fg-primary";
 
 export type ReorderableTabMeta = { label: () => string; icon?: FC<{ className?: string }> };
 

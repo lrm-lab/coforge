@@ -49,6 +49,7 @@ import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { AgentProfileUnavailable } from "./agent-profile-unavailable";
+import { AgentProfileControlNotice } from "./agent-profile-header";
 import { AgentProfileTabs, useAgentProfileTabsForProfile } from "./agent-profile-tabs";
 import { setupComputerOptions } from "./setup-computers";
 import {
@@ -306,6 +307,13 @@ export function AgentProfilePanel({
         hideClose={hideClose}
         back={back}
       />
+      <AgentProfileTabs
+        active={tab}
+        tabs={tabOrder.tabs}
+        onSelect={onTabChange}
+        onReorder={tabOrder.reorder}
+      />
+      <AgentProfileControlNotice controls={controls} />
       {profile?.computerAccessRevoked && !deleted ? (
         <p
           role="status"
@@ -350,12 +358,6 @@ export function AgentProfilePanel({
           />
         )
       )}
-      <AgentProfileTabs
-        active={tab}
-        tabs={tabOrder.tabs}
-        onSelect={onTabChange}
-        onReorder={tabOrder.reorder}
-      />
       <div
         className={
           profile && (tab === "workspace" || tab === "activity")

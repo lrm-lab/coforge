@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { ArrowLeft } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -73,10 +74,8 @@ export function ConversationBackHeader({
 }) {
   return (
     <header
-      className={cx(
-        "flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 md:px-6",
-        className,
-      )}
+      {...PANE_HEADER_ATTR}
+      className={cx(PANE_HEADER_CLASS, "gap-3 px-4 md:px-6", className)}
     >
       <ConversationListButton />
       {children}

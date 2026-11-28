@@ -12,11 +12,13 @@ import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { cx } from "#src/utils/cx";
 import { RecordSideRenameDialog } from "./record-side-rename-dialog";
 import type { ChatSessionRow, useRecordSideChatSessions } from "./use-record-side-chat-sessions";
 
@@ -60,7 +62,7 @@ export function RecordSideChatHeader({
   const locale = getLocale();
   return (
     <>
-      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-secondary px-3">
+      <div {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-1 px-3")}>
         <ButtonUtility
           size="sm"
           color="tertiary"

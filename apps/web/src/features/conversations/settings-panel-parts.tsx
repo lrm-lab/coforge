@@ -2,12 +2,16 @@ import type { ComponentType, ReactNode } from "react";
 import { ArrowLeft, XClose } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 export function DetailsPaneHeader({ title, onClose }: { title: string; onClose: () => void }) {
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-secondary px-4 md:px-6">
+    <header
+      {...PANE_HEADER_ATTR}
+      className={cn(PANE_HEADER_CLASS, "justify-between gap-2 px-4 md:px-6")}
+    >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <ButtonUtility
           icon={ArrowLeft}

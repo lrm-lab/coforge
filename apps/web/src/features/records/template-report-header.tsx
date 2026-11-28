@@ -5,7 +5,9 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { BackToRecords, RecordsKeyPointReturnBack } from "./records-layout";
 import { WeekBadge } from "./records-sidebar-parts";
 
@@ -53,7 +55,7 @@ export function TemplateReportHeader({
   onResetPage: () => void;
 }) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
+    <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-3 px-4 sm:px-6")}>
       <span className="flex shrink-0 items-center gap-2">
         {returnTo ? <RecordsKeyPointReturnBack returnTo={returnTo} /> : <BackToRecords />}
         <WeekBadge week={week} />

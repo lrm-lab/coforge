@@ -2,8 +2,10 @@ import type { FC } from "react";
 
 import { PageBackButton } from "#src/components/layout/page-back-button";
 import { PageBreadcrumbs, type BreadcrumbItem } from "#src/components/layout/page-breadcrumbs";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { cn } from "#src/lib/utils";
+import { cx } from "#src/utils/cx";
 
 export function PageHeader({
   leading,
@@ -62,7 +64,7 @@ export function PageHeader({
       />
     );
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
+    <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-3 px-page")}>
       {title}
       {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
     </header>

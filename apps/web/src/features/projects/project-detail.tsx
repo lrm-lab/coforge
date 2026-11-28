@@ -20,6 +20,7 @@ import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
+import { PANE_SUBBAR_ATTR } from "#src/components/layout/pane-header";
 import { PAGE_TAB_CLASS } from "#src/components/ui/reorderable-tab-strip";
 import { cx } from "#src/utils/cx";
 import { WorkspaceTaskBoard } from "#src/features/tasks/workspace-task-board";
@@ -89,7 +90,7 @@ export function ProjectDetail({
         }}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="shrink-0 border-b border-secondary px-page">
+        <div {...PANE_SUBBAR_ATTR} className="shrink-0 border-b border-secondary px-page">
           <div className="-mx-2 -mb-px flex min-w-0 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <TabList
               type="underline"

@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
 
+import {
+  PANE_HEADER_ATTR,
+  PANE_HEADER_CLASS,
+  PANE_SUBBAR_ATTR,
+  PANE_SUBBAR_CLASS,
+} from "#src/components/layout/pane-header";
 import { TabHomeHeader } from "#src/components/layout/tab-home-header";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import {
   ActivityInboxFilterPicker,
@@ -28,7 +35,7 @@ export function ActivityInboxHeader({
 }) {
   if (desktop) {
     return (
-      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-secondary px-4">
+      <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "justify-between gap-2 px-4")}>
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="truncate text-lg font-semibold text-primary">{m.navigation_activity()}</h1>
           {activeCount !== undefined && (
@@ -68,7 +75,7 @@ export function ActivityInboxHeader({
           )
         }
       />
-      <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-4">
+      <div {...PANE_SUBBAR_ATTR} className={cx(PANE_SUBBAR_CLASS, "gap-2 px-4")}>
         <ActivityInboxTabs
           filter={filter}
           onFilterChange={onFilterChange}

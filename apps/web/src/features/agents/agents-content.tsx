@@ -10,6 +10,7 @@ import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/t
 import { Button } from "#src/components/base/buttons/button";
 import { Select } from "#src/components/base/select/select";
 import { PageBackButton } from "#src/components/layout/page-back-button";
+import { PANE_HEADER_ATTR, PANE_SUBBAR_ATTR } from "#src/components/layout/pane-header";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -205,7 +206,10 @@ export function AgentsContent({
       }}
       className="@container/members flex min-h-0 min-w-0 flex-1 flex-col"
     >
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
+      <header
+        {...PANE_HEADER_ATTR}
+        className="flex h-pane-header shrink-0 items-center gap-3 border-b border-secondary px-page"
+      >
         <PageBackButton />
         <h1 className="truncate text-lg font-semibold text-primary">
           {m.member_directory_title()}
@@ -216,7 +220,7 @@ export function AgentsContent({
         </p>
       </header>
 
-      <div className="shrink-0 border-b border-secondary px-page">
+      <div {...PANE_SUBBAR_ATTR} className="shrink-0 border-b border-secondary px-page">
         <UnderlineStripFrame
           activeKey={`${memberType}:${totalCount}:${summary.peopleCount}:${summary.agentCount}`}
           observe='[role="tab"]'

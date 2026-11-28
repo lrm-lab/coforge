@@ -1,7 +1,14 @@
+import {
+  PANE_HEADER_ATTR,
+  PANE_HEADER_CLASS,
+  PANE_SUBBAR_ATTR,
+  PANE_SUBBAR_CLASS,
+} from "#src/components/layout/pane-header";
 import { TabHomeHeader } from "#src/components/layout/tab-home-header";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 export function ActivityInboxPending() {
   const desktop = useBreakpoint("lg");
@@ -14,7 +21,7 @@ export function ActivityInboxPending() {
     >
       <div className="flex min-h-0 flex-1 flex-col bg-primary lg:w-list-column lg:flex-none lg:shrink-0">
         {desktop ? (
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-4">
+          <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-2 px-4")}>
             <h1 className="truncate text-lg font-semibold text-primary">
               {m.navigation_activity()}
             </h1>
@@ -23,7 +30,7 @@ export function ActivityInboxPending() {
         ) : (
           <>
             <TabHomeHeader title={m.navigation_activity()} />
-            <div className="flex shrink-0 items-center border-b border-secondary px-4 py-2">
+            <div {...PANE_SUBBAR_ATTR} className={cx(PANE_SUBBAR_CLASS, "px-4")}>
               <Skeleton className="h-5 w-52" />
             </div>
           </>

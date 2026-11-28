@@ -18,12 +18,7 @@
     `isPending` 仍在 `isLoading` 打开时**立即**生效，只有指示器本身延后出现。
 
   这不是任意修改官方源码的许可；升级或重新 init 时保留这三处限定修补并重新验证。
-- 例外：`base-components/mobile-header.tsx` 和官方的 `sidebar-simple.tsx`、`sidebar-slim.tsx`
-  是**演示模板**（写死 Untitled 自己的 logo、搜索框、假账号卡片、固定像素宽度），不是可参数化的
-  组件。两个侧栏模板已复制到 `src/components/layout/sidebar/`，复制后从本仓库移除（再次复制时用
-  CLI 取回）；复制之后就是 CoForge 自己的代码，不再受"源码不改"约束。复制体内部继续调用的 `app-navigation/base-components/**`
-  （`NavItemBase`、`NavButton`、`NavList`、`MobileNavigationHeader` 等）和 `components/base/**`
-  仍然原样不改。
+- 例外：官方的 `sidebar-simple.tsx`、`sidebar-slim.tsx` 是**演示模板**（写死 Untitled 自己的 logo、搜索框、假账号卡片、固定像素宽度），不是可参数化的组件。两个侧栏模板已复制到 `src/components/layout/sidebar/`，复制后从本仓库移除（再次复制时用 CLI 取回）；复制之后就是 CoForge 自己的代码，不再受"源码不改"约束。复制体内部继续调用的 `app-navigation/base-components/**`（`NavItemBase`、`NavButton`、`NavList` 等）和 `components/base/**` 仍然原样不改；同样写死的 `base-components/mobile-header.tsx` 已从仓库移除（需要时可用 CLI 取回）。
 - 升级用 `npx untitledui@latest upgrade`，升级后跑 `bun run check` 和 `mise run test:web`。
 - 允许自写的只有官方没有对应物的原语，放在 `src/components/ui/`：Empty、Skeleton、Loading（延迟显示指示器的策略）、Spinner、Toast 包装、RelativeTime、InputOTP、HoverPopover，以及官方只在 PRO 版提供的 Alert 和 ProgressSteps（CLI 添加 `alerts`、`progress-steps` 需要 PRO 授权）。自写原语只能组合 React Aria 和官方组件，不能复制官方文件再改。
 - `src/components/ui/README.md` 维护"偏离官方组件清单"：每个自写文件一行，写明为什么官方没有。清单之外不允许出现非官方组件。

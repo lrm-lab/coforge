@@ -9,6 +9,7 @@ import {
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { PANE_HEADER_ATTR } from "#src/components/layout/pane-header";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { messageSlots } from "#src/lib/message-slots";
@@ -61,7 +62,7 @@ export function ReportDetailHeader({
 }) {
   return (
     <>
-      <header className="h-12 shrink-0 border-b border-secondary">
+      <header {...PANE_HEADER_ATTR} className="h-pane-header shrink-0 border-b border-secondary">
         <div className="mx-auto flex h-full w-full max-w-4xl items-center gap-3 px-4 sm:px-8">
           {returnTo ? (
             <span className="flex shrink-0 items-center gap-1">

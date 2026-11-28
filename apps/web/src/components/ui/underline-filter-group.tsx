@@ -11,7 +11,7 @@ export const UNDERLINE_STRIP_SCROLL_CLASS =
   "-mb-px flex min-w-0 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 export const UNDERLINE_TAB_CLASS =
-  "relative z-10 h-9 shrink-0 select-none gap-1.5 rounded-none border-b-0 px-0.5 py-0 text-sm font-medium text-tertiary transition-colors duration-100 ease-out outline-focus-ring hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 any-pointer-coarse:h-11 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:border-b-2 after:border-transparent";
+  "relative z-10 h-pane-subbar shrink-0 select-none gap-1.5 rounded-none border-b-0 px-0.5 py-0 text-sm font-medium text-tertiary transition-colors duration-100 ease-out outline-focus-ring hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:border-b-2 after:border-transparent";
 
 export type UnderlineFilterItem<T extends string> = {
   id: T;

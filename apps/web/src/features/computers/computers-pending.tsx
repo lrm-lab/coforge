@@ -2,8 +2,10 @@ import { useMatch, useRouter } from "@tanstack/react-router";
 import { AlertCircle } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { BackToComputers } from "./back-to-computers";
 
 export function ComputersPending() {
@@ -12,7 +14,7 @@ export function ComputersPending() {
       <p role="status" className="sr-only">
         {m.computer_loading()}
       </p>
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
+      <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-3 px-page")}>
         <h1 className="text-lg font-semibold text-primary">{m.computer_page_title()}</h1>
         <Skeleton aria-hidden="true" className="h-3.5 w-40 motion-safe:animate-pulse" />
       </header>
@@ -63,7 +65,7 @@ export function ComputerDetailPending() {
 function ComputerDetailSkeleton({ announce }: { announce: boolean }) {
   return (
     <div aria-busy={announce ? "true" : undefined} className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
+      <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-3 px-page")}>
         <BackToComputers />
         <Skeleton aria-hidden="true" className="h-5 w-48 motion-safe:animate-pulse" />
         {announce && (
@@ -108,7 +110,7 @@ export function ComputerDetailLoadError({ error }: { error: unknown }) {
   void error;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
+      <header {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-3 px-page")}>
         <BackToComputers />
         <h1 className="text-md font-medium">{m.computer_page_title()}</h1>
       </header>

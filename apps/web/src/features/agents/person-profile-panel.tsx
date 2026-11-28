@@ -16,6 +16,7 @@ import { Button as AriaButton } from "react-aria-components";
 import { MemberRemovalDialog } from "#src/features/workspaces/member-removal-dialog";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Button } from "#src/components/base/buttons/button";
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import {
   Empty,
   EmptyDescription,
@@ -31,6 +32,7 @@ import { formatNumber } from "#src/lib/format-number";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { cx } from "#src/utils/cx";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import {
   removeWorkspaceMember,
@@ -82,11 +84,11 @@ export function PersonProfilePanel({
   if (person.isPending) {
     return (
       <aside aria-busy="true" aria-label={m.agent_profile_loading()} className="flex flex-col">
-        <div className="flex h-12 items-center gap-2 px-5">
+        <div {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-2 px-5")}>
           <Skeleton className="size-8 rounded-full" />
           <Skeleton className="h-4 w-32" />
         </div>
-        <div className="space-y-3 border-t border-secondary px-6 py-5">
+        <div className="space-y-3 px-6 py-5">
           <Skeleton className="size-14 rounded-full" />
           <Skeleton className="h-4 w-48" />
           <Skeleton className="h-4 w-64" />
@@ -100,7 +102,7 @@ export function PersonProfilePanel({
       isAppErrorCode(person.error, "NOT_FOUND") || isAppErrorCode(person.error, "ACCESS_DENIED");
     return (
       <aside className="flex min-h-0 flex-1 flex-col">
-        <div className="flex h-12 shrink-0 items-center gap-2 px-5">
+        <div {...PANE_HEADER_ATTR} className={cx(PANE_HEADER_CLASS, "gap-2 px-5")}>
           {back && <BackButton back={back} />}
           <span className="flex-1" />
           {!hideClose && <CloseButton onClose={onClose} />}
@@ -131,7 +133,10 @@ export function PersonProfilePanel({
   const profile = person.data;
   return (
     <aside aria-label={profile.displayName} className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-5 any-pointer-coarse:gap-3">
+      <header
+        {...PANE_HEADER_ATTR}
+        className={cx(PANE_HEADER_CLASS, "gap-2 px-5 any-pointer-coarse:gap-3")}
+      >
         {back && <BackButton back={back} />}
         <ActorAvatar
           presence

@@ -8,7 +8,7 @@ export const FLOATING_SURFACE_CLASS = "rounded-xl border border-secondary bg-pri
 export const TOOLBAR_BUTTON_ON_CLASS = "bg-active text-fg-secondary hover:bg-active";
 
 export const PANEL_HEADER_CLASS =
-  "flex h-12 shrink-0 items-center gap-1 border-b border-secondary pe-2 ps-4";
+  "flex h-pane-header shrink-0 items-center gap-1 border-b border-secondary pe-2 ps-4";
 
 export const PANEL_TITLE_CLASS = "min-w-0 flex-1 truncate text-sm font-medium text-primary";
 

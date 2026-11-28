@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { PANE_HEADER_ATTR, PANE_HEADER_CLASS } from "#src/components/layout/pane-header";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { cn } from "#src/lib/utils";
@@ -23,7 +24,7 @@ export function ComputerDetailHeader({
   const statusLabel = computer.online ? m.computer_status_online() : m.computer_status_offline();
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-page">
+    <div {...PANE_HEADER_ATTR} className={cn(PANE_HEADER_CLASS, "gap-2 px-page")}>
       <BackToComputers />
       <Tooltip title={statusLabel}>
         <TooltipTrigger
