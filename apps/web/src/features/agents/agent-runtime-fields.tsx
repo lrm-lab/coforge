@@ -10,9 +10,7 @@ import {
 } from "@lrm/coforge-sdk/internal/codex-compatible-provider";
 
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
-import { Input } from "#src/components/base/input/input";
 import { useCodexCompatibleSupport } from "#src/features/computers/use-codex-compatible-support";
-import { fieldHint } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { AgentCodexCompatibleFields } from "./agent-codex-compatible-fields";
 import {
@@ -26,7 +24,6 @@ import { AgentModelSizeFields } from "./agent-model-size-fields";
 import { initialModelSizes, modelSizesApply } from "./agent-model-sizes";
 import { AgentReasoningField } from "./agent-reasoning-field";
 import { KEYED_MODEL_PROVIDERS } from "./agent.schemas";
-import { ModelComboBox } from "./model-combobox";
 import type { ModelChoice } from "./model-search";
 import {
   fastModeFieldState,
@@ -50,10 +47,10 @@ import {
   type RuntimeProviderNoticeContext,
   type RuntimeSelection,
 } from "./agent-runtime-fields-state";
+import { AgentRuntimeModelField } from "./agent-runtime-model-field";
 import { AgentRuntimeProviderSelect } from "./agent-runtime-provider-select";
 import { useCommandCodeEfforts } from "./use-command-code-efforts";
 import { useRuntimeCatalogRefresh } from "./use-runtime-catalog-refresh";
-import { RuntimeRefreshOutcome } from "./runtime-refresh-outcome";
 
 export * from "./agent-runtime-fields-state";
 
@@ -431,73 +428,53 @@ export function AgentRuntimeFields({
           }}
         />
       )}
-      {failed ? (
-        <Input
-          label={m.agent_form_model()}
-          name="model"
-          size={controlSize}
-          isRequired
-          validationBehavior={modelRequired ? "aria" : undefined}
-          isInvalid={Boolean(modelError)}
-          hint={fieldHint(modelError)}
-          maxLength={200}
-          defaultValue={initial?.model}
-          className="min-w-0"
-          onChange={() => {
-            setManualDirty(true);
-            onModelErrorClear?.();
-            onFieldErrorClear?.("model");
-          }}
-        />
-      ) : !isCodexCompatible ? (
-        <>
-          <input type="hidden" name="model" value={modelValue} />
-          <div data-field="model" className="relative min-w-0">
-            <ModelComboBox
-              label={m.agent_form_model()}
-              className="min-w-0"
-              popoverClassName="min-w-(--trigger-width) w-max max-w-[min(36rem,calc(100vw-3rem))]"
-              isDisabled={!options}
-              isRequired={modelRequired}
-              isInvalid={Boolean(modelError)}
-              hint={modelError}
-              refresh={{
-                run: () => void catalogRefresh.refresh(),
-                busy: catalogRefresh.busy,
-                refreshing: catalogRefresh.refreshing,
-              }}
-              choices={modelChoices}
-              pinned={pinnedModelChoices}
-              selectedKey={piConfigured && customModelActive ? CUSTOM_MODEL_KEY : modelKey}
-              onSelectionChange={(value) => {
-                onModelErrorClear?.();
-                onFieldErrorClear?.("model");
-                if (piConfigured && value === CUSTOM_MODEL_KEY) {
-                  setCustomModelActive(true);
-                  setModelKey("");
-                  setReasoning("");
-                  return;
-                }
-                setCustomModelActive(false);
-                setModelKey(value);
-                const model = catalogModels.find((item) => modelOptionValue(item) === value);
-                if (!isPi) {
-                  if (model?.modelProvider !== modelProvider) setApiKey("");
-                  setModelProvider(model?.modelProvider ?? "");
-                }
-                setReasoning(
-                  value === initialModelKey && provider === initial?.provider
-                    ? initial.reasoning
-                    : (model?.defaultReasoning ?? ""),
-                );
-              }}
-            />
-          </div>
-          {catalogRefresh.note && (
-            <RuntimeRefreshOutcome note={catalogRefresh.note} runtime={provider} />
-          )}
-        </>
-      ) : null}
+      <AgentRuntimeModelField
+        failed={failed}
+        isCodexCompatible={isCodexCompatible}
+        controlSize={controlSize}
+        modelRequired={modelRequired}
+        modelError={modelError}
+        initialModel={initial?.model}
+        modelValue={modelValue}
+        optionsLoaded={Boolean(options)}
+        refresh={{
+          run: () => void catalogRefresh.refresh(),
+          busy: catalogRefresh.busy,
+          refreshing: catalogRefresh.refreshing,
+        }}
+        modelChoices={modelChoices}
+        pinnedModelChoices={pinnedModelChoices}
+        selectedKey={piConfigured && customModelActive ? CUSTOM_MODEL_KEY : modelKey}
+        catalogRefreshNote={catalogRefresh.note}
+        provider={provider}
+        onManualChange={() => {
+          setManualDirty(true);
+          onModelErrorClear?.();
+          onFieldErrorClear?.("model");
+        }}
+        onSelectionChange={(value) => {
+          onModelErrorClear?.();
+          onFieldErrorClear?.("model");
+          if (piConfigured && value === CUSTOM_MODEL_KEY) {
+            setCustomModelActive(true);
+            setModelKey("");
+            setReasoning("");
+            return;
+          }
+          setCustomModelActive(false);
+          setModelKey(value);
+          const model = catalogModels.find((item) => modelOptionValue(item) === value);
+          if (!isPi) {
+            if (model?.modelProvider !== modelProvider) setApiKey("");
+            setModelProvider(model?.modelProvider ?? "");
+          }
+          setReasoning(
+            value === initialModelKey && provider === initial?.provider
+              ? initial.reasoning
+              : (model?.defaultReasoning ?? ""),
+          );
+        }}
+      />
       {piConfigured && customModelActive && (
         <AgentRuntimeCustomModelField
           controlSize={controlSize}
