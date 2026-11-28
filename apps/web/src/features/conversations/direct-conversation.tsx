@@ -23,6 +23,8 @@ import {
   ConversationPinnedArtifactStrip,
   PinnedArtifactRestoreButton,
 } from "./conversation-pinned-artifact-strip";
+import { DirectAgentGuidanceCard } from "./direct-agent-guidance-card";
+import { resolveDirectAgentGuidance } from "./direct-agent-availability";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
 import { plainMentionsByHandle } from "./message-markdown";
 import type {
@@ -170,11 +172,20 @@ export function DirectConversation({
   }) {
   const { conversation } = props;
   const details = useConversationDetailsState({ enabled: !props.taskPopup });
+  const display = useLiveAgentDisplay(conversation.agent.id);
   // A deleted Agent's DM stays readable, but nothing new can be sent to it.
   const deleted = Boolean(conversation.agent.deletedAt);
   // A private Agent's DM stays scoped to its own creator; this viewer's existing DM
   // reads read-only. Independent of, and checked after, the deletion case above.
   const dmRestricted = !deleted && conversation.dmWritable === false;
+  const guidance = resolveDirectAgentGuidance({
+    agent: conversation.agent,
+    dmWritable: conversation.dmWritable,
+    display,
+  });
+  const openAgentStatus = props.onOpenAgentProfile
+    ? () => props.onOpenAgentProfile?.(conversation.agent.id)
+    : undefined;
   // A DM carries no member directory: its only member counterpart is the conversation's own
   // Agent, whose messages keep plain text by design. Chip that one handle (display-only) so the
   // stream still reads the Agent's display label.
@@ -245,9 +256,31 @@ export function DirectConversation({
           </div>
         ) : undefined
       }
+      composerBanner={
+        guidance ? (
+          <DirectAgentGuidanceCard
+            variant="banner"
+            guidance={guidance}
+            onOpenAgentProfile={openAgentStatus}
+          />
+        ) : undefined
+      }
       emptyState={{
         title: m.conversation_empty_title({ name: conversation.agent.displayName }),
-        description: m.conversation_empty_description(),
+        description: guidance
+          ? m.dm_agent_empty_unavailable({ name: agentName })
+          : m.conversation_empty_description(),
+        ...(guidance
+          ? {
+              footer: (
+                <DirectAgentGuidanceCard
+                  variant="empty"
+                  guidance={guidance}
+                  onOpenAgentProfile={openAgentStatus}
+                />
+              ),
+            }
+          : {}),
         avatar: {
           name: conversation.agent.displayName,
           src: conversation.agent.avatarUrl,

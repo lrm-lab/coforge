@@ -10,9 +10,10 @@ import {
 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { DialogAction, DialogCancel } from "#src/components/ui/dialog-actions";
+import { DialogAction } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import { WizardShell } from "./onboarding-wizard-frame";
+import { roleStepAction, toggleRoleChoice } from "./onboarding-wizard-plan";
 import { PERSON_ROLES, type PersonRole } from "./person-role";
 
 type RoleIcon = ComponentType<SVGProps<SVGSVGElement> & { color?: string; size?: number }>;
@@ -69,12 +70,13 @@ export function OnboardingRoleStep({
   skip,
 }: {
   role: PersonRole | undefined;
-  onRole: (role: PersonRole) => void;
+  onRole: (role: PersonRole | undefined) => void;
   /** Goes on with the picked role, or with none (`undefined`) when this step is skipped. */
   onNext: (role: PersonRole | undefined) => void;
   /** The quiet "skip setup" on the footer's left. */
   skip: ReactNode;
 }) {
+  const action = roleStepAction(role);
   return (
     <WizardShell
       step="role"
@@ -82,14 +84,13 @@ export function OnboardingRoleStep({
       description={m.onboarding_wizard_role_description()}
       skip={skip}
       actions={
-        <>
-          <DialogCancel onPress={() => onNext(undefined)}>
+        action.mode === "skip_step" ? (
+          <DialogAction color="secondary" onPress={() => onNext(undefined)}>
             {m.onboarding_wizard_role_skip()}
-          </DialogCancel>
-          <DialogAction isDisabled={role === undefined} onPress={() => onNext(role)}>
-            {m.controls_next()}
           </DialogAction>
-        </>
+        ) : (
+          <DialogAction onPress={() => onNext(action.role)}>{m.controls_next()}</DialogAction>
+        )
       }
     >
       <div
@@ -103,7 +104,7 @@ export function OnboardingRoleStep({
             icon={ROLES[value].icon}
             label={ROLES[value].label()}
             selected={role === value}
-            onSelect={() => onRole(value)}
+            onSelect={() => onRole(toggleRoleChoice(role, value))}
           />
         ))}
       </div>

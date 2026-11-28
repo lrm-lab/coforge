@@ -13,6 +13,7 @@ export function DirectThreadedConversation({
   emptyState: {
     title: string;
     description: string;
+    footer?: ThreadedConversationProps["emptyState"]["footer"];
     avatar: { name: string; src?: string | null; userId?: string; agentId?: string };
   };
 }) {

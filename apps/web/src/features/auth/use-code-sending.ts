@@ -16,11 +16,13 @@ type SendProblem = "invalid_destination" | "rate_limited" | "send_failed";
  */
 export function useCodeSending<Problem extends string = SendProblem>({
   destination,
+  isDestinationValid,
   request,
   setProblem,
   onSent,
 }: {
   destination: string;
+  isDestinationValid?: (destination: string) => boolean;
   request: (destination: string) => Promise<{ ok: true } | { ok: false; problem: Problem }>;
   setProblem: (problem: Problem | SendProblem | null) => void;
   onSent?: () => void;
@@ -36,7 +38,8 @@ export function useCodeSending<Problem extends string = SendProblem>({
 
   async function onSend() {
     // The server judges it again; asking here first only spares a round trip.
-    if (!parseCodeDestination(destination)) return setProblem("invalid_destination");
+    const accepts = isDestinationValid ?? ((typed: string) => Boolean(parseCodeDestination(typed)));
+    if (!accepts(destination)) return setProblem("invalid_destination");
     setProblem(null);
     if (secondsLeft > 0) return;
     const result = await guard(async () => {

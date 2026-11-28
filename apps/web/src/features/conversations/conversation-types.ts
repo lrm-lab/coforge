@@ -36,6 +36,9 @@ export type DirectConversationView = {
     displayName: string;
     deletedAt?: Date | null;
     avatarUrl?: string | null;
+    computerId?: string | null;
+    hosting?: "managed" | "external";
+    isAppBot?: boolean;
   };
   /** Whether the viewer may still send here: a private Agent's DM stays scoped to its
    * own creator, so an existing DM held by anyone else reads read-only once it goes private.
@@ -148,10 +151,12 @@ export type ThreadedConversationProps = Omit<ConversationProps, "conversation"> 
   header: ReactNode;
   pinnedStrip?: ReactNode;
   readOnlyNotice?: ReactNode;
+  composerBanner?: ReactNode;
   emptyState: {
     title: string;
     description: string;
     media: ReactNode;
+    footer?: ReactNode;
     singleLineDescription?: boolean;
   };
   threadHeaderAction?: (rootMessageId: string) => ReactNode;

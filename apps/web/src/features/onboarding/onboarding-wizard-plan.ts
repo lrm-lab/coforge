@@ -7,6 +7,7 @@ import {
 } from "#src/features/agents/agent-runtime-options";
 import { computerLabel } from "#src/features/computers/computer-identity";
 import type { loadOnboardingComputers } from "./onboarding-wizard.functions";
+import type { PersonRole } from "./person-role";
 
 /** The setup wizard's steps, in order. */
 export const WIZARD_STEPS = ["computer", "assistant", "role", "handoff"] as const;
@@ -35,6 +36,34 @@ export function wizardLocalComputers<T extends WizardComputer>(computers: readon
 export function initialComputerChoice(computers: readonly WizardComputer[]): ComputerChoice {
   if (wizardLocalComputers(computers).length > 0) return "local";
   return wizardCloudComputer(computers) ? "cloud" : "local";
+}
+
+/** Tracks async cloud computer arrival until the member picks `"local"` explicitly; falls back safely if cloud disappears. */
+export function resolvedComputerChoice(input: {
+  explicitChoice: ComputerChoice | undefined;
+  computers: readonly WizardComputer[];
+}): ComputerChoice {
+  if (input.explicitChoice === "cloud") {
+    return wizardCloudComputer(input.computers) ? "cloud" : "local";
+  }
+  if (input.explicitChoice === "local") return "local";
+  return initialComputerChoice(input.computers);
+}
+
+/** Tapping the active role card clears selection so the member can advance without picking a role. */
+export function toggleRoleChoice(
+  current: PersonRole | undefined,
+  clicked: PersonRole,
+): PersonRole | undefined {
+  return current === clicked ? undefined : clicked;
+}
+
+/** Chooses between skipping the optional role step and continuing with the selected role. */
+export function roleStepAction(role: PersonRole | undefined): {
+  mode: "skip_step" | "next";
+  role: PersonRole | undefined;
+} {
+  return role === undefined ? { mode: "skip_step", role: undefined } : { mode: "next", role };
 }
 
 /** The runtimes the computer reports as usable. */

@@ -58,3 +58,15 @@ export function e164Phone(input: string): string | null {
 export function isSignInCode(value: string): boolean {
   return SIGN_IN_CODE.test(value);
 }
+
+/** Validates destination input per login mode (`email` rejects phone numbers; `phone` accepts either). */
+export function validateCodeSignInDestination(
+  kind: "phone" | "email",
+  input: string,
+): "invalid_destination" | "invalid_email_destination" | null {
+  const parsed = parseCodeDestination(input);
+  if (kind === "email") {
+    return parsed?.kind === "email" ? null : "invalid_email_destination";
+  }
+  return parsed ? null : "invalid_destination";
+}

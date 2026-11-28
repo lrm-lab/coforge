@@ -1,0 +1,15 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "dm_agent_empty_unavailable": "{name} 目前暂时无法回复消息。",
+  "dm_agent_no_computer_title": "{name} 尚未连接电脑",
+  "dm_agent_no_computer_description": "Agent 需要在在线电脑上运行。连接一台电脑后，就能在这里和它对话。",
+  "dm_agent_no_computer_banner": "{name} 尚未连接电脑，连接后才能回复消息。",
+  "dm_agent_offline_title": "{name} 当前离线",
+  "dm_agent_offline_description": "它所在的电脑可能未开启或正在启动。前往「电脑」查看状态并开启运行环境。",
+  "dm_agent_offline_banner": "{name} 当前离线，所在电脑未运行，暂时无法回复。",
+  "dm_agent_external_offline_description": "这是一个外部托管的 Agent，当前未连接到 CoForge。请在其运行的设备上重新启动。",
+  "dm_agent_external_offline_banner": "{name} 当前离线，暂时无法回复消息。",
+  "dm_agent_connect_computer": "去连接电脑",
+  "dm_agent_open_computers": "去开启电脑",
+  "dm_agent_view_status": "查看状态"
+}

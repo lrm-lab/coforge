@@ -1,0 +1,15 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "dm_agent_empty_unavailable": "{name} can't reply right now.",
+  "dm_agent_no_computer_title": "{name} doesn't have a Computer yet",
+  "dm_agent_no_computer_description": "Agents run on an online Computer. Connect one to start chatting here.",
+  "dm_agent_no_computer_banner": "{name} isn't connected to a Computer yet, so it can't reply right now.",
+  "dm_agent_offline_title": "{name} is currently offline",
+  "dm_agent_offline_description": "Its Computer may be turned off or still starting. Open Computers to check its status and start it.",
+  "dm_agent_offline_banner": "{name} is offline while its Computer isn't running.",
+  "dm_agent_external_offline_description": "This external Agent isn't connected right now. Restart it on the machine where it runs.",
+  "dm_agent_external_offline_banner": "{name} is currently offline and can't reply right now.",
+  "dm_agent_connect_computer": "Connect a Computer",
+  "dm_agent_open_computers": "Open Computers",
+  "dm_agent_view_status": "View status"
+}

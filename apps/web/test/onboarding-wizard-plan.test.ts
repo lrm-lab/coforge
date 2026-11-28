@@ -7,6 +7,9 @@ import {
   defaultRuntimeProvider,
   initialComputerChoice,
   localConnectionChecks,
+  resolvedComputerChoice,
+  roleStepAction,
+  toggleRoleChoice,
   wizardCloudComputer,
   wizardLocalComputers,
   type WizardComputer,
@@ -150,4 +153,29 @@ test("the local connection checks tick in order, and only the first pending one 
   expect(
     statuses(localConnectionChecks({ approved: true, computer: { ...detected, online: false } })),
   ).toEqual(["complete", "current", "incomplete"]);
+});
+
+test("resolvedComputerChoice tracks cloud computer arrival unless the member picked local explicitly", () => {
+  const mine = computer({ id: "mine" });
+  expect(resolvedComputerChoice({ explicitChoice: undefined, computers: [] })).toBe("local");
+  expect(resolvedComputerChoice({ explicitChoice: undefined, computers: [cloud] })).toBe("cloud");
+  expect(resolvedComputerChoice({ explicitChoice: undefined, computers: [cloud, mine] })).toBe(
+    "local",
+  );
+  // Explicit pick stays pinned even when a cloud computer exists or arrives.
+  expect(resolvedComputerChoice({ explicitChoice: "local", computers: [cloud] })).toBe("local");
+  expect(resolvedComputerChoice({ explicitChoice: "cloud", computers: [cloud, mine] })).toBe(
+    "cloud",
+  );
+  // Missing cloud computer falls back safely instead of sticking on a disabled option.
+  expect(resolvedComputerChoice({ explicitChoice: "cloud", computers: [] })).toBe("local");
+});
+
+test("role step toggles selection and switches between skip_step and next without duplicate skips", () => {
+  expect(toggleRoleChoice(undefined, "designer")).toBe("designer");
+  expect(toggleRoleChoice("designer", "designer")).toBeUndefined();
+  expect(toggleRoleChoice("designer", "engineer")).toBe("engineer");
+
+  expect(roleStepAction(undefined)).toEqual({ mode: "skip_step", role: undefined });
+  expect(roleStepAction("designer")).toEqual({ mode: "next", role: "designer" });
 });

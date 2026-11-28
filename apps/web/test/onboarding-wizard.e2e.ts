@@ -151,7 +151,7 @@ test("a first sign-in lands in the setup wizard, and finishing or skipping it op
     await db.agent.update({ where: { id: assistant.agentId }, data: { computerId: cloud.id } });
     await finisher.browser("screenshot", join(artifacts, "step-1-local-install.png"));
     await finisher.waitFor(dialogShows("Starting"));
-    // The selection stays where the member was when the wizard opened: they pick the cloud card.
+    // Once the cloud computer arrives, the wizard selects it automatically; clicking the card keeps it selected.
     await finisher.browser(
       "eval",
       `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.includes("Cloud computer")).click()`,

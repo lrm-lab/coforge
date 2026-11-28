@@ -19,7 +19,7 @@ import { OnboardingWizardModal, WizardShell } from "./onboarding-wizard-frame";
 import {
   canLeaveComputerStep,
   computerSelection,
-  initialComputerChoice,
+  resolvedComputerChoice,
   type ComputerChoice,
   type WizardComputer,
   type WizardStep,
@@ -74,9 +74,6 @@ export function OnboardingWizard({
   const configure = useServerFn(configureOnboardingAssistant);
   const complete = useServerFn(completeOnboardingWizard);
   const [step, setStep] = useState<WizardStep>("computer");
-  // The choice the member starts on is fixed when the wizard opens: a computer appearing later
-  // (a cloud row, a freshly connected one) is shown but never moves the selection under them.
-  const [initialChoice] = useState(() => initialComputerChoice(initial.computers));
   const [choice, setChoice] = useState<ComputerChoice>();
   const [connecting, setConnecting] = useState(false);
   const [localId, setLocalId] = useState<string>();
@@ -91,7 +88,9 @@ export function OnboardingWizard({
   const [finishing, guard] = useSubmitGuard();
 
   function selectionOf(rows: readonly WizardComputer[]) {
-    const current = choice ?? initialChoice;
+    // Follow async cloud arrival while the member has not made an explicit choice; once they tap
+    // "Your computer", stay on it across polls.
+    const current = resolvedComputerChoice({ explicitChoice: choice, computers: rows });
     return {
       current,
       ...computerSelection({ computers: rows, choice: current, pickedLocalId: localId, knownIds }),

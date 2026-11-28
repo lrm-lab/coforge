@@ -11,10 +11,12 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation"> & {
   header?: ReactNode;
   pinnedStrip?: ReactNode;
   readOnlyNotice?: ReactNode;
+  composerBanner?: ReactNode;
   emptyState: {
     title: string;
     description: string;
     media: ReactNode;
+    footer?: ReactNode;
     singleLineDescription?: boolean;
   };
   streamRead?: StreamRead;

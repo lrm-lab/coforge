@@ -85,6 +85,8 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
               avatarMascot: true,
               ownerId: true,
               visibility: true,
+              computerId: true,
+              hosting: true,
               appBot: APP_BOT_LOGO_SELECT,
             },
           },
@@ -223,6 +225,9 @@ export async function openConversationForUser(
             displayName: agent.displayName,
             deletedAt: agent.deletedAt,
             avatarUrl: agentFaceUrl(agent),
+            ...(agent.computerId !== undefined ? { computerId: agent.computerId } : {}),
+            ...(agent.hosting === "external" ? { hosting: "external" as const } : {}),
+            ...(agent.appBot ? { isAppBot: true as const } : {}),
           },
           dmWritable: canDirectMessageAgent(userId, agent),
           ...(agentMember

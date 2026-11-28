@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -8,7 +8,7 @@ import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { scheduleFocusInvalidField } from "#src/lib/form-field-error";
 import { m } from "#src/paraglide/messages";
 import { useLoginArt } from "./login-art-state";
-import { isSignInCode, parseCodeDestination } from "./code-destination";
+import { isSignInCode, validateCodeSignInDestination } from "./code-destination";
 import { CodeInput, codeProblemText, SendCodeRow } from "./send-code-row";
 import { requestSignInCode, signInWithCode } from "./sign-in-code.functions";
 import { useCodeSending } from "./use-code-sending";
@@ -16,6 +16,14 @@ import { useCodeSending } from "./use-code-sending";
 type Problem = keyof typeof problemText;
 
 const problemText = { ...codeProblemText, failed: () => m.login_failed() };
+
+function destinationErrorText(
+  problem: "invalid_destination" | "invalid_email_destination",
+): string {
+  return problem === "invalid_email_destination"
+    ? m.login_invalid_email_destination()
+    : problemText.invalid_destination();
+}
 
 export function CodeSignInForm({
   returnTo,
@@ -29,6 +37,7 @@ export function CodeSignInForm({
   const send = useServerFn(requestSignInCode);
   const submit = useServerFn(signInWithCode);
   const formRef = useRef<HTMLFormElement>(null);
+  const autoSignupHintId = useId();
   const [formProblem, setFormProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
   const art = useLoginArt();
@@ -63,7 +72,14 @@ export function CodeSignInForm({
     }
     if (next === "invalid_destination") {
       setFormProblem(null);
-      setFieldServerError(form, "destination", problemText.invalid_destination(), formRef.current);
+      setFieldServerError(
+        form,
+        "destination",
+        destinationErrorText(
+          kind === "email" ? "invalid_email_destination" : "invalid_destination",
+        ),
+        formRef.current,
+      );
       return;
     }
     if (next === "invalid_code") {
@@ -85,27 +101,39 @@ export function CodeSignInForm({
         }}
       >
         <div className="flex flex-col gap-5">
-          <form.AppField
-            name="destination"
-            validators={{
-              onSubmit: ({ value }) =>
-                parseCodeDestination(value) ? undefined : problemText.invalid_destination(),
-            }}
-          >
-            {(field) => (
-              <field.Input
-                size="lg"
-                placeholder={
-                  kind === "email" ? m.login_email_placeholder() : m.login_phone_placeholder()
-                }
-                autoComplete="username"
-                onChange={() => setFormProblem(null)}
-              />
-            )}
-          </form.AppField>
+          <div className="flex flex-col gap-2">
+            {/* Placed above the input so autocomplete popovers do not cover it while typing. */}
+            <p id={autoSignupHintId} className="text-sm text-tertiary">
+              {kind === "email"
+                ? m.login_email_auto_signup_hint()
+                : m.login_phone_auto_signup_hint()}
+            </p>
+            <form.AppField
+              name="destination"
+              validators={{
+                onSubmit: ({ value }) => {
+                  const invalid = validateCodeSignInDestination(kind, value);
+                  return invalid ? destinationErrorText(invalid) : undefined;
+                },
+              }}
+            >
+              {(field) => (
+                <field.Input
+                  size="lg"
+                  placeholder={
+                    kind === "email" ? m.login_email_placeholder() : m.login_phone_placeholder()
+                  }
+                  aria-describedby={autoSignupHintId}
+                  autoComplete="username"
+                  onChange={() => setFormProblem(null)}
+                />
+              )}
+            </form.AppField>
+          </div>
           <form.Subscribe selector={(state) => state.values.destination}>
             {(destination) => (
               <CodeSignInCodeRow
+                kind={kind}
                 destination={destination}
                 send={(typed) => send({ data: { destination: typed } })}
                 reportProblem={reportProblem}
@@ -166,11 +194,13 @@ export function CodeSignInForm({
 }
 
 function CodeSignInCodeRow({
+  kind,
   destination,
   send,
   reportProblem,
   renderField,
 }: {
+  kind: "phone" | "email";
   destination: string;
   send: (typed: string) => Promise<{ ok: true } | { ok: false; problem: Problem }>;
   reportProblem: (problem: Problem | null) => void;
@@ -178,6 +208,7 @@ function CodeSignInCodeRow({
 }) {
   const codeSending = useCodeSending<Problem>({
     destination,
+    isDestinationValid: (typed) => validateCodeSignInDestination(kind, typed) === null,
     request: send,
     setProblem: reportProblem,
   });

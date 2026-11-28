@@ -19,6 +19,7 @@ export function ConversationComposerFooter({
   narrow,
   column,
   readOnlyNotice,
+  composerBanner,
   mentionCompletion,
   mentionMemberLimit,
   composerTarget,
@@ -33,6 +34,7 @@ export function ConversationComposerFooter({
   narrow: boolean;
   column: boolean;
   readOnlyNotice?: ReactNode;
+  composerBanner?: ReactNode;
   mentionCompletion: boolean;
   mentionMemberLimit?: number;
   composerTarget?: string;
@@ -53,7 +55,8 @@ export function ConversationComposerFooter({
   return (
     <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
       {!narrow && <ConversationUpdateNotice conversation={conversation} />}
-      {!readOnlyNotice && !narrow && !selecting && (
+      {!readOnlyNotice && !narrow && !selecting && composerBanner}
+      {!readOnlyNotice && !composerBanner && !narrow && !selecting && (
         <div data-conversation-notification-banner="">
           <NotificationActivationBanner />
         </div>

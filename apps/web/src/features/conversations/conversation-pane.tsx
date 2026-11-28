@@ -46,6 +46,7 @@ export function ConversationPane({
   header,
   pinnedStrip,
   readOnlyNotice,
+  composerBanner,
   emptyState,
   streamRead = "settled",
   onSend,
@@ -248,6 +249,9 @@ export function ConversationPane({
       narrow={narrow}
       column={column}
       readOnlyNotice={readOnlyNotice}
+      composerBanner={
+        !root && (visibleMessages.length > 0 || shownOutbox.length > 0) ? composerBanner : undefined
+      }
       mentionCompletion={mentionCompletion}
       mentionMemberLimit={mentionMemberLimit}
       composerTarget={composerTarget}
