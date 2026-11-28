@@ -6,7 +6,7 @@ import { hideUsernamesRun } from "./helpers/hide-usernames-e2e";
  * A person is shown by their name, never by their `@username`. Settings → Account edits one
  * required display name (the username is not shown or editable); Settings → Members, its Invite
  * dialog (the join link alone, no invite by username) and the Members directory list people by
- * their names. Channels and Search: `e2e-hide-usernames-channels.e2e.ts`.
+ * their names.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database, seeded by `hideUsernamesRun`.

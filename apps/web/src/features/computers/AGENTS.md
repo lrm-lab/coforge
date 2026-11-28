@@ -120,8 +120,7 @@ provider)`, with its count and account label fixed when it opens.
   (`computer-runtimes.tsx`). The account is the popover's last band:
   the login state beside one button of the same weight signed in or out (Frank,
   2026-10-27). It and the Public switch stay in view while the bands
-  above them scroll, so a phone never cuts an action off
-  (`test/e2e-runtime-account-band.e2e.ts`). The dialogs subscribe to the viewer's
+  above them scroll, so a phone never cuts an action off. The dialogs subscribe to the viewer's
   `runtimeauth:user:<id>` channel and then read the login or logout once, and
   `runtime-auth-login-state.ts` drops whatever both deliver, so a view only
   moves a login forward. A device code, a pasted code and a sign-in link live
