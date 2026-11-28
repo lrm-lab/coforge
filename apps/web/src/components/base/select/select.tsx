@@ -1,8 +1,8 @@
 import type { FC, ReactNode, Ref, RefAttributes } from "react";
-import { isValidElement } from "react";
+import { isValidElement, useId } from "react";
 import { ChevronDown } from "@untitledui/icons";
 import type { SelectProps as AriaSelectProps } from "react-aria-components";
-import { Button as AriaButton, ListBox as AriaListBox, Select as AriaSelect, SelectValue as AriaSelectValue } from "react-aria-components";
+import { Button as AriaButton, ListBox as AriaListBox, Select as AriaSelect, SelectValue as AriaSelectValue, TextContext } from "react-aria-components";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { FIELD_STATES } from "#src/components/base/input/field-states";
 import { HintText } from "#src/components/base/input/hint-text";
@@ -99,9 +99,11 @@ const SelectValue = ({ isOpen, isFocused, isDisabled, isInvalid, size, placehold
 };
 
 const Select = ({ placeholder = "Select", icon, size = "md", children, items, label, hint, tooltip, hideRequiredIndicator, className, wrapValue, ...rest }: SelectProps) => {
+    const hintId = useId();
+    const describedBy = [rest["aria-describedby"], hint ? hintId : undefined].filter(Boolean).join(" ") || undefined;
     return (
         <SelectContext.Provider value={{ size }}>
-            <AriaSelect {...rest} className={(state) => cx("flex flex-col gap-1.5", typeof className === "function" ? className(state) : className)}>
+            <AriaSelect {...rest} aria-describedby={describedBy} className={(state) => cx("flex flex-col gap-1.5", typeof className === "function" ? className(state) : className)}>
                 {(state) => (
                     <>
                         {label && (
@@ -119,9 +121,11 @@ const Select = ({ placeholder = "Select", icon, size = "md", children, items, la
                         </Popover>
 
                         {hint && (
-                            <HintText isInvalid={state.isInvalid} className={cx(size === "sm" && "text-xs")}>
-                                {hint}
-                            </HintText>
+                            <TextContext.Provider value={{}}>
+                                <HintText id={hintId} isInvalid={state.isInvalid} className={cx(size === "sm" && "text-xs")}>
+                                    {hint}
+                                </HintText>
+                            </TextContext.Provider>
                         )}
                     </>
                 )}

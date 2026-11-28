@@ -39,6 +39,7 @@ import {
 import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer-upgrade-slot";
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
+import { publicRuntimesHint } from "./public-runtimes-hint";
 import type { RuntimeCatalogRefreshResult } from "./runtime-catalog-refresh-poll";
 import { RuntimeRescanFeedback } from "./runtime-rescan-feedback";
 import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
@@ -137,6 +138,7 @@ export function ComputerDetail({
   const resolvedCreator = computer.creator ? humanLabel(computer.creator) : "";
   const creatorName =
     resolvedCreator === UNNAMED_PERSON_NAME ? m.computer_detail_creator_unnamed() : resolvedCreator;
+  const ownerPublicRuntimesHint = publicRuntimesHint(computer);
   const {
     isCloud,
     currentVersion,
@@ -292,6 +294,9 @@ export function ComputerDetail({
       ) : (
         <p className="text-sm text-tertiary">{m.computer_no_code_agents()}</p>
       )}
+      {ownerPublicRuntimesHint ? (
+        <p className="mt-2 text-xs text-tertiary wrap-anywhere">{ownerPublicRuntimesHint}</p>
+      ) : null}
       {detectionStatus === "detecting_with_list" ? (
         <p className="mt-1 text-sm text-tertiary" role="status">
           {m.computer_runtime_detection_pending()}
@@ -460,6 +465,7 @@ export function ComputerDetail({
               kind: computer.kind,
               name: computer.name,
               displayName: computer.displayName,
+              creator: computer.creator,
               online: computer.online,
               platform: computer.platform,
               ownedByCurrentUser: computer.ownedByCurrentUser,
