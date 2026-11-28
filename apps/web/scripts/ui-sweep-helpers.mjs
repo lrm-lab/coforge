@@ -1,8 +1,3 @@
-/**
- * @param {any} element
- * @param {number} viewportWidth
- * @param {(element: any) => { overflowX: string }} getStyle
- */
 export function isInsideViewportScroller(element, viewportWidth, getStyle = getComputedStyle) {
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
     const overflowX = getStyle(parent).overflowX;
