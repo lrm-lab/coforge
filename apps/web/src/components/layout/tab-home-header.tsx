@@ -7,12 +7,6 @@ import { NotificationBell } from "#src/features/usage-limits/notification-bell";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
-/**
- * The header every tab home shows on a phone, below `lg`: the CoForge mark that opens the
- * Workspace switcher, the page's title, the busy Agents filling the space after it, and the
- * notification bell. `actions` follow the bell (Chat's "new conversation"). A desktop has these
- * in the sidebar instead.
- */
 export function TabHomeHeader({
   title,
   meta,
@@ -20,9 +14,7 @@ export function TabHomeHeader({
   actions,
 }: {
   title: string;
-  /** Status that belongs beside the title (Chat's connection state). */
   meta?: ReactNode;
-  /** The busy Agents; Chat ranks the ones it has a Direct message with. */
   agents?: ReactNode;
   actions?: ReactNode;
 }) {
@@ -42,8 +34,6 @@ export function TabHomeHeader({
   );
 }
 
-/** A tab page's one header (Workspace, Me): the tab home's below `lg`, the plain page header from
- * `lg` up, where the page is an ordinary page beside the sidebar. */
 export function TabPageHeader({ title }: { title: string }) {
   return useBreakpoint("lg") ? (
     <PageHeader leading={null} heading={title} />

@@ -4,9 +4,7 @@ const twMerge = extendTailwindMerge({
   extend: {
     theme: {
       text: ["display-xs", "display-sm", "display-md", "display-lg", "display-xl", "display-2xl"],
-      // The page gutter (`--spacing-page` in styles.css), so `px-page` overrides `px-4`.
       spacing: ["page"],
-      // Untitled's own shadows (`--shadow-*` in theme.css), so `shadow-none` overrides them.
       shadow: [
         "skeuomorphic",
         "xs-skeuomorphic",
@@ -21,17 +19,8 @@ const twMerge = extendTailwindMerge({
   },
 });
 
-/**
- * This function is a wrapper around the twMerge function.
- * It is used to merge the classes inside style objects.
- */
 export const cx = twMerge;
 
-/**
- * This function does nothing besides helping us to be able to
- * sort the classes inside style objects which is not supported
- * by the Tailwind IntelliSense by default.
- */
 export function sortCx<
   T extends Record<
     string,

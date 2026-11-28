@@ -48,12 +48,6 @@ export function useAgentProfileTabsForProfile(
   return useAgentProfileTabOrder(canManage, canSeeApps, canSeeChat, canSeeUsage);
 }
 
-/**
- * The panel's second band: the reorderable tab strip above the band's bottom rule.
- * The strip scrolls sideways when its tabs do not fit instead of pushing the
- * panel wider, keeping the selected tab in view; the rule stays put. An edge with more tabs past
- * it fades out, so a tab cut off there reads as "scroll for more" rather than as a clipped label.
- */
 export function AgentProfileTabs({
   active,
   tabs,
@@ -65,7 +59,6 @@ export function AgentProfileTabs({
   onSelect: (tab: AgentProfileTab) => void;
   onReorder: (order: AgentProfileTab[]) => void;
 }) {
-  // Each tab's width (a label grows once its font arrives) moves the edges too.
   const fade = useScrollEdges("x", { observe: '[role="tab"]', key: tabs.join(" ") });
   return (
     <div className="relative shrink-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary">
