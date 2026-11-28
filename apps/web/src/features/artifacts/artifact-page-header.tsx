@@ -5,7 +5,7 @@ import type { ReactNode, RefObject } from "react";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { PANE_HEADER_ATTR } from "#src/components/layout/pane-header";
+import { PANE_HEADER_MULTILINE_MOBILE_ATTR } from "#src/components/layout/pane-header";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
@@ -72,7 +72,7 @@ export function ArtifactPageHeader({
 
   return (
     <header
-      {...PANE_HEADER_ATTR}
+      {...PANE_HEADER_MULTILINE_MOBILE_ATTR}
       className={cn(
         "@container/header flex min-h-pane-header shrink-0 items-center gap-1.5 border-b border-secondary py-1.5 sm:h-pane-header sm:gap-2 sm:py-0",
         pane ? "pr-2 pl-4" : "px-3 sm:px-4",

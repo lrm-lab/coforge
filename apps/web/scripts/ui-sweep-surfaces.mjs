@@ -9,6 +9,8 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
 
   const url = (p) => `${BASE_URL}/${LOCALE}/w/${ids.workspaceSlug}${p}`;
 
+  const taskChannelId = ids.channelTaskChannelId ?? ids.channelId;
+
   const surfaces = [
     { key: "agents-list", url: url("/members") },
     ids.agentId && {
@@ -45,6 +47,48 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       },
     },
     ids.dmId && { key: "dm-conversation", url: url(`/dm/${ids.dmId}`) },
+    ids.dmId &&
+      ids.agentId && {
+        key: "dm-agent-profile",
+        url: url(`/dm/${ids.dmId}?profile=agent:${ids.agentId}`),
+        prepare: async (page) => {
+          await waitForPanelSettled(page, '[data-split-slot="profile"]');
+        },
+      },
+    ids.channelId && {
+      key: "channel-settings-panel",
+      url: url(`/channel/${ids.channelId}?details=panel`),
+      prepare: async (page) => {
+        await waitForPanelSettled(page, '[data-split-slot="details"]');
+      },
+    },
+    ids.channelId && {
+      key: "channel-settings-members",
+      url: url(`/channel/${ids.channelId}?details=members`),
+      prepare: async (page) => {
+        await waitForPanelSettled(page, '[data-split-slot="details"]');
+      },
+    },
+    taskChannelId &&
+      ids.channelTaskNumber && {
+        key: "channel-task-split",
+        url: url(`/channel/${taskChannelId}?task=${ids.channelTaskNumber}`),
+        prepare: async (page) => {
+          await waitForPanelSettled(page, "[data-task-detail]");
+        },
+      },
+    {
+      key: "activity-detail-split",
+      url: url("/activity"),
+      prepare: async (page) => {
+        const rect = await page.findRectBySelector(
+          "[data-tab-home-scroll] [data-activity-row]:not([data-activity-artifact]) a[href]",
+        );
+        if (!rect) return "could not find an activity row to open the detail pane";
+        await page.clickRect(rect);
+        await sleepScript(700);
+      },
+    },
     { key: "tasks-board", url: url("/tasks?layout=board") },
     { key: "tasks-list", url: url("/tasks?layout=list") },
     { key: "computers-list", url: url("/computers") },
@@ -171,4 +215,27 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
 
 function sleepScript(ms) {
   return sleep(ms);
+}
+
+async function waitForPanelSettled(page, selector) {
+  for (let waited = 0; waited < 2000; waited += 100) {
+    const settled = await page.evalJs(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.right > window.innerWidth + 1) return false;
+      let cur = el;
+      while (cur && cur !== document.body) {
+        const t = getComputedStyle(cur).transform;
+        if (t && t !== "none" && t !== "matrix(1, 0, 0, 1, 0, 0)") return false;
+        cur = cur.parentElement;
+      }
+      return true;
+    })()`);
+    if (settled) {
+      await sleepScript(100);
+      break;
+    }
+    await sleepScript(100);
+  }
 }

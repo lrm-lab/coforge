@@ -47,6 +47,8 @@ async function discoverIds(page) {
     computerId: null,
     channelId: null,
     dmId: null,
+    channelTaskChannelId: null,
+    channelTaskNumber: null,
   };
 
   const extract = (linkPattern) => `(() => {
@@ -57,6 +59,31 @@ async function discoverIds(page) {
       if (match) return match[1];
     }
     return null;
+  })()`;
+
+  const extractPair = (linkPattern, allowedFirst = null) => `(() => {
+    const re = new RegExp(${JSON.stringify(linkPattern)});
+    const allowed = ${allowedFirst ? `new Set(${JSON.stringify(allowedFirst)})` : "null"};
+    for (const a of document.querySelectorAll('a[href]')) {
+      const href = a.getAttribute('href');
+      const match = href.match(re);
+      if (match && (!allowed || allowed.has(match[1]))) return [match[1], match[2]];
+    }
+    return null;
+  })()`;
+
+  const extractAll = (linkPattern, limit = 5) => `(() => {
+    const re = new RegExp(${JSON.stringify(linkPattern)});
+    const seen = [];
+    for (const a of document.querySelectorAll('a[href]')) {
+      const href = a.getAttribute('href');
+      const match = href.match(re);
+      if (match && !seen.includes(match[1])) {
+        seen.push(match[1]);
+        if (seen.length >= ${limit}) break;
+      }
+    }
+    return seen;
   })()`;
 
   await page.navigate(`${BASE_URL}/${LOCALE}`);
@@ -78,8 +105,34 @@ async function discoverIds(page) {
   ids.computerId = await page.evalJs(extract(`${workspace}/computer/([0-9a-fA-F-]{36})(?:[/?]|$)`));
 
   await page.navigate(`${BASE_URL}${workspace}`);
-  ids.channelId = await page.evalJs(extract(`${workspace}/channel/([0-9a-fA-F-]{36})(?:[/?]|$)`));
+  const channelIds = await page.evalJs(
+    extractAll(`${workspace}/channel/([0-9a-fA-F-]{36})(?:[/?]|$)`, 5),
+  );
+  ids.channelId = channelIds[0] ?? null;
   ids.dmId = await page.evalJs(extract(`${workspace}/dm/([0-9a-fA-F-]{36})(?:[/?]|$)`));
+
+  if (channelIds.length > 0) {
+    await page.navigate(`${BASE_URL}${workspace}/tasks?layout=list`);
+    const taskPair =
+      (await page.evalJs(extractPair(`task=([0-9a-fA-F-]{36})(?::|%3A)(\\d+)`, channelIds))) ||
+      (await page.evalJs(extractPair(`channel/([0-9a-fA-F-]{36})[^"']*[?&]task=(\\d+)`)));
+    if (taskPair) {
+      ids.channelTaskChannelId = taskPair[0];
+      ids.channelTaskNumber = taskPair[1];
+    } else {
+      for (const cid of channelIds) {
+        await page.navigate(`${BASE_URL}${workspace}/channel/${cid}?task=1`);
+        const hasTaskDetail = await page.evalJs(
+          `Boolean(document.querySelector('[data-task-detail]'))`,
+        );
+        if (hasTaskDetail) {
+          ids.channelTaskChannelId = cid;
+          ids.channelTaskNumber = "1";
+          break;
+        }
+      }
+    }
+  }
 
   return ids;
 }

@@ -1,4 +1,8 @@
-import { isInsideViewportScroller } from "./ui-sweep-helpers.mjs";
+import {
+  findPaneHeaderMisalignments,
+  isInsideViewportScroller,
+  resolveHorizontalDividerRule,
+} from "./ui-sweep-helpers.mjs";
 
 const FORBIDDEN_CLASS_PATTERNS = [
   {
@@ -19,6 +23,8 @@ export const CHECKS_EXPR = `
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const isInsideViewportScroller = ${isInsideViewportScroller.toString()};
+  const findPaneHeaderMisalignments = ${findPaneHeaderMisalignments.toString()};
+  const resolveHorizontalDividerRule = ${resolveHorizontalDividerRule.toString()};
 
   function locator(el) {
     if (!el) return null;
@@ -76,7 +82,19 @@ export const CHECKS_EXPR = `
     }
   }
 
-  const h1 = document.querySelector("h1");
+  const allH1s = Array.from(document.querySelectorAll("h1"));
+  const h1 =
+    allH1s.find((el) => {
+      if (el.closest('[inert], [aria-hidden="true"]')) return false;
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) === 0) {
+        return false;
+      }
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }) ??
+    allH1s[0] ??
+    null;
   const overlayOpen = document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]');
   if (!h1) {
     findings.push({ check: "missing-h1", detail: "no <h1> found on the page" });
@@ -177,6 +195,130 @@ export const CHECKS_EXPR = `
       break;
     }
     walker = walker.parentElement;
+  }
+
+  const round10 = (v) => Math.round(v * 10) / 10;
+  const isVisiblePaneNode = (el) => {
+    if (!el || el.closest('[inert], [aria-hidden="true"], [role="dialog"]')) return false;
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) === 0) {
+      return false;
+    }
+    if (
+      typeof el.checkVisibility === "function" &&
+      !el.checkVisibility({ visibilityProperty: true, opacityProperty: true })
+    ) {
+      return false;
+    }
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    if (r.right <= 1 || r.left >= vw - 1 || r.bottom <= 0 || r.top >= vh) return false;
+    return true;
+  };
+
+  const visibleHeaders = [];
+  for (const el of document.querySelectorAll("[data-pane-header]")) {
+    if (!isVisiblePaneNode(el)) continue;
+    const r = el.getBoundingClientRect();
+    visibleHeaders.push({
+      el,
+      r,
+      div: resolveHorizontalDividerRule(r, getComputedStyle(el), getComputedStyle(el, "::before")),
+    });
+  }
+  const visibleSubbars = [];
+  for (const el of document.querySelectorAll("[data-pane-header-subbar]")) {
+    if (!isVisiblePaneNode(el)) continue;
+    const r = el.getBoundingClientRect();
+    visibleSubbars.push({
+      el,
+      r,
+      div: resolveHorizontalDividerRule(r, getComputedStyle(el), getComputedStyle(el, "::before")),
+    });
+  }
+  const usedSubbars = new Set();
+  const paneRecords = [];
+  for (const h of visibleHeaders) {
+    const { el, r, div } = h;
+    let subbar = visibleSubbars.find((s) => !usedSubbars.has(s.el) && el.contains(s.el));
+    if (!subbar) {
+      let best = null;
+      for (const s of visibleSubbars) {
+        if (usedSubbars.has(s.el) || s.el.contains(el)) continue;
+        const overlap = Math.min(r.right, s.r.right) - Math.max(r.left, s.r.left);
+        if (overlap <= Math.min(r.width, s.r.width) * 0.5) continue;
+        if (s.r.top < r.bottom - 1.5 || s.r.top > r.bottom + 200) continue;
+        const blockedByHeader = visibleHeaders.some(
+          (other) =>
+            other.el !== el &&
+            Math.min(other.r.right, s.r.right) - Math.max(other.r.left, s.r.left) >
+              Math.min(other.r.width, s.r.width) * 0.5 &&
+            other.r.top >= r.bottom - 1 &&
+            other.r.bottom <= s.r.top + 1,
+        );
+        if (blockedByHeader) continue;
+        if (!best || s.r.top < best.r.top) best = s;
+      }
+      subbar = best;
+    }
+    if (subbar) usedSubbars.add(subbar.el);
+
+    const containedSubbar = Boolean(subbar && el.contains(subbar.el));
+    let row1HasDivider = false;
+    let row1Y = null;
+    let row2HasDivider = false;
+    let row2Y = null;
+    if (containedSubbar) {
+      const hasInternalBefore =
+        div.beforeRuleY !== null && div.beforeRuleY > r.top + 1 && div.beforeRuleY < r.bottom - 1;
+      row1HasDivider = hasInternalBefore;
+      row1Y = hasInternalBefore ? div.beforeRuleY : null;
+      const hasBottomBefore =
+        div.beforeRuleY !== null && Math.abs(div.beforeRuleY - r.bottom) <= 1.5;
+      row2HasDivider = div.hasBottomBorder || hasBottomBefore;
+      row2Y = hasBottomBefore ? div.beforeRuleY : round10(r.bottom);
+    } else {
+      const hasHeaderBottomBefore =
+        div.beforeRuleY !== null && Math.abs(div.beforeRuleY - r.bottom) <= 1.5;
+      row1HasDivider = div.hasBottomBorder || hasHeaderBottomBefore;
+      row1Y = hasHeaderBottomBefore ? div.beforeRuleY : round10(r.bottom);
+      if (subbar) {
+        const hasSubbarBottomBefore =
+          subbar.div.beforeRuleY !== null &&
+          Math.abs(subbar.div.beforeRuleY - subbar.r.bottom) <= 1.5;
+        row2HasDivider = subbar.div.hasBottomBorder || hasSubbarBottomBefore;
+        row2Y = hasSubbarBottomBefore ? subbar.div.beforeRuleY : round10(subbar.r.bottom);
+      }
+    }
+
+    const bottomY = subbar ? Math.max(r.bottom, subbar.r.bottom) : r.bottom;
+    paneRecords.push({
+      locator: locator(el),
+      left: round10(r.left),
+      right: round10(r.right),
+      top: round10(r.top),
+      bottom: round10(r.bottom),
+      totalHeight: round10(bottomY - r.top),
+      borderless: Boolean(el.closest("[data-sidebar]")),
+      multilineMobile: el.getAttribute("data-pane-header") === "multiline-mobile",
+      row1HasDivider,
+      row1Y,
+      hasSubbar: Boolean(subbar),
+      subbarTop: subbar ? round10(subbar.r.top) : null,
+      row2HasDivider,
+      row2Y,
+    });
+  }
+
+  const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const isCoarse = window.matchMedia("(any-pointer: coarse)").matches;
+  const paneFindings = findPaneHeaderMisalignments(paneRecords, {
+    viewportWidth: vw,
+    expectedHeaderHeight: round10(rootFontSize * 3),
+    expectedSubbarHeight: round10(rootFontSize * (isCoarse ? 2.75 : 2.25)),
+  });
+  for (const finding of paneFindings) {
+    findings.push(finding);
   }
 
   return {
