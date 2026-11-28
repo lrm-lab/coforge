@@ -11,11 +11,6 @@ import { useBodyWithArtifactTitles } from "#src/features/artifacts/artifact-card
 import { MessageBody } from "./message-body";
 import { groupsWithPrevious, type MessageView } from "./message-view";
 
-/**
- * What a share image shows: the messages as a stream draws them, a sender's run under one heading,
- * and at the foot, quietly, where they come from. It follows the viewer's theme, as the image is
- * what they see. `height` is the least it fills, for an image of a fixed ratio.
- */
 const noopSubscribe = () => () => {};
 const readLocationHost = () => window.location.host;
 const serverLocationHost = () => "";

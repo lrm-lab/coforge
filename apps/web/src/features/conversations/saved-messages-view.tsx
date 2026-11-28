@@ -139,7 +139,6 @@ function SavedMessageCard({
     if (key === "copy-link") {
       copy(new URL(href, window.location.origin).href, m.conversation_saved_link_copied());
     } else if (key === "copy-markdown" && message.body) {
-      // Markdown source as typed, with mentions and task references spelled out.
       copy(
         messagePlainText({ body: message.body, mentions: message.mentions }),
         m.conversation_copy_as_markdown_success(),
@@ -154,10 +153,6 @@ function SavedMessageCard({
       <Fold open={!leaving} variant="dismiss">
         <div className="pb-2">
           <div className="flex items-start gap-2 rounded-xl border border-secondary bg-primary p-3 transition-colors select-none [-webkit-touch-callout:none] hover:bg-secondary">
-            {/* The card is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
-          can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
-          navigation (react-aria.adobe.com/Link, client-side routing). A left click stays an
-          ordinary jump. */}
             <Dropdown.Root trigger="contextMenu">
               <AriaLink
                 href={href}
@@ -194,8 +189,6 @@ function SavedMessageCard({
                     <RelativeTime value={message.createdAt} />
                   </span>
                 </div>
-                {/* Every card is the same size: a plain-text excerpt in one type size, always two lines
-              tall, the rest hidden. */}
                 <p className="mt-1 line-clamp-2 h-10 text-sm break-words text-secondary">
                   {actionCardPreviewText(message.card) ||
                     (message.body
