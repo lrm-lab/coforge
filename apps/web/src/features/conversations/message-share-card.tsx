@@ -5,11 +5,18 @@ import { formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { cn } from "#src/lib/utils";
 import { getLocale } from "#src/paraglide/runtime";
+import { m } from "#src/paraglide/messages";
 import { MessageAttachments } from "./attachment-card";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import { useBodyWithArtifactTitles } from "#src/features/artifacts/artifact-card";
 import { MessageBody } from "./message-body";
 import { groupsWithPrevious, type MessageView } from "./message-view";
+import {
+  RoutedFeedbackAvatar,
+  RoutedFeedbackBody,
+  RoutedFeedbackCategoryBadge,
+} from "./routed-feedback-body";
+import { parseRoutedFeedbackMessage } from "./routed-feedback-message";
 
 const noopSubscribe = () => () => {};
 const readLocationHost = () => window.location.host;
@@ -57,32 +64,42 @@ function ShareRow({
   first: boolean;
 }) {
   const timeFormat = useTimeFormat();
-  const body = useBodyWithArtifactTitles(attachmentMessageDisplayBody(message));
+  const routedFeedback = parseRoutedFeedbackMessage(message);
+  const body = useBodyWithArtifactTitles(
+    routedFeedback ? "" : attachmentMessageDisplayBody(message),
+  );
+  const senderLabel = routedFeedback ? m.feedback_channel_sender_name() : message.senderName;
   return (
     <div data-share-row className={cn("flex min-w-0 gap-3", !first && (grouped ? "mt-1" : "mt-4"))}>
       <span className="w-8 shrink-0">
-        {!grouped && (
-          <ActorAvatar
-            size="sm"
-            presence={false}
-            name={message.senderName}
-            src={message.senderAvatarUrl}
-          />
-        )}
+        {!grouped &&
+          (routedFeedback ? (
+            <RoutedFeedbackAvatar size="sm" />
+          ) : (
+            <ActorAvatar
+              size="sm"
+              presence={false}
+              name={message.senderName}
+              src={message.senderAvatarUrl}
+            />
+          ))}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {!grouped && (
-          <p className="flex min-w-0 items-baseline gap-2">
-            <span className="truncate text-sm font-semibold text-primary">
-              {message.senderName}
-            </span>
+          <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="truncate text-sm font-semibold text-primary">{senderLabel}</span>
+            {routedFeedback && <RoutedFeedbackCategoryBadge category={routedFeedback.category} />}
             <time className="shrink-0 text-xs text-tertiary tabular-nums">
               {formatMonthDayTime(message.createdAt, null, getLocale(), timeFormat)}
             </time>
           </p>
         )}
         <div className="min-w-0 text-md text-primary [overflow-wrap:anywhere]">
-          {body && <MessageBody body={body} mentions={message.mentions} />}
+          {routedFeedback ? (
+            <RoutedFeedbackBody feedback={routedFeedback} showEmailPlain={false} />
+          ) : (
+            body && <MessageBody body={body} mentions={message.mentions} />
+          )}
           <MessageAttachments attachments={message.attachments} />
         </div>
       </div>

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Button } from "#src/components/base/buttons/button";
 import { AgentDescriptionLabel, AgentModelLabel } from "#src/features/agents/agent-model-label";
 import { DELETED_AGENT_NAME_CLASS } from "#src/features/agents/deleted-agent";
@@ -12,6 +14,7 @@ export function MessageSenderLine({
   onOpenSender,
   time,
   hasToolbar = false,
+  badge,
 }: {
   message: MessageView;
   displayName: string;
@@ -19,11 +22,13 @@ export function MessageSenderLine({
   onOpenSender: (() => void) | undefined;
   time: string;
   hasToolbar?: boolean;
+  badge?: ReactNode;
 }) {
   return (
     <p
       className={cn(
-        "flex min-h-5 items-baseline gap-2 pr-8",
+        "flex min-h-5 items-baseline gap-x-2 pr-8",
+        badge && "flex-wrap gap-y-1",
         hasToolbar &&
           "lg:[@media(hover:hover)_and_(pointer:fine)]:[li:has(>[role=separator])_&]:pr-32",
       )}
@@ -60,6 +65,7 @@ export function MessageSenderLine({
           </>
         )}
       </span>
+      {badge}
       <time
         dateTime={new Date(message.createdAt).toISOString()}
         className="shrink-0 text-xs text-tertiary tabular-nums"

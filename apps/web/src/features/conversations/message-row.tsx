@@ -1,5 +1,5 @@
 import { actionCardPreviewText } from "./action-card-preview";
-import { memo, useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { WeeklyReportMessageCard } from "#src/features/records/weekly-report-message-card";
 
 import type {
@@ -23,6 +23,12 @@ import {
 import { ArtifactInlineEmbed } from "#src/features/artifacts/artifact-inline-embed";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-reference-chips";
+import {
+  RoutedFeedbackAvatar,
+  RoutedFeedbackBody,
+  RoutedFeedbackCategoryBadge,
+} from "./routed-feedback-body";
+import { parseRoutedFeedbackMessage } from "./routed-feedback-message";
 import { messagePlainText } from "./selection-copy";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -156,7 +162,12 @@ export const MessageRow = memo(function MessageRow({
     toolbarControllerRef.current?.pointerLeave();
   }, []);
   const clearToolbarStart = useCallback(() => setToolbarActive({}), []);
-  const displayName = own ? m.conversation_you() : message.senderName;
+  const routedFeedback = useMemo(() => parseRoutedFeedbackMessage(message), [message]);
+  const displayName = own
+    ? m.conversation_you()
+    : routedFeedback
+      ? m.feedback_channel_sender_name()
+      : message.senderName;
   const deleted = Boolean(message.senderDeleted);
   const openableAgentId =
     !own && message.senderKind === "agent" && message.senderAgentId && onOpenAgentProfile
@@ -171,26 +182,27 @@ export const MessageRow = memo(function MessageRow({
     : openablePersonId
       ? () => onOpenPersonProfile?.(openablePersonId)
       : undefined;
-  const avatar =
-    message.senderKind === "agent" && message.senderAgentId ? (
-      <ActorAvatar
-        size="sm"
-        presence
-        agentId={message.senderAgentId}
-        name={message.senderName}
-        src={message.senderAvatarUrl}
-        deleted={deleted}
-      />
-    ) : (
-      <ActorAvatar
-        presence
-        size="sm"
-        userId={message.senderUserId}
-        name={message.senderName}
-        src={message.senderAvatarUrl}
-        deleted={deleted}
-      />
-    );
+  const avatar = routedFeedback ? (
+    <RoutedFeedbackAvatar size="sm" />
+  ) : message.senderKind === "agent" && message.senderAgentId ? (
+    <ActorAvatar
+      size="sm"
+      presence
+      agentId={message.senderAgentId}
+      name={message.senderName}
+      src={message.senderAvatarUrl}
+      deleted={deleted}
+    />
+  ) : (
+    <ActorAvatar
+      presence
+      size="sm"
+      userId={message.senderUserId}
+      name={message.senderName}
+      src={message.senderAvatarUrl}
+      deleted={deleted}
+    />
+  );
   const { actions, copyable, hasActions, sheetActions, actionsOpen, setActionsOpen, openActions } =
     useMessageRowActions({
       message,
@@ -279,6 +291,11 @@ export const MessageRow = memo(function MessageRow({
               onOpenSender={openSenderProfile}
               time={fullTime}
               hasToolbar={showsToolbar}
+              badge={
+                routedFeedback ? (
+                  <RoutedFeedbackCategoryBadge category={routedFeedback.category} />
+                ) : undefined
+              }
             />
           )}
           {message.actionCard ? (
@@ -301,70 +318,78 @@ export const MessageRow = memo(function MessageRow({
               data-quote-time={fullTime}
               className="relative min-w-0 text-md text-primary [overflow-wrap:anywhere]"
             >
-              {hasInFlowEmbeds ? (
-                <div className="flex flex-col gap-1.5">
-                  {artifactLayout.segments.map((segment, index) => {
-                    if (segment.kind === "embed") {
-                      const card = artifactLayout.cardsById.get(segment.link.id);
-                      if (!card) return null;
-                      return (
-                        <ArtifactInlineEmbed
-                          key={`embed:${segment.link.id}`}
-                          card={card}
-                          version={segment.link.version}
-                          selectionActive={Boolean(selection)}
-                        />
-                      );
-                    }
-                    return (
-                      <CollapsibleMessageBody
-                        key={`text:${index}`}
-                        body={segment.text}
-                        trailing={index === artifactLayout.lastTextIndex ? textTicks : undefined}
-                        mentions={message.mentions}
-                        plainMentions={plainMentions}
-                        viewerId={viewerId}
-                        onOpenTask={onOpenTask}
-                        channelNames={channelNames}
-                        onOpenAgentProfile={onOpenAgentProfile}
-                        onOpenPersonProfile={onOpenPersonProfile}
-                        expanded={expanded}
-                        collapsible={collapsible && index === artifactLayout.longestTextIndex}
-                        onToggleExpanded={() => onToggleExpanded(message.id)}
-                      />
-                    );
-                  })}
-                </div>
+              {routedFeedback ? (
+                <RoutedFeedbackBody feedback={routedFeedback} showEmailPlain />
               ) : (
-                <CollapsibleMessageBody
-                  body={displayBody}
-                  trailing={textTicks}
-                  mentions={message.mentions}
-                  plainMentions={plainMentions}
-                  viewerId={viewerId}
-                  onOpenTask={onOpenTask}
-                  channelNames={channelNames}
-                  onOpenAgentProfile={onOpenAgentProfile}
-                  onOpenPersonProfile={onOpenPersonProfile}
-                  expanded={expanded}
-                  collapsible={collapsible}
-                  onToggleExpanded={() => onToggleExpanded(message.id)}
-                />
+                <>
+                  {hasInFlowEmbeds ? (
+                    <div className="flex flex-col gap-1.5">
+                      {artifactLayout.segments.map((segment, index) => {
+                        if (segment.kind === "embed") {
+                          const card = artifactLayout.cardsById.get(segment.link.id);
+                          if (!card) return null;
+                          return (
+                            <ArtifactInlineEmbed
+                              key={`embed:${segment.link.id}`}
+                              card={card}
+                              version={segment.link.version}
+                              selectionActive={Boolean(selection)}
+                            />
+                          );
+                        }
+                        return (
+                          <CollapsibleMessageBody
+                            key={`text:${index}`}
+                            body={segment.text}
+                            trailing={
+                              index === artifactLayout.lastTextIndex ? textTicks : undefined
+                            }
+                            mentions={message.mentions}
+                            plainMentions={plainMentions}
+                            viewerId={viewerId}
+                            onOpenTask={onOpenTask}
+                            channelNames={channelNames}
+                            onOpenAgentProfile={onOpenAgentProfile}
+                            onOpenPersonProfile={onOpenPersonProfile}
+                            expanded={expanded}
+                            collapsible={collapsible && index === artifactLayout.longestTextIndex}
+                            onToggleExpanded={() => onToggleExpanded(message.id)}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <CollapsibleMessageBody
+                      body={displayBody}
+                      trailing={textTicks}
+                      mentions={message.mentions}
+                      plainMentions={plainMentions}
+                      viewerId={viewerId}
+                      onOpenTask={onOpenTask}
+                      channelNames={channelNames}
+                      onOpenAgentProfile={onOpenAgentProfile}
+                      onOpenPersonProfile={onOpenPersonProfile}
+                      expanded={expanded}
+                      collapsible={collapsible}
+                      onToggleExpanded={() => onToggleExpanded(message.id)}
+                    />
+                  )}
+                  <MessageArtifactCards
+                    body={message.body}
+                    links={artifactLayout.trailingLinks}
+                    states={message.artifactCards}
+                    selectionActive={Boolean(selection)}
+                  />
+                  {message.weeklyReportSuggestion ? (
+                    <WeeklyReportMessageCard
+                      messageId={message.id}
+                      suggestion={message.weeklyReportSuggestion}
+                      onOpenAgentProfile={onOpenAgentProfile}
+                      disabled={deleted}
+                    />
+                  ) : null}
+                </>
               )}
-              <MessageArtifactCards
-                body={message.body}
-                links={artifactLayout.trailingLinks}
-                states={message.artifactCards}
-                selectionActive={Boolean(selection)}
-              />
-              {message.weeklyReportSuggestion ? (
-                <WeeklyReportMessageCard
-                  messageId={message.id}
-                  suggestion={message.weeklyReportSuggestion}
-                  onOpenAgentProfile={onOpenAgentProfile}
-                  disabled={deleted}
-                />
-              ) : null}
             </div>
           ) : null}
           <ReviewLanding value={message.threadRootId ? undefined : message.id}>

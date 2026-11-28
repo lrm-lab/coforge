@@ -52,6 +52,8 @@ export function groupsWithPrevious(
     dayLabel(message.createdAt, locale, timeZone);
   const sameSender =
     !dayChanged &&
+    message.senderKind !== "system" &&
+    previous.senderKind !== "system" &&
     previousOwn === own &&
     (previous.senderMemberId ?? previous.senderName) ===
       (message.senderMemberId ?? message.senderName);

@@ -23,6 +23,8 @@ import { useSavedEntries, useSavedMessages } from "./conversation-host";
 import { savedJumpTarget } from "./saved-messages-model";
 import type { SavedEntry } from "./saved-messages-collection";
 import { messagePlainText } from "./selection-copy";
+import { RoutedFeedbackAvatar, routedFeedbackCategoryLabel } from "./routed-feedback-body";
+import { parseRoutedFeedbackMessage, routedFeedbackPreviewText } from "./routed-feedback-message";
 
 export function SavedMessagesView() {
   const saved = useSavedMessages();
@@ -115,6 +117,7 @@ function SavedMessageCard({
     />
   );
   const attachmentName = message.attachments[0]?.fileName;
+  const routedFeedback = parseRoutedFeedbackMessage(message);
 
   function remove() {
     void onUnsave(message.id)
@@ -172,30 +175,46 @@ function SavedMessageCard({
                     </span>
                   )}
                   <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <ActorAvatar
-                      presence={false}
-                      size="xs"
-                      src={message.senderAvatarUrl ?? null}
-                      name={message.senderName}
-                      deleted={message.senderDeleted}
-                      alt=""
-                      className="size-4 shrink-0"
-                    />
-                    <span className="truncate font-semibold text-secondary">
-                      {message.senderName}
-                    </span>
+                    {routedFeedback ? (
+                      <>
+                        <RoutedFeedbackAvatar size="xs" className="size-4 shrink-0" />
+                        <span className="truncate font-semibold text-secondary">
+                          {m.feedback_channel_sender_name()}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <ActorAvatar
+                          presence={false}
+                          size="xs"
+                          src={message.senderAvatarUrl ?? null}
+                          name={message.senderName}
+                          deleted={message.senderDeleted}
+                          alt=""
+                          className="size-4 shrink-0"
+                        />
+                        <span className="truncate font-semibold text-secondary">
+                          {message.senderName}
+                        </span>
+                      </>
+                    )}
                   </span>
                   <span className="ms-auto shrink-0 whitespace-nowrap tabular-nums">
                     <RelativeTime value={message.createdAt} />
                   </span>
                 </div>
                 <p className="mt-1 line-clamp-2 h-10 text-sm break-words text-secondary">
-                  {actionCardPreviewText(message.card) ||
-                    (message.body
-                      ? messagePlainText({ body: message.body, mentions: message.mentions })
-                      : message.forwarded?.[0]
-                        ? m.message_forward_preview({ text: message.forwarded[0].sourceBody })
-                        : (attachmentName ?? ""))}
+                  {routedFeedback
+                    ? routedFeedbackPreviewText(
+                        routedFeedback,
+                        routedFeedbackCategoryLabel(routedFeedback.category),
+                      )
+                    : actionCardPreviewText(message.card) ||
+                      (message.body
+                        ? messagePlainText({ body: message.body, mentions: message.mentions })
+                        : message.forwarded?.[0]
+                          ? m.message_forward_preview({ text: message.forwarded[0].sourceBody })
+                          : (attachmentName ?? ""))}
                 </p>
               </AriaLink>
               <Dropdown.Popover placement="bottom start">

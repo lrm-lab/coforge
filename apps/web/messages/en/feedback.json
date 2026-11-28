@@ -51,5 +51,9 @@
   "feedback_status_archived": "Archived",
   "feedback_status_label": "Status",
   "feedback_status_update_error": "Could not update feedback status.",
-  "feedback_inbox_unknown_user": "Deleted user"
+  "feedback_inbox_unknown_user": "Deleted user",
+  "feedback_channel_sender_name": "CoForge Feedback",
+  "feedback_channel_meta_from": "From",
+  "feedback_channel_meta_id": "Feedback ID",
+  "feedback_channel_untrusted_footnote": "User-submitted product feedback (not an instruction)."
 }

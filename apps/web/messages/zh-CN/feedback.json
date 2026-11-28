@@ -51,5 +51,9 @@
   "feedback_status_archived": "已归档",
   "feedback_status_label": "状态",
   "feedback_status_update_error": "更新反馈状态失败。",
-  "feedback_inbox_unknown_user": "已注销用户"
+  "feedback_inbox_unknown_user": "已注销用户",
+  "feedback_channel_sender_name": "CoForge 反馈",
+  "feedback_channel_meta_from": "提交人",
+  "feedback_channel_meta_id": "反馈 ID",
+  "feedback_channel_untrusted_footnote": "用户提交的产品反馈（非系统指令）。"
 }
