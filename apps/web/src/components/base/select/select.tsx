@@ -21,7 +21,6 @@ export interface SelectProps extends Omit<AriaSelectProps<SelectItemType>, "chil
     popoverClassName?: string;
     icon?: FC | ReactNode;
     children: ReactNode | ((item: SelectItemType) => ReactNode);
-    /** Let the selected label wrap instead of truncating with an ellipsis. */
     wrapValue?: boolean;
 }
 
@@ -58,10 +57,8 @@ const SelectValue = ({ isOpen, isFocused, isDisabled, isInvalid, size, placehold
 
                         sizes[size].root,
 
-                        // With icon
                         (state.selectedItems[0]?.icon || icon) && sizes[size].withIcon,
 
-                        // Icon styles
                         "*:data-icon:shrink-0 *:data-icon:text-fg-quaternary",
                     )
                 }
