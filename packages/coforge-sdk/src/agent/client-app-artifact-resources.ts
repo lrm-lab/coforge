@@ -26,8 +26,6 @@ export const AGENT_COMMAND_GUIDANCE: Readonly<Record<string, string>> = {
     "[Guidance] `action prepare` supports `choice` and multi-question `questions` cards; retract obsolete unanswered cards with `coforge action withdraw --message <id>`.",
   inbox:
     "[Guidance] Use `coforge inbox read --target <item>` to page unread items or `coforge inbox dismiss --before <iso>` to clear stale backlog.",
-  message:
-    "[Guidance] Clear an obsolete held send draft without sending via `coforge message send --target <target> --discard-draft`.",
 };
 
 type AppManagementOp = appManagementWire.AgentAppManagementRequest["operation"];

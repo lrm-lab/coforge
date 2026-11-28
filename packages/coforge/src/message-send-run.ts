@@ -61,8 +61,21 @@ export async function runMessageSend(
     } catch (error) {
       throw error instanceof CliError ? withOutputMode(error, outputMode) : error;
     }
-    const discarded =
-      discardedResult?.discarded !== false && discardedResult?.clearedDraft !== false;
+    const discarded = discardedResult?.discarded ?? discardedResult?.clearedDraft;
+    if (
+      typeof discarded !== "boolean" ||
+      (typeof discardedResult?.clearedDraft === "boolean" &&
+        discardedResult.clearedDraft !== discarded)
+    ) {
+      throw withOutputMode(
+        new CliError({
+          code: "DISCARD_DRAFT_UNCONFIRMED",
+          message: "The daemon did not confirm whether the saved draft was discarded.",
+          retryable: false,
+        }),
+        outputMode,
+      );
+    }
     if (invocation.json) {
       return JSON.stringify({
         state: "discarded",
@@ -174,6 +187,9 @@ export async function runMessageSend(
       ),
       outputMode,
     );
+  const attachmentNote = formatLongMessageConvertedSuffix(
+    converted.convertedAttachmentId,
+  ).trimStart();
   if (isCommittedSend(result))
     return invocation.json
       ? JSON.stringify({
@@ -187,7 +203,9 @@ export async function runMessageSend(
             ? { convertedToAttachmentId: converted.convertedAttachmentId }
             : {}),
         })
-      : `${formatSendCommitted(invocation.target, result.messageId)}${formatLongMessageConvertedSuffix(converted.convertedAttachmentId)}`;
+      : [attachmentNote, formatSendCommitted(invocation.target, result.messageId)]
+          .filter(Boolean)
+          .join("\n");
   const sent = result as {
     messageId?: string;
     recentUnread?: AgentMessageRecord[];
@@ -210,5 +228,7 @@ export async function runMessageSend(
     });
   }
   if (undelivered) throw undelivered;
-  return `${formatSendSuccess(invocation.target, sent, sent.recentUnread)}${formatLongMessageConvertedSuffix(converted.convertedAttachmentId)}`;
+  return [attachmentNote, formatSendSuccess(invocation.target, sent, sent.recentUnread)]
+    .filter(Boolean)
+    .join("\n");
 }

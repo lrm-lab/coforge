@@ -268,15 +268,15 @@ test("formatSendSuccess prints the receipt line alone, for a thread target or no
     formatSendSuccess("@ada:11111111", { messageId: "aaaaaaaa-0000-4000-8000-000000000001" }),
   ).toBe("Message sent to @ada:11111111. Message ID: aaaaaaaa-0000-4000-8000-000000000001");
 });
-test("formatSendSuccess appends the joined-channel notice with the mute command", () => {
+test("formatSendSuccess puts the joined-channel notice above the receipt", () => {
   expect(
     formatSendSuccess("#general", {
       messageId: "aaaaaaaa-0000-4000-8000-000000000001",
       joinedChannel: "#general",
     }),
   ).toBe(
-    "Message sent to #general. Message ID: aaaaaaaa-0000-4000-8000-000000000001\n" +
-      "Joined #general. To mute it, run `coforge channel mute --target '#general'`.",
+    "Joined #general. To mute it, run `coforge channel mute --target '#general'`.\n\n" +
+      "Message sent to #general. Message ID: aaaaaaaa-0000-4000-8000-000000000001",
   );
   expect(formatSendSuccess("#general", { messageId: "m-1" })).not.toContain("Joined ");
 });
@@ -285,7 +285,7 @@ test("formatSendSuccess omits the id when messageId is missing or empty", () => 
   expect(formatSendSuccess("@user", { messageId: "" })).toBe("Message sent to @user.");
   expect(formatSendSuccess("#general:11111111", {})).toBe("Message sent to #general:11111111.");
 });
-test("formatSendSuccess appends a recentUnread section only when non-empty", () => {
+test("formatSendSuccess puts a nonempty recentUnread section above the receipt", () => {
   expect(formatSendSuccess("@user:11111111", { messageId: "message-1" }, [])).toBe(
     "Message sent to @user:11111111. Message ID: message-1",
   );
@@ -305,7 +305,7 @@ test("formatSendSuccess appends a recentUnread section only when non-empty", () 
       attachments: [],
     },
   ]);
-  expect(rendered).toContain("Message sent to @user:11111111. Message ID: message-1");
+  expect(rendered.endsWith("Message sent to @user:11111111. Message ID: message-1")).toBe(true);
   expect(rendered).toContain("--- New messages you may have missed ---");
   expect(rendered).toContain("@frank: missed while held");
 });

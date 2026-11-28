@@ -3,7 +3,7 @@ import type {
   AgentCommandGuidanceResponse,
 } from "@lrm/coforge-sdk/agent";
 
-const GUIDED_COMMANDS = new Set(["task", "action", "inbox", "message"]);
+const GUIDED_COMMANDS = new Set(["task", "action", "inbox"]);
 
 /**
  * Queries the daemon's compaction-aware `AgentContextLedger` (`"guidance"`) for progressive

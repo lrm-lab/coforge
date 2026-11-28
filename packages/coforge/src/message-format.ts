@@ -180,30 +180,31 @@ export function formatSendSuccess(
   queued = false,
 ): string {
   const verb = queued ? "queued" : "sent";
-  const joined = response.joinedChannel
-    ? `\nJoined ${response.joinedChannel}. To mute it, run \`coforge channel mute --target '${response.joinedChannel}'\`.`
-    : "";
-  const base = response.messageId
-    ? `Message ${verb} to ${target}. Message ID: ${response.messageId}${joined}`
-    : `Message ${verb} to ${target}.${joined}`;
-  if (!recentUnread?.length) return base;
-  const lines = [
-    base,
-    "",
-    "--- New messages you may have missed ---",
-    ...recentUnread.map(formatMessageLine),
-  ];
-  const taskHint = formatTaskWorkflowHint(recentUnread);
-  if (taskHint) lines.push(taskHint);
-  const dmHint = formatAgentDmHint(recentUnread);
-  if (dmHint) lines.push(dmHint);
+  const receipt = response.messageId
+    ? `Message ${verb} to ${target}. Message ID: ${response.messageId}`
+    : `Message ${verb} to ${target}.`;
+  const lines: string[] = [];
+  if (response.joinedChannel)
+    lines.push(
+      `Joined ${response.joinedChannel}. To mute it, run \`coforge channel mute --target '${response.joinedChannel}'\`.`,
+    );
+  if (recentUnread?.length) {
+    if (lines.length) lines.push("");
+    lines.push("--- New messages you may have missed ---", ...recentUnread.map(formatMessageLine));
+    const taskHint = formatTaskWorkflowHint(recentUnread);
+    if (taskHint) lines.push(taskHint);
+    const dmHint = formatAgentDmHint(recentUnread);
+    if (dmHint) lines.push(dmHint);
+  }
+  if (lines.length) lines.push("");
+  lines.push(receipt);
   return lines.join("\n");
 }
 
 export function formatSendCommitted(target: string, messageId: string): string {
   return [
-    `Message commit confirmed for ${target}. Message ID: ${messageId}`,
     "The original response was lost, so delivery-side receipt details (including mention delivery warnings and recent unread context) are unavailable; no message was replayed.",
+    `Message commit confirmed for ${target}. Message ID: ${messageId}`,
   ].join("\n");
 }
 

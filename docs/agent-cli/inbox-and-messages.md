@@ -35,8 +35,11 @@ clears it. `--send-draft --expected-draft-key <key>` refuses with
 to another send. If after reading newer messages you decide not to send the
 saved draft at all, run `message send --target "<target>" --discard-draft [--expected-draft-key <key>]`
 to clear the local draft without sending anything (refusing with
-`SAVED_DRAFT_IDENTITY_CHANGED` if `--expected-draft-key` no longer matches). A draft past its ten minutes is not sent: `--send-draft`
-fails with `SEND_DRAFT_EXPIRED`, removes it, and prints its body as the last
+`SAVED_DRAFT_IDENTITY_CHANGED` if `--expected-draft-key` no longer matches).
+The receipt says whether the draft was discarded or absent. An unconfirmed discard returns
+`DISCARD_DRAFT_UNCONFIRMED`. A successful send ends with its receipt line.
+
+A draft past its ten minutes expires. `--send-draft` fails with `SEND_DRAFT_EXPIRED`, removes it, and prints its body as the last
 copy (`details.discarded_draft` with `--json`); the original may already have
 been delivered, so read the target before resending.
 

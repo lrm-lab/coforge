@@ -669,8 +669,8 @@ test("a send confirmed by reconciliation says so, and that no receipt or replay 
   const text = await run(["message", "send", "--target", "@ada", "--send-draft"], transport);
   expect(text).toBe(
     [
-      "Message commit confirmed for @ada. Message ID: message-9",
       "The original response was lost, so delivery-side receipt details (including mention delivery warnings and recent unread context) are unavailable; no message was replayed.",
+      "Message commit confirmed for @ada. Message ID: message-9",
     ].join("\n"),
   );
   const json = await run(
