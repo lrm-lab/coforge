@@ -127,4 +127,3 @@ e2e-svg-attachment.e2e.ts 3
 e2e-long-message-file.e2e.ts 10
 e2e-account-password.e2e.ts 64
 e2e-sidebar-mention-badge.e2e.ts 4
-e2e-public-runtimes-hint.e2e.ts 10

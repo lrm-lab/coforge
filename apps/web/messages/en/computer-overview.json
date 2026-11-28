@@ -73,6 +73,5 @@
   "computer_detail_creator_unnamed": "Unnamed",
   "computer_detail_show_more": "Show {remaining} more",
   "computer_detail_copy_name": "Copy name",
-  "computer_detail_name_copied": "Copied",
-  "computer_runtimes_owner_public": "Showing runtimes {owner} has made public."
+  "computer_detail_name_copied": "Copied"
 }

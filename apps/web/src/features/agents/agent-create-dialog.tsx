@@ -27,7 +27,6 @@ import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields"
 import { AgentRuntimeSignInNotice } from "./agent-runtime-sign-in-notice";
 import type { RuntimeSignInComputer } from "./agent-runtime-sign-in-state";
 import { RuntimeSignInDialog } from "#src/features/computers/runtime-sign-in-dialog";
-import { publicRuntimesHint } from "#src/features/computers/public-runtimes-hint";
 import { useCodexCompatibleSupportByComputer } from "#src/features/computers/use-codex-compatible-support";
 import { useRuntimeAuthSignals } from "#src/features/computers/use-runtime-auth-signals";
 import { runtimeProviderLabel } from "./runtime-provider-display";
@@ -56,7 +55,6 @@ type AgentCreateComputerOption = RuntimeSignInComputer & {
   name: string;
   displayName: string;
   online?: boolean;
-  creator?: { displayName: string | null } | null;
   runtimes: {
     provider: RuntimeProvider;
     unavailableCode?: RuntimeUnavailableCode | null;
@@ -237,7 +235,6 @@ export function LocalAgentForm({
     },
   });
   const computer = computers.find((candidate) => candidate.id === computerId);
-  const providerHint = publicRuntimesHint(computer);
   const cachedCatalog = cachedRuntimeCatalog?.(computerId);
   const runtimeOptionsFor = (id: string, catalogs: RuntimeCatalog[]) => ({
     ...runtimeOptionsFromRuntimes(
@@ -365,7 +362,6 @@ export function LocalAgentForm({
                                     key={computerId}
                                     open
                                     computerId={computerId}
-                                    providerHint={providerHint}
                                     initial={preferredRuntime(computer)}
                                     enforceRequiredModel
                                     providerError={visibleFieldError(

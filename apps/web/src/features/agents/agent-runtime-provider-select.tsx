@@ -18,7 +18,6 @@ export function AgentRuntimeProviderSelect({
   providers,
   unusable = [],
   error,
-  hint,
   className,
   onChange,
 }: {
@@ -26,7 +25,6 @@ export function AgentRuntimeProviderSelect({
   providers: ReadonlySet<string | undefined>;
   unusable?: RuntimeOptions["unusable"];
   error?: string;
-  hint?: string;
   className?: string;
   onChange: (key: string | number) => void;
 }) {
@@ -45,9 +43,9 @@ export function AgentRuntimeProviderSelect({
       <Select
         label={m.agent_form_provider()}
         size={controlSize}
-        className="min-w-0 [&>span]:wrap-anywhere"
+        className="min-w-0"
         isInvalid={Boolean(error)}
-        hint={error ?? hint}
+        hint={error}
         selectedKey={provider}
         onSelectionChange={(key) => {
           if (key !== null) onChange(key);

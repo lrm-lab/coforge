@@ -65,7 +65,6 @@ export function AgentRuntimeFields({
   credentialConfigured = false,
   enforceRequiredModel = false,
   providerError,
-  providerHint,
   modelProviderError,
   modelError,
   baseUrlError,
@@ -84,7 +83,6 @@ export function AgentRuntimeFields({
   credentialConfigured?: boolean;
   enforceRequiredModel?: boolean;
   providerError?: string;
-  providerHint?: string;
   modelProviderError?: string;
   modelError?: string;
   baseUrlError?: string;
@@ -338,7 +336,6 @@ export function AgentRuntimeFields({
         providers={providers}
         unusable={options?.unusable}
         error={providerError}
-        hint={providerHint}
         className="min-w-0"
         onChange={(key) => {
           setProvider(parseRuntimeProvider(key) ?? RUNTIME_PROVIDER.COFORGE);
