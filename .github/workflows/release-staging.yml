@@ -33,6 +33,14 @@ on:
         required: false
         type: string
 
+      force_validate:
+        description: >-
+          Run full validation even when the dispatch commit already has a successful CI run on
+          main, which is otherwise reused as the verdict.
+        required: false
+        type: boolean
+        default: false
+
       withdraw_version:
         description: "Withdraw this numbered dev version instead of publishing (requires both manifest hashes and restore_version)"
         required: false
@@ -92,9 +100,39 @@ jobs:
           RELEASE_NOTES_ZH_CN: ${{ inputs.notes_zh_cn }}
         run: bun scripts/release/release-notes.ts --check
 
+  # The dispatch commit is main's head, which ci.yml usually just validated on the push. Reusing
+  # that verdict saves the full validation run; an unavailable verdict reads as no verdict, so
+  # validation still runs - never a silent skip.
+  ci-status:
+    name: Check main CI
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
+    steps:
+      - name: Check out the dispatch workflow source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Check CI for the dispatch commit
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          DISPATCH_SHA: ${{ github.sha }}
+          CANDIDATE_REF: ""
+          FALLBACK_TO_VALIDATION: "true"
+        run: bash scripts/deploy/resolve-staging-source.sh
+
   gates:
     name: Validate
-    if: github.ref == 'refs/heads/main'
+    needs: ci-status
+    if: github.ref == 'refs/heads/main' && (inputs.force_validate || needs.ci-status.outputs.passed != 'true')
     permissions:
       contents: read
       actions: read
@@ -104,7 +142,11 @@ jobs:
 
   publish:
     name: Build and publish Computer
-    needs: [gates, notes-check]
+    needs: [ci-status, gates, notes-check]
+    # A reused green verdict skips Validate, and a skipped need would skip this job too - hence
+    # always() with the verdict spelt out: forced validation has to pass, otherwise either the
+    # reuse or the validation does.
+    if: always() && github.ref == 'refs/heads/main' && !cancelled() && needs.notes-check.result == 'success' && ((!inputs.force_validate && needs.ci-status.outputs.passed == 'true') || needs.gates.result == 'success')
     # macOS, for Apple's codesign.
     runs-on: macos-latest
     environment: staging

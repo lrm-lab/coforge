@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { type Step, parse } from "./workflow-helpers";
 
@@ -72,5 +75,64 @@ test("withdrawal inputs cannot accidentally fall through to a publication", asyn
       env: { PATH: process.env.PATH, ...inputs },
     });
     expect(child.exitCode).toBe(allowed ? 0 : 1);
+  }
+});
+
+test("Computer staging reuses the push CI verdict for the exact dispatch commit and keeps validation as the fallback", async () => {
+  expect(release.jobs.gates.with.track).toBe("local");
+  expect(release.jobs.gates.needs).toBe("ci-status");
+  expect(release.jobs["ci-status"].if).toBe("github.ref == 'refs/heads/main'");
+  expect(release.jobs["ci-status"].permissions).toEqual({ contents: "read", actions: "read" });
+  expect(release.jobs.gates.permissions).toEqual({ contents: "read", actions: "read" });
+  expect(release.jobs.gates.if).toBe(
+    "github.ref == 'refs/heads/main' && (inputs.force_validate || needs.ci-status.outputs.passed != 'true')",
+  );
+  expect(release.on.workflow_dispatch.inputs.force_validate).toMatchObject({
+    type: "boolean",
+    default: false,
+  });
+  expect(release.jobs.publish.needs).toEqual(["ci-status", "gates", "notes-check"]);
+  expect(release.jobs.publish.if).toBe(
+    "always() && github.ref == 'refs/heads/main' && !cancelled() && needs.notes-check.result == 'success' && ((!inputs.force_validate && needs.ci-status.outputs.passed == 'true') || needs.gates.result == 'success')",
+  );
+});
+
+test("the release staging CI check falls back to validation when the verdict is unavailable, never silently skipping", async () => {
+  const script = await Bun.file("scripts/deploy/resolve-staging-source.sh").text();
+  const dir = await mkdtemp(join(tmpdir(), "coforge-ci-soft-"));
+  try {
+    await Bun.write(
+      join(dir, "gh"),
+      `#!/bin/bash
+case "$GH_MODE" in
+  green) jq -n '{workflow_runs: []}'; exit 0 ;;
+  fail) exit 1 ;;
+esac
+`,
+    );
+    await chmod(join(dir, "gh"), 0o755);
+    const run = (extra: Record<string, string>) => {
+      const output = join(dir, `output-${Math.random()}`);
+      const result = Bun.spawnSync(["bash", "-e", "-o", "pipefail", "-c", script], {
+        env: {
+          ...Bun.env,
+          PATH: `${dir}:${Bun.env.PATH}`,
+          DISPATCH_SHA: "a".repeat(40),
+          CANDIDATE_REF: "",
+          REPOSITORY: "lrm-lab/coforge",
+          GITHUB_OUTPUT: output,
+          ...extra,
+        },
+      });
+      return { code: result.exitCode, out: output };
+    };
+    // The API failing without soft mode is a hard error: no silent skip.
+    expect(run({ GH_MODE: "fail" }).code).not.toBe(0);
+    // With soft mode the same failure falls back: passed=false so the caller runs full validation.
+    const soft = run({ GH_MODE: "fail", FALLBACK_TO_VALIDATION: "true" });
+    expect(soft.code).toBe(0);
+    expect(await Bun.file(soft.out).text()).toBe(`sha=${"a".repeat(40)}\npassed=false\n`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

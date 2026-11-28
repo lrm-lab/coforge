@@ -116,8 +116,8 @@ test("staging checks the notes beside its gates and registers them after publish
   const check = checkStep(staging);
   // Off the gates' critical path, but the publish job needs both, so bad notes still fail before
   // anything is published.
-  expect(staging.jobs.gates!.needs).toBeUndefined();
-  expect(staging.jobs.publish!.needs).toEqual(["gates", check.job]);
+  expect(staging.jobs.gates!.needs).toBe("ci-status");
+  expect(staging.jobs.publish!.needs).toEqual(["ci-status", "gates", check.job]);
   expect(check.definition.if).toBe("github.ref == 'refs/heads/main'");
   expect(check.definition.permissions).toEqual({ contents: "read" });
   // A withdrawal publishes no version and needs no notes: the step skips and the job still
